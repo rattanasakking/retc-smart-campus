@@ -9,7 +9,7 @@ npm-debug.log*
 
 # Frontend
 frontend/node_modules/
-frontend/.next/
+frontend/.next/cache/
 frontend/.env.local
 frontend/out/
 
