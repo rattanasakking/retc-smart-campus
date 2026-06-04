@@ -1,0 +1,232 @@
+'use client';
+import { useEffect, useRef, useState } from 'react';
+import { api, USER_KEY } from '@/lib/api';
+import { Camera, Lock, Save, X, CheckCircle } from 'lucide-react';
+
+interface UserProfile {
+  id: number; name: string; email: string; employeeId: string;
+  role: string; department?: string; phone?: string; nickname?: string;
+  avatar?: string; position?: string;
+}
+
+const ROLE_LABEL: Record<string, string> = {
+  admin: 'ผู้ดูแลระบบ', executive: 'ผู้บริหาร',
+  teacher: 'ครู/อาจารย์', staff: 'เจ้าหน้าที่',
+};
+
+function Toast({ msg, err, onClose }: { msg: string; err?: boolean; onClose: () => void }) {
+  if (!msg) return null;
+  return (
+    <div className={`fixed top-4 right-4 z-[100] px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white flex items-center gap-2 ${err ? 'bg-red-500' : 'bg-[#0d9068]'}`}>
+      {err ? <X className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+      {msg}
+      <button onClick={onClose}><X className="w-3.5 h-3.5" /></button>
+    </div>
+  );
+}
+
+export default function ProfilePage() {
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving]   = useState(false);
+  const [pwSaving, setPwSaving] = useState(false);
+  const [toast, setToast]     = useState('');
+  const [toastErr, setToastErr] = useState('');
+  const imgRef = useRef<HTMLInputElement>(null);
+
+  const [form, setForm]       = useState({ name: '', phone: '', nickname: '' });
+  const [avatarPreview, setAvatarPreview] = useState('');
+  const [avatarBase64, setAvatarBase64]   = useState('');
+
+  const [pwForm, setPwForm] = useState({ current: '', newPw: '', confirm: '' });
+
+  const showToast = (msg: string, err = false) => {
+    if (err) setToastErr(msg); else setToast(msg);
+    setTimeout(() => { setToast(''); setToastErr(''); }, 3500);
+  };
+
+  useEffect(() => {
+    api.get<{ success: boolean; data: UserProfile }>('/auth/me')
+      .then(r => {
+        if (r.success) {
+          setProfile(r.data);
+          setForm({ name: r.data.name, phone: r.data.phone ?? '', nickname: r.data.nickname ?? '' });
+          if (r.data.avatar) setAvatarPreview(r.data.avatar);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleAvatar = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const b64 = e.target?.result as string;
+      setAvatarPreview(b64);
+      setAvatarBase64(b64);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim()) { showToast('กรุณาระบุชื่อ', true); return; }
+    setSaving(true);
+    try {
+      const body: Record<string, string> = {
+        name: form.name.trim(),
+        phone: form.phone,
+        nickname: form.nickname,
+      };
+      if (avatarBase64) body.avatar = avatarBase64;
+
+      const r = await api.put<{ success: boolean; data: UserProfile }>('/auth/profile', body);
+      if (r.success) {
+        setProfile(r.data);
+        setAvatarBase64('');
+        // Update localStorage
+        const stored = localStorage.getItem(USER_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          localStorage.setItem(USER_KEY, JSON.stringify({
+            ...parsed, name: r.data.name,
+            avatar: r.data.avatar,
+          }));
+        }
+        showToast('บันทึกโปรไฟล์สำเร็จ');
+      }
+    } catch (e) {
+      showToast((e as Error).message, true);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handlePwChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pwForm.newPw !== pwForm.confirm) { showToast('รหัสผ่านใหม่ไม่ตรงกัน', true); return; }
+    if (pwForm.newPw.length < 8) { showToast('รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร', true); return; }
+    setPwSaving(true);
+    try {
+      await api.put('/auth/change-password', { currentPassword: pwForm.current, newPassword: pwForm.newPw });
+      showToast('เปลี่ยนรหัสผ่านสำเร็จ');
+      setPwForm({ current: '', newPw: '', confirm: '' });
+    } catch (e) {
+      showToast((e as Error).message, true);
+    } finally {
+      setPwSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6 max-w-xl mx-auto space-y-4">
+        {[1, 2, 3].map(i => <div key={i} className="skeleton h-12 rounded-xl" />)}
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 md:p-6 max-w-xl mx-auto space-y-5">
+      <Toast msg={toast || toastErr} err={!!toastErr} onClose={() => { setToast(''); setToastErr(''); }} />
+
+      <h1 className="text-xl font-bold text-[#1a2744]">โปรไฟล์ของฉัน</h1>
+
+      {/* ── Profile Form ─────────────────────────────────────────────────── */}
+      <form onSubmit={handleSave} className="card space-y-4">
+        {/* Avatar */}
+        <div className="flex flex-col items-center gap-3">
+          <div className="relative">
+            <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-[#dce6f9]">
+              {avatarPreview ? (
+                <img src={avatarPreview} alt="avatar" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-3xl font-bold text-white"
+                     style={{ backgroundColor: '#2979ff' }}>
+                  {profile?.name?.charAt(0)}
+                </div>
+              )}
+            </div>
+            <button type="button"
+              onClick={() => imgRef.current?.click()}
+              className="absolute bottom-0 right-0 w-8 h-8 rounded-full flex items-center justify-center shadow-md"
+              style={{ backgroundColor: '#1d6ae5' }}>
+              <Camera className="w-4 h-4 text-white" />
+            </button>
+          </div>
+          <input ref={imgRef} type="file" accept="image/*" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleAvatar(f); }} />
+          {avatarBase64 && (
+            <button type="button" onClick={() => { setAvatarBase64(''); setAvatarPreview(profile?.avatar ?? ''); }}
+              className="text-xs text-red-500">ยกเลิกรูปใหม่</button>
+          )}
+        </div>
+
+        {/* Read-only info */}
+        <div className="grid grid-cols-2 gap-3 p-3 rounded-xl" style={{ backgroundColor: '#f5f8ff' }}>
+          <div>
+            <p className="text-xs text-[#94a3b8] mb-0.5">รหัสพนักงาน</p>
+            <p className="text-sm font-medium text-[#1a2744]">{profile?.employeeId}</p>
+          </div>
+          <div>
+            <p className="text-xs text-[#94a3b8] mb-0.5">ตำแหน่ง / บทบาท</p>
+            <p className="text-sm font-medium text-[#1a2744]">{ROLE_LABEL[profile?.role ?? ''] ?? profile?.role}</p>
+          </div>
+          <div className="col-span-2">
+            <p className="text-xs text-[#94a3b8] mb-0.5">อีเมล</p>
+            <p className="text-sm font-medium text-[#1a2744]">{profile?.email}</p>
+          </div>
+        </div>
+
+        {/* Editable fields */}
+        <div>
+          <label className="block text-xs font-medium text-[#4a6080] mb-1">ชื่อ-นามสกุล <span className="text-red-500">*</span></label>
+          <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+            className="input-field" placeholder="ชื่อ นามสกุล" required />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-[#4a6080] mb-1">ชื่อเล่น</label>
+          <input value={form.nickname} onChange={e => setForm(p => ({ ...p, nickname: e.target.value }))}
+            className="input-field" placeholder="ชื่อเล่น" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-[#4a6080] mb-1">เบอร์โทรศัพท์</label>
+          <input value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))}
+            className="input-field" placeholder="08x-xxx-xxxx" type="tel" />
+        </div>
+
+        <button type="submit" disabled={saving} className="btn-primary w-full flex items-center justify-center gap-2">
+          <Save className="w-4 h-4" />
+          {saving ? 'กำลังบันทึก...' : 'บันทึกโปรไฟล์'}
+        </button>
+      </form>
+
+      {/* ── Change Password ───────────────────────────────────────────────── */}
+      <form onSubmit={handlePwChange} className="card space-y-4">
+        <div className="flex items-center gap-2 pb-3 border-b border-[#dce6f9]">
+          <Lock className="w-4 h-4 text-[#1d6ae5]" />
+          <h2 className="font-semibold text-[#1a2744]">เปลี่ยนรหัสผ่าน</h2>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-[#4a6080] mb-1">รหัสผ่านปัจจุบัน</label>
+          <input value={pwForm.current} onChange={e => setPwForm(p => ({ ...p, current: e.target.value }))}
+            type="password" className="input-field" placeholder="••••••••" required />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-[#4a6080] mb-1">รหัสผ่านใหม่</label>
+          <input value={pwForm.newPw} onChange={e => setPwForm(p => ({ ...p, newPw: e.target.value }))}
+            type="password" className="input-field" placeholder="อย่างน้อย 8 ตัวอักษร" required />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-[#4a6080] mb-1">ยืนยันรหัสผ่านใหม่</label>
+          <input value={pwForm.confirm} onChange={e => setPwForm(p => ({ ...p, confirm: e.target.value }))}
+            type="password" className="input-field" placeholder="••••••••" required />
+        </div>
+        <button type="submit" disabled={pwSaving} className="btn-secondary w-full flex items-center justify-center gap-2">
+          <Lock className="w-4 h-4" />
+          {pwSaving ? 'กำลังบันทึก...' : 'เปลี่ยนรหัสผ่าน'}
+        </button>
+      </form>
+    </div>
+  );
+}

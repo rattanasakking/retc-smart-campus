@@ -1,0 +1,597 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ========== ENUMS ==========
+
+enum Role {
+  admin
+  executive
+  teacher
+  staff
+}
+
+enum Position {
+  director
+  deputy_director
+  division_chief
+  work_unit_chief
+  department_chief
+  teacher
+  specialist
+  officer
+  worker
+}
+
+enum ShiftType {
+  morning
+  afternoon
+  evening
+  holiday
+}
+
+
+enum WorkLogStatus {
+  draft
+  submitted
+  approved
+  rejected
+  returned
+}
+
+enum WorkLogApprovalStatus {
+  approved
+  rejected
+  returned
+}
+
+enum EquipmentStatus {
+  active
+  damaged
+  disposed
+  borrowed
+}
+
+enum BorrowStatus {
+  pending
+  approved
+  rejected
+  returned
+  overdue
+}
+
+enum InspectionCondition {
+  good
+  fair
+  damaged
+  disposed
+}
+
+enum Urgency {
+  normal
+  urgent
+  critical
+}
+
+enum RepairStatus {
+  pending
+  assigned
+  in_progress
+  waiting_parts
+  completed
+  cancelled
+}
+
+enum RepairAssignmentStatus {
+  assigned
+  in_progress
+  completed
+}
+
+enum PmStatus {
+  scheduled
+  completed
+  overdue
+  cancelled
+}
+
+enum RoomStatus {
+  active
+  maintenance
+  inactive
+}
+
+enum BookingStatus {
+  pending
+  approved
+  rejected
+  cancelled
+  completed
+}
+
+enum RoomApprovalStatus {
+  approved
+  rejected
+}
+
+enum LostFoundStatus {
+  found
+  claimed
+  archived
+}
+
+// ========== MODELS ==========
+
+model User {
+  id           Int       @id @default(autoincrement())
+  employeeId   String    @unique
+  name         String
+  email        String    @unique
+  password     String
+  role         Role      @default(staff)
+  position     Position?
+  isSuperAdmin Boolean   @default(false)
+
+  // โครงสร้างองค์กร (FK optional — backward compat กับ department String? เดิม)
+  divisionId   Int?
+  division     Division?   @relation(fields: [divisionId], references: [id])
+  workUnitId   Int?
+  workUnit     WorkUnit?   @relation(fields: [workUnitId], references: [id])
+  departmentId Int?
+  deptGroup    Department? @relation(fields: [departmentId], references: [id])
+
+  // fields เดิม (ยังคงไว้)
+  department   String?
+  phone        String?
+  avatar       String?
+  isActive     Boolean   @default(true)
+
+  // ข้อมูลส่วนตัว (เพิ่มใหม่)
+  nickname     String?
+  birthDate    DateTime? @db.Date
+  nationalId   String?   @unique
+  startDate    DateTime? @db.Date
+  signature    String?
+
+  // Social / SSO (เพิ่มใหม่)
+  lineUserId   String?   @unique
+  googleId     String?   @unique
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // ─── Relations (เดิม) ───────────────────────────────────────────────────────
+  createdDutySchedules  DutySchedule[]        @relation("DutyCreatedBy")
+  dutyLogs              DutyLog[]             @relation("DutyLogTeacher")
+  recordedLogs          DutyLog[]             @relation("DutyLogRecorder")
+  workLogs              WorkLog[]
+  workLogApprovals      WorkLogApproval[]
+  borrowedEquipments    EquipmentBorrow[]     @relation("Borrower")
+  approvedBorrows       EquipmentBorrow[]     @relation("BorrowApprover")
+  equipmentInspections  EquipmentInspection[]
+  reportedRepairTickets RepairTicket[]        @relation("TicketReporter")
+  repairAssignments     RepairAssignment[]    @relation("RepairTechnician")
+  pmSchedules           PmSchedule[]
+  roomBookings          RoomBooking[]
+  roomBookingApprovals  RoomBookingApproval[]
+  notifications         Notification[]
+
+  // ─── Relations (ใหม่) ───────────────────────────────────────────────────────
+  lostFoundReports      LostFoundItem[]       @relation("LostFoundReporter")
+  lostFoundClaims       LostFoundItem[]       @relation("LostFoundClaimer")
+  modulePermissions     ModulePermission[]
+
+  @@map("users")
+}
+
+// ─── ระบบเวรรับนักเรียน ────────────────────────────────────────────────────
+
+model DutySchedule {
+  id             Int       @id @default(autoincrement())
+  semester       String    // "1/2568" | "2/2568"
+  dutyDate       DateTime  @db.Date
+  departmentId   Int?
+  departmentName String
+  note           String?   @db.Text
+  createdById    Int
+  createdBy      User      @relation("DutyCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime  @default(now())
+
+  logs           DutyLog[]
+
+  @@map("duty_schedules")
+}
+
+model DutyLog {
+  id           Int          @id @default(autoincrement())
+  scheduleId   Int
+  schedule     DutySchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  teacherId    Int
+  teacher      User         @relation("DutyLogTeacher", fields: [teacherId], references: [id])
+  status       String       // "PRESENT" | "ABSENT"
+  photo        String?
+  note         String?      @db.Text
+  recordedById Int?
+  recordedBy   User?        @relation("DutyLogRecorder", fields: [recordedById], references: [id])
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@unique([scheduleId, teacherId])
+  @@map("duty_logs")
+}
+
+// ─── ระบบบันทึกปฏิบัติงาน ──────────────────────────────────────────────────
+
+model WorkType {
+  id       Int     @id @default(autoincrement())
+  name     String  @unique
+  category String
+  color    String
+  isActive Boolean @default(true)
+
+  workLogs WorkLog[]
+
+  @@map("work_types")
+}
+
+model WorkLog {
+  id          Int           @id @default(autoincrement())
+  userId      Int
+  user        User          @relation(fields: [userId], references: [id])
+  workTypeId  Int
+  workType    WorkType      @relation(fields: [workTypeId], references: [id])
+  logDate     DateTime      @db.Date
+  title       String
+  detail      String?       @db.Text
+  startTime   String?
+  endTime     String?
+  gpsLat      String?
+  gpsLng      String?
+  attachments String?       @db.Text
+  status      WorkLogStatus @default(draft)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  approvals WorkLogApproval[]
+
+  @@map("work_logs")
+}
+
+model WorkLogApproval {
+  id         Int                   @id @default(autoincrement())
+  logId      Int
+  log        WorkLog               @relation(fields: [logId], references: [id])
+  approverId Int
+  approver   User                  @relation(fields: [approverId], references: [id])
+  status     WorkLogApprovalStatus
+  comment    String?               @db.Text
+  createdAt  DateTime              @default(now())
+
+  @@map("work_log_approvals")
+}
+
+// ─── ระบบครุภัณฑ์ ──────────────────────────────────────────────────────────
+
+model EquipmentCategory {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique
+  description String? @db.Text
+  isActive    Boolean @default(true)
+
+  equipments Equipment[]
+
+  @@map("equipment_categories")
+}
+
+model Equipment {
+  id           Int               @id @default(autoincrement())
+  code         String            @unique
+  name         String
+  categoryId   Int
+  category     EquipmentCategory @relation(fields: [categoryId], references: [id])
+  brand        String?
+  model        String?
+  serialNumber String?
+  department   String
+  room         String?
+  price        Decimal?          @db.Decimal(12, 2)
+  acquiredDate DateTime?         @db.Date
+  source       String?
+  status       EquipmentStatus   @default(active)
+  qrCode       String?
+  image        String?
+  note         String?           @db.Text
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  borrows       EquipmentBorrow[]
+  inspections   EquipmentInspection[]
+  repairTickets RepairTicket[]
+  pmSchedules   PmSchedule[]
+
+  @@map("equipments")
+}
+
+model EquipmentBorrow {
+  id          Int          @id @default(autoincrement())
+  equipmentId Int
+  equipment   Equipment    @relation(fields: [equipmentId], references: [id])
+  borrowerId  Int
+  borrower    User         @relation("Borrower", fields: [borrowerId], references: [id])
+  approverId  Int?
+  approver    User?        @relation("BorrowApprover", fields: [approverId], references: [id])
+  purpose     String       @db.Text
+  borrowDate  DateTime     @db.Date
+  dueDate     DateTime     @db.Date
+  returnDate  DateTime?    @db.Date
+  status      BorrowStatus @default(pending)
+  condition   String?
+  note        String?      @db.Text
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@map("equipment_borrows")
+}
+
+model EquipmentInspection {
+  id          Int                 @id @default(autoincrement())
+  equipmentId Int
+  equipment   Equipment           @relation(fields: [equipmentId], references: [id])
+  inspectorId Int
+  inspector   User                @relation(fields: [inspectorId], references: [id])
+  inspectDate DateTime            @db.Date
+  condition   InspectionCondition
+  note        String?             @db.Text
+  image       String?
+  createdAt   DateTime            @default(now())
+
+  @@map("equipment_inspections")
+}
+
+// ─── ระบบแจ้งซ่อม ──────────────────────────────────────────────────────────
+
+model RepairTicket {
+  id          Int          @id @default(autoincrement())
+  ticketNo    String       @unique
+  reporterId  Int
+  reporter    User         @relation("TicketReporter", fields: [reporterId], references: [id])
+  equipmentId Int?
+  equipment   Equipment?   @relation(fields: [equipmentId], references: [id])
+  type        String
+  location    String
+  urgency     Urgency      @default(normal)
+  title       String
+  description String       @db.Text
+  image       String?
+  status      RepairStatus @default(pending)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  assignments RepairAssignment[]
+
+  @@map("repair_tickets")
+}
+
+model RepairAssignment {
+  id           Int                    @id @default(autoincrement())
+  ticketId     Int
+  ticket       RepairTicket           @relation(fields: [ticketId], references: [id])
+  technicianId Int
+  technician   User                   @relation("RepairTechnician", fields: [technicianId], references: [id])
+  assignedAt   DateTime               @default(now())
+  dueDate      DateTime?
+  solution     String?                @db.Text
+  cost         Decimal?               @default(0) @db.Decimal(12, 2)
+  status       RepairAssignmentStatus @default(assigned)
+  completedAt  DateTime?
+
+  @@map("repair_assignments")
+}
+
+model PmSchedule {
+  id            Int       @id @default(autoincrement())
+  equipmentId   Int
+  equipment     Equipment @relation(fields: [equipmentId], references: [id])
+  pmType        String
+  scheduledDate DateTime  @db.Date
+  technicianId  Int?
+  technician    User?     @relation(fields: [technicianId], references: [id])
+  status        PmStatus  @default(scheduled)
+  note          String?   @db.Text
+  completedAt   DateTime?
+
+  @@map("pm_schedules")
+}
+
+// ─── ระบบจองห้องประชุม ─────────────────────────────────────────────────────
+
+model Room {
+  id              Int        @id @default(autoincrement())
+  name            String
+  capacity        Int
+  facilities      String?    @db.Text
+  image           String?
+  requireApproval Boolean    @default(false)
+  status          RoomStatus @default(active)
+  note            String?    @db.Text
+
+  bookings RoomBooking[]
+
+  @@map("rooms")
+}
+
+model RoomBooking {
+  id              Int           @id @default(autoincrement())
+  roomId          Int
+  room            Room          @relation(fields: [roomId], references: [id])
+  userId          Int
+  user            User          @relation(fields: [userId], references: [id])
+  title           String
+  attendees       Int?
+  startTime       DateTime
+  endTime         DateTime
+  equipmentNeeded String?       @db.Text
+  purpose         String?       @db.Text
+  status          BookingStatus @default(pending)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  approvals RoomBookingApproval[]
+
+  @@map("room_bookings")
+}
+
+model RoomBookingApproval {
+  id         Int                @id @default(autoincrement())
+  bookingId  Int
+  booking    RoomBooking        @relation(fields: [bookingId], references: [id])
+  approverId Int
+  approver   User               @relation(fields: [approverId], references: [id])
+  status     RoomApprovalStatus
+  note       String?            @db.Text
+  createdAt  DateTime           @default(now())
+
+  @@map("room_booking_approvals")
+}
+
+// ─── ระบบแจ้งเตือน ─────────────────────────────────────────────────────────
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  message   String   @db.Text
+  type      String
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+
+// ─── โครงสร้างองค์กร ────────────────────────────────────────────────────────
+
+model Division {
+  id       Int    @id @default(autoincrement())
+  name     String @unique
+  code     String @unique
+  isActive Boolean @default(true)
+
+  workUnits WorkUnit[]
+  users     User[]
+
+  @@map("divisions")
+}
+
+model WorkUnit {
+  id         Int      @id @default(autoincrement())
+  name       String
+  code       String   @unique
+  divisionId Int
+  division   Division @relation(fields: [divisionId], references: [id])
+  isActive   Boolean  @default(true)
+
+  users User[]
+
+  @@map("work_units")
+}
+
+model Department {
+  id       Int    @id @default(autoincrement())
+  name     String @unique
+  code     String @unique
+  isActive Boolean @default(true)
+
+  users User[]
+
+  @@map("departments")
+}
+
+// ─── ของหาย / ของได้ ─────────────────────────────────────────────────────────
+
+model LostFoundCategory {
+  id       Int    @id @default(autoincrement())
+  name     String @unique
+  isActive Boolean @default(true)
+
+  items LostFoundItem[]
+
+  @@map("lostfound_categories")
+}
+
+model LostFoundItem {
+  id            Int                @id @default(autoincrement())
+  refNo         String?            @unique
+  type          String             @default("found")
+  title         String
+  description   String?            @db.Text
+  categoryId    Int?
+  category      LostFoundCategory? @relation(fields: [categoryId], references: [id])
+  foundDate     DateTime?          @db.Date
+  foundLocation String?
+  image         String?
+  gpsLat        String?
+  gpsLng        String?
+  status        LostFoundStatus    @default(found)
+  reporterId    Int
+  reporter      User               @relation("LostFoundReporter", fields: [reporterId], references: [id])
+  claimedBy     Int?
+  claimer       User?              @relation("LostFoundClaimer", fields: [claimedBy], references: [id])
+  claimedAt     DateTime?
+  claimedByName String?
+  claimedPhone  String?
+  claimedIdCard String?
+  claimedPhoto  String?
+  note          String?            @db.Text
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@map("lostfound_items")
+}
+
+// ─── Module Permissions ───────────────────────────────────────────────────────
+
+model ModulePermission {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module    String   // DUTY | WORK_LOG | EQUIPMENT | HELPDESK | ROOM_BOOKING | LOST_FOUND
+  level     String   @default("ADMIN") // ADMIN | USER
+  createdAt DateTime @default(now())
+
+  @@unique([userId, module])
+  @@map("module_permissions")
+}
+
+// ─── ตั้งค่าระบบ ─────────────────────────────────────────────────────────────
+
+model SystemSettings {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String   @db.Text
+  group     String   @default("general")
+  label     String?
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+// ─── ปีการศึกษา ──────────────────────────────────────────────────────────────
+
+model AcademicYear {
+  id        Int      @id @default(autoincrement())
+  year      Int      @unique
+  semester  Int
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  isCurrent Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("academic_years")
+}
