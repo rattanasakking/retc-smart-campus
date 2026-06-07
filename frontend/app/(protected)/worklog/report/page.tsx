@@ -2,9 +2,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
-} from 'recharts';
-import {
   ChevronLeft, Download, Check, AlertTriangle, Loader2, BarChart3,
 } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -38,25 +35,14 @@ interface ReportData {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function PctBar({ pct }: { pct: number }) {
+function PctBadge({ pct }: { pct: number }) {
   const color = pct >= 80 ? '#0d9068' : pct >= 50 ? '#b45309' : '#dc2626';
+  const bg    = pct >= 80 ? '#e6f9f0' : pct >= 50 ? '#fffbeb' : '#fef2f2';
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: '#e8f0fe' }}>
-        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
-      </div>
-      <span className="text-xs font-medium w-8 text-right" style={{ color }}>{pct}%</span>
-    </div>
+    <span className="inline-block text-xs font-bold px-2.5 py-0.5 rounded-full"
+      style={{ backgroundColor: bg, color }}>{pct}%</span>
   );
 }
-
-const CHART_STYLE = {
-  backgroundColor: '#ffffff',
-  border: '1px solid #dce6f9',
-  borderRadius: 8,
-  color: '#1a2744',
-  fontSize: 12,
-};
 
 const POS_LABEL: Record<string, string> = {
   teacher: 'ครู', work_unit_chief: 'หน.งาน', department_chief: 'หน.แผนก',
@@ -246,22 +232,19 @@ export default function WorkLogReportPage() {
             ))}
           </div>
 
-          {/* Bar chart — work type freq */}
+          {/* Work type freq list */}
           {report.byWorkType.length > 0 && (
             <div className="card">
-              <p className="text-sm font-semibold mb-4" style={{ color: '#1a2744' }}>ประเภทงานที่ทำบ่อย</p>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={report.byWorkType.slice(0, 10)} layout="vertical" barSize={18}>
-                  <XAxis type="number" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <YAxis type="category" dataKey="name" tick={{ fill: '#4a6080', fontSize: 11 }} axisLine={false} tickLine={false} width={120} />
-                  <Tooltip contentStyle={CHART_STYLE} cursor={{ fill: '#e8f0fe' }} />
-                  <Bar dataKey="count" name="รายการ" radius={[0, 4, 4, 0]}>
-                    {report.byWorkType.slice(0, 10).map((_, i) => (
-                      <Cell key={i} fill={i === 0 ? '#2979ff' : '#dce6f9'} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              <p className="text-sm font-semibold mb-3" style={{ color: '#1a2744' }}>ประเภทงานที่ทำบ่อย</p>
+              <div className="space-y-1.5">
+                {report.byWorkType.slice(0, 10).map((wt, i) => (
+                  <div key={wt.name} className="flex items-center gap-3 px-3 py-2 rounded-lg" style={{ backgroundColor: '#f5f8ff' }}>
+                    <span className="text-[11px] w-5 text-center font-bold flex-shrink-0" style={{ color: i === 0 ? '#1d6ae5' : '#94a3b8' }}>{i + 1}</span>
+                    <span className="text-xs flex-1 truncate" style={{ color: '#1a2744' }}>{wt.name}</span>
+                    <span className="text-xs font-semibold flex-shrink-0" style={{ color: '#4a6080' }}>{wt.count} รายการ</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -290,7 +273,7 @@ export default function WorkLogReportPage() {
                     <td className="px-4 py-3 text-center font-medium" style={{ color: '#0d9068' }}>{u.approved}</td>
                     <td className="px-4 py-3 text-center" style={{ color: u.submitted > 0 ? '#b45309' : '#94a3b8' }}>{u.submitted}</td>
                     <td className="px-4 py-3 text-center" style={{ color: u.returned > 0 ? '#1d6ae5' : '#94a3b8' }}>{u.returned}</td>
-                    <td className="px-4 py-3 min-w-[120px]"><PctBar pct={u.rate} /></td>
+                    <td className="px-4 py-3 min-w-[120px]"><PctBadge pct={u.rate} /></td>
                   </tr>
                 ))}
               </tbody>

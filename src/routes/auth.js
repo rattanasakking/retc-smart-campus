@@ -30,6 +30,7 @@ const USER_SELECT = {
   role: true, position: true, isSuperAdmin: true,
   department: true, divisionId: true, workUnitId: true, departmentId: true,
   phone: true, avatar: true, isActive: true, createdAt: true,
+  notifyByLine: true, notifyByEmail: true,
 };
 
 // List view — เพิ่ม relation names + personal fields
@@ -82,7 +83,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-const ALL_MODULES = ['DUTY', 'WORK_LOG', 'EQUIPMENT', 'HELPDESK', 'ROOM_BOOKING', 'LOST_FOUND'];
+const ALL_MODULES = ['DUTY', 'WORK_LOG', 'EQUIPMENT', 'HELPDESK', 'ROOM_BOOKING', 'LOST_FOUND', 'PERSONNEL', 'LEAVE'];
 
 // GET /api/auth/my-modules  — returns modules this user can access (role + admin)
 router.get('/my-modules', auth, async (req, res) => {

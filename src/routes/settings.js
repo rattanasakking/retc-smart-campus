@@ -463,6 +463,69 @@ router.delete('/academic-years/:id', superAdmin, async (req, res, next) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// การแจ้งเตือน (Notification Settings)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const NOTIFY_MODULES = ['DUTY', 'WORK_LOG', 'EQUIPMENT', 'HELPDESK', 'ROOM_BOOKING', 'LOST_FOUND', 'PERSONNEL', 'LEAVE'];
+const NOTIFY_KEY = (m) => `notify_line_${m}`;
+
+// GET /api/settings/notifications
+router.get('/notifications', auth, async (req, res, next) => {
+  try {
+    const rows = await prisma.systemSettings.findMany({
+      where: { key: { startsWith: 'notify_line_' } },
+    });
+    const result = {};
+    for (const m of NOTIFY_MODULES) {
+      const row = rows.find((r) => r.key === NOTIFY_KEY(m));
+      result[m] = row ? row.value === 'true' : true; // default on
+    }
+    res.json(success(result));
+  } catch (e) { next(e); }
+});
+
+// PUT /api/settings/notifications  — body: { DUTY: true, HELPDESK: false, ... }
+router.put('/notifications', superAdmin, async (req, res, next) => {
+  try {
+    const updates = req.body;
+    if (typeof updates !== 'object' || Array.isArray(updates)) {
+      return res.status(400).json(error('Body ต้องเป็น object'));
+    }
+    const entries = Object.entries(updates).filter(([k]) => NOTIFY_MODULES.includes(k));
+    if (entries.length === 0) return res.status(400).json(error('ไม่มีข้อมูลที่จะอัปเดต'));
+
+    await prisma.$transaction(
+      entries.map(([module, enabled]) =>
+        prisma.systemSettings.upsert({
+          where:  { key: NOTIFY_KEY(module) },
+          update: { value: String(Boolean(enabled)) },
+          create: { key: NOTIFY_KEY(module), value: String(Boolean(enabled)), group: 'notifications' },
+        })
+      )
+    );
+    res.json(success(null, 'บันทึกการตั้งค่าการแจ้งเตือนสำเร็จ'));
+  } catch (e) { next(e); }
+});
+
+// PUT /api/settings/me/notifications  — any user updates their own preferences
+router.put('/me/notifications', auth, async (req, res, next) => {
+  try {
+    const { notifyByLine, notifyByEmail } = req.body;
+    const data = {};
+    if (notifyByLine  !== undefined) data.notifyByLine  = Boolean(notifyByLine);
+    if (notifyByEmail !== undefined) data.notifyByEmail = Boolean(notifyByEmail);
+    if (Object.keys(data).length === 0) return res.status(400).json(error('ไม่มีข้อมูลที่จะอัปเดต'));
+
+    const user = await prisma.user.update({
+      where: { id: req.user.id },
+      data,
+      select: { id: true, notifyByLine: true, notifyByEmail: true },
+    });
+    res.json(success(user, 'บันทึกการตั้งค่าการแจ้งเตือนสำเร็จ'));
+  } catch (e) { next(e); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // ทดสอบ LINE Notify
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -763,7 +826,7 @@ router.put('/users/:id', superAdmin, async (req, res, next) => {
 // Module Permissions
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const VALID_MODULES = ['DUTY', 'WORK_LOG', 'EQUIPMENT', 'HELPDESK', 'ROOM_BOOKING', 'LOST_FOUND'];
+const VALID_MODULES = ['DUTY', 'WORK_LOG', 'EQUIPMENT', 'HELPDESK', 'ROOM_BOOKING', 'LOST_FOUND', 'PERSONNEL', 'LEAVE'];
 const ALL_ROLES     = ['admin', 'executive', 'teacher', 'staff'];
 const MODULE_KEY    = (m) => `MODULE_ROLES_${m}`;
 

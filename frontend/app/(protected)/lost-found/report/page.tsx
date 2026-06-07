@@ -4,7 +4,6 @@ import { api } from '@/lib/api';
 import { Download, MapPin, Calendar, ChevronDown, Package } from 'lucide-react';
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts';
 
 interface Category { id: number; name: string }
@@ -174,18 +173,17 @@ export default function LostFoundReportPage() {
             )}
           </div>
 
-          {/* Bar — monthly */}
+          {/* Monthly counts grid */}
           <div className="card">
             <h3 className="font-semibold text-[#1a2744] mb-4 text-sm">จำนวนรายการรายเดือน ปี {Number(year) + 543}</h3>
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={barData} margin={{ top: 0, right: 8, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f4ff" />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#4a6080' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#4a6080' }} allowDecimals={false} />
-                <Tooltip formatter={(v: number) => [v, 'รายการ']} />
-                <Bar dataKey="count" fill="#1d6ae5" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="grid grid-cols-4 gap-2">
+              {barData.map(({ month, count }) => (
+                <div key={month} className="rounded-lg p-3 text-center" style={{ backgroundColor: '#f5f8ff' }}>
+                  <p className="text-lg font-bold" style={{ color: count > 0 ? '#1d6ae5' : '#94a3b8' }}>{count}</p>
+                  <p className="text-xs mt-0.5" style={{ color: '#4a6080' }}>{month}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

@@ -3,17 +3,20 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  Building2, Network, Shield, ChevronLeft, Settings, Users,
+  Building2, Network, Shield, ChevronLeft, Settings, Users, Smartphone, CalendarX, Bell,
 } from 'lucide-react';
 import { USER_KEY } from '@/lib/api';
 
 interface StoredUser { isSuperAdmin?: boolean; name?: string }
 
 const MENU = [
-  { href: '/settings/general',      label: 'ข้อมูลวิทยาลัย',   Icon: Building2 },
-  { href: '/settings/organization', label: 'โครงสร้างองค์กร', Icon: Network    },
-  { href: '/settings/users',        label: 'จัดการผู้ใช้',     Icon: Users      },
-  { href: '/settings/permissions',  label: 'สิทธิ์การใช้งาน', Icon: Shield     },
+  { href: '/settings/general',      label: 'ข้อมูลวิทยาลัย',    Icon: Building2  },
+  { href: '/settings/organization', label: 'โครงสร้างองค์กร',  Icon: Network     },
+  { href: '/settings/users',        label: 'จัดการผู้ใช้',      Icon: Users       },
+  { href: '/settings/permissions',  label: 'สิทธิ์การใช้งาน',  Icon: Shield      },
+  { href: '/settings/quick-menu',     label: 'เมนูด่วน (มือถือ)', Icon: Smartphone  },
+  { href: '/settings/leave-types',    label: 'ประเภทการลา',       Icon: CalendarX   },
+  { href: '/settings/notifications',  label: 'การแจ้งเตือน',      Icon: Bell        },
 ];
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {

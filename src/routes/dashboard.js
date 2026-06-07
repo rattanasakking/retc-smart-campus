@@ -54,6 +54,9 @@ router.get('/summary', auth, async (req, res, next) => {
       todayBookings,
       todayWorkLogs,
       unclaimedLostFound,
+      totalPersonnel,
+      pendingLeaves,
+      dutyLoggedSchedules,
     ] = await Promise.all([
 
       // ครุภัณฑ์ทั้งหมด (ยกเว้น disposed)
@@ -101,6 +104,26 @@ router.get('/summary', auth, async (req, res, next) => {
       s0('kpi.unclaimedLostFound', () =>
         prisma.lostFoundItem.count({ where: { status: 'found' } })
       ),
+
+      // บุคลากรทั้งหมด — นับเหมือนกับ GET /personnel (ไม่กรอง isActive)
+      s0('kpi.totalPersonnel', () =>
+        prisma.user.count()
+      ),
+
+      // ใบลารออนุมัติ (ทั้งระบบ)
+      s0('kpi.pendingLeaves', () =>
+        prisma.leaveRequest.count({ where: { status: 'PENDING' } })
+      ),
+
+      // เวรวันนี้ที่บันทึกแล้ว (มี DutyLog อย่างน้อย 1 รายการ)
+      s0('kpi.dutyLoggedSchedules', () =>
+        prisma.dutySchedule.count({
+          where: {
+            dutyDate: { gte: today, lt: tomorrow },
+            logs: { some: {} },
+          },
+        })
+      ),
     ]);
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -114,6 +137,7 @@ router.get('/summary', auth, async (req, res, next) => {
       rawAlertRepairs,
       rawAlertLostFound,
       rawTrend,
+      rawPersonnelTypes,
     ] = await Promise.all([
 
       // repairByStatus — groupBy
@@ -205,6 +229,24 @@ router.get('/summary', auth, async (req, res, next) => {
           return { month: THAI_MONTHS[d.getMonth()], count };
         })
       ),
+
+      // บุคลากรตามประเภท — groupBy users จาก user table (reliable กว่า _count select)
+      sa('personnelByType', async () => {
+        const [types, grouped] = await Promise.all([
+          prisma.personnelType.findMany({
+            where:   { isActive: true },
+            select:  { id: true, name: true },
+            orderBy: { name: 'asc' },
+          }),
+          prisma.user.groupBy({
+            by:    ['personnelTypeId'],
+            _count: { id: true },
+            where: { personnelTypeId: { not: null } },
+          }),
+        ]);
+        const countMap = new Map(grouped.map((g) => [g.personnelTypeId, g._count.id]));
+        return types.map((t) => ({ name: t.name, count: countMap.get(t.id) ?? 0 }));
+      }),
     ]);
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -279,6 +321,13 @@ router.get('/summary', auth, async (req, res, next) => {
     // repairTrend — rawTrend ได้จาก Promise.all ด้านบน
     const repairTrend = rawTrend;
 
+    // personnelByType — query คืน [{ name, count }] ตรงๆ แล้ว เพิ่ม "ไม่ระบุ" ถ้ามี
+    const personnelByType = rawPersonnelTypes.filter((t) => t.count > 0);
+    const typedCount = personnelByType.reduce((s, t) => s + t.count, 0);
+    if (totalPersonnel - typedCount > 0) {
+      personnelByType.push({ name: 'ไม่ระบุประเภท', count: totalPersonnel - typedCount });
+    }
+
     // ═════════════════════════════════════════════════════════════════════════
     // RESPONSE
     // ═════════════════════════════════════════════════════════════════════════
@@ -292,6 +341,9 @@ router.get('/summary', auth, async (req, res, next) => {
         todayBookings,
         todayWorkLogs,
         unclaimedLostFound,
+        totalPersonnel,
+        pendingLeaves,
+        dutyLoggedSchedules,
       },
       recentAlerts,
       repairTrend,
@@ -299,6 +351,7 @@ router.get('/summary', auth, async (req, res, next) => {
       equipmentByCategory,
       todayDutyList,
       todayBookingList,
+      personnelByType,
     }));
 
   } catch (err) {

@@ -5,10 +5,6 @@ import {
   Plus, ChevronLeft, ChevronRight, Loader2, Check, AlertTriangle,
   Calendar, List, Clock, Users, X, Settings,
 } from 'lucide-react';
-import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
-  CartesianGrid, Tooltip, Cell,
-} from 'recharts';
 import { api, USER_KEY } from '@/lib/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -547,20 +543,18 @@ export default function RoomPage() {
                 ))}
               </div>
 
-              {/* BarChart */}
+              {/* Room usage list */}
               <div className="bg-white rounded-xl p-4" style={{ border: '1px solid #dce6f9' }}>
-                <p className="text-sm font-semibold mb-4" style={{ color: '#1a2744' }}>การใช้งานห้องประชุม (ชั่วโมง)</p>
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={reportData.rooms} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f4ff" />
-                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                    <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #dce6f9' }} formatter={(v: number) => [`${v} ชม.`, 'ชั่วโมง']} />
-                    <Bar dataKey="hours" radius={[4,4,0,0]}>
-                      {reportData.rooms.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                <p className="text-sm font-semibold mb-3" style={{ color: '#1a2744' }}>การใช้งานห้องประชุม (ชั่วโมง)</p>
+                <div className="space-y-1.5">
+                  {[...reportData.rooms].sort((a, b) => b.hours - a.hours).map((r, i) => (
+                    <div key={r.id} className="flex items-center gap-3 px-3 py-2 rounded-lg" style={{ backgroundColor: '#f5f8ff' }}>
+                      <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
+                      <span className="text-xs flex-1 truncate" style={{ color: '#1a2744' }}>{r.name}</span>
+                      <span className="text-xs font-semibold flex-shrink-0" style={{ color: '#4a6080' }}>{r.hours} ชม.</span>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* Table */}
@@ -581,12 +575,13 @@ export default function RoomPage() {
                         <td className="px-4 py-3 text-xs" style={{ color: '#4a6080' }}>{r.bookings}</td>
                         <td className="px-4 py-3 text-xs" style={{ color: '#4a6080' }}>{r.hours}</td>
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 bg-[#f0f4ff] rounded-full h-1.5">
-                              <div className="h-1.5 rounded-full" style={{ width: `${r.utilization}%`, backgroundColor: '#1d6ae5' }} />
-                            </div>
-                            <span className="text-xs font-medium w-10 text-right" style={{ color: '#1a2744' }}>{r.utilization}%</span>
-                          </div>
+                          <span className="inline-block text-xs font-bold px-2.5 py-0.5 rounded-full"
+                            style={{
+                              backgroundColor: r.utilization >= 80 ? '#e6f9f0' : r.utilization >= 50 ? '#fffbeb' : '#f0f4ff',
+                              color: r.utilization >= 80 ? '#0d9068' : r.utilization >= 50 ? '#b45309' : '#1d6ae5',
+                            }}>
+                            {r.utilization}%
+                          </span>
                         </td>
                       </tr>
                     ))}

@@ -28,7 +28,11 @@ app.use(
 );
 
 // ─── Body parsers ─────────────────────────────────────────────────────────────
-app.use(express.json({ limit: '10mb' }));
+// verify callback เก็บ rawBody (string) ไว้ใน req.rawBody เพื่อ verify LINE webhook signature
+app.use(express.json({
+  limit: '10mb',
+  verify: (req, _res, buf) => { req.rawBody = buf.toString('utf8'); },
+}));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ─── Session (ใช้เฉพาะ OAuth state verification) ──────────────────────────────
@@ -60,6 +64,8 @@ app.use('/api/room',       require('./routes/room'));
 app.use('/api/lostfound',  require('./routes/lostfound'));
 app.use('/api/settings',   require('./routes/settings'));
 app.use('/api/report',     require('./routes/report'));
+app.use('/api/personnel',  require('./routes/personnel'));
+app.use('/api/webhook',    require('./routes/webhook'));
 
 // ─── Health check (Plesk monitoring / uptime check) ──────────────────────────
 app.get('/api/health', (_req, res) => {

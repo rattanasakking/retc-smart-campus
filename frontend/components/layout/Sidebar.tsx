@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import {
   LayoutDashboard, CalendarCheck, ClipboardList, Monitor,
   Wrench, DoorOpen, PackageSearch, BarChart3, Car, CalendarDays, Megaphone,
-  Lock, ChevronRight, Settings,
+  Lock, ChevronRight, Settings, Users, CalendarX,
 } from 'lucide-react';
 import { TOKEN_KEY, USER_KEY } from '@/lib/api';
 
@@ -20,8 +20,10 @@ const ROLE_COLOR: Record<string, string> = {
   admin: 'bg-[#7c3aed]', executive: 'bg-[#dc2626]', teacher: 'bg-[#1d6ae5]', staff: 'bg-[#0d9068]',
 };
 
-// module key for each nav item (undefined = always visible)
-const NAV_PHASE1: { href: string; label: string; Icon: React.FC<{className?: string}>; badge?: boolean; module?: string; adminOnly?: boolean }[] = [
+const NAV_PHASE1: {
+  href: string; label: string; Icon: React.FC<{className?: string}>;
+  badge?: boolean; module?: string; modules?: string[]; adminOnly?: boolean; extraMatch?: string;
+}[] = [
   { href: '/dashboard', label: 'หน้าหลัก',          Icon: LayoutDashboard },
   { href: '/duty',      label: 'เวรรับนักเรียน',    Icon: CalendarCheck,   module: 'DUTY'         },
   { href: '/worklog',   label: 'บันทึกปฏิบัติงาน', Icon: ClipboardList,   module: 'WORK_LOG'     },
@@ -30,6 +32,8 @@ const NAV_PHASE1: { href: string; label: string; Icon: React.FC<{className?: str
   { href: '/room',      label: 'จองห้องประชุม',      Icon: DoorOpen,        module: 'ROOM_BOOKING' },
   { href: '/lost-found/manage', label: 'ของหาย',     Icon: PackageSearch,   module: 'LOST_FOUND'   },
   { href: '/report',    label: 'รายงานภาพรวม',       Icon: BarChart3,       adminOnly: true        },
+  { href: '/personnel', label: 'บุคลากร',             Icon: Users,           module: 'PERSONNEL'    },
+  { href: '/leave',     label: 'ระบบการลา',           Icon: CalendarX,       module: 'LEAVE'        },
 ];
 
 const NAV_PHASE2 = [
@@ -46,7 +50,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
   const [pendingRepairs, setPendingRepairs] = useState(0);
   const [allowedModules, setAllowedModules] = useState<string[] | null>(null);
   const [logoUrl, setLogoUrl]             = useState<string | null>(null);
-  const [schoolName, setSchoolName]       = useState('Smart Campus'); // null = loading
+  const [schoolName, setSchoolName]       = useState('Smart Campus');
 
   useEffect(() => {
     const stored = localStorage.getItem(USER_KEY);
@@ -55,7 +59,6 @@ export default function Sidebar({ onClose }: SidebarProps) {
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) return;
 
-    // Fetch logo (public), pending repairs, and accessible modules in parallel
     Promise.all([
       fetch('/api/settings/logo').then(r => r.json()).catch(() => ({})),
       fetch('/api/dashboard/summary', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
@@ -71,13 +74,28 @@ export default function Sidebar({ onClose }: SidebarProps) {
   }, []);
 
   const canSeeItem = (item: typeof NAV_PHASE1[0]) => {
-    if (!item.module && !item.adminOnly) return true; // always visible (e.g., dashboard)
-    if (allowedModules === null) return true; // loading state: show all
+    if (!item.module && !item.modules && !item.adminOnly) return true;
+    if (allowedModules === null) return true;
     if (item.adminOnly) {
       return user?.isSuperAdmin || user?.role === 'admin' || user?.role === 'executive';
     }
+    if (item.modules) return item.modules.some((m) => allowedModules.includes(m));
     return item.module ? allowedModules.includes(item.module) : true;
   };
+
+  function navItemStyle(active: boolean) {
+    return {
+      backgroundColor: active ? '#2979ff' : 'transparent',
+      color: active ? '#ffffff' : 'rgba(255,255,255,0.55)',
+    };
+  }
+
+  function navItemHover(e: React.MouseEvent<HTMLAnchorElement | HTMLButtonElement>, active: boolean) {
+    if (!active) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.07)';
+  }
+  function navItemLeave(e: React.MouseEvent<HTMLAnchorElement | HTMLButtonElement>, active: boolean) {
+    if (!active) e.currentTarget.style.backgroundColor = 'transparent';
+  }
 
   return (
     <aside className="w-[220px] flex flex-col flex-shrink-0 h-full relative"
@@ -110,23 +128,21 @@ export default function Sidebar({ onClose }: SidebarProps) {
         </div>
       </div>
 
-      {/* Phase 1 nav */}
-      <nav className="flex-1 overflow-y-auto py-3">
+      {/* Nav */}
+      <nav className="flex-1 overflow-y-auto py-3 no-scrollbar">
         <p className="px-4 mb-1.5 text-[10px] font-semibold uppercase tracking-wider"
            style={{ color: 'rgba(255,255,255,0.3)' }}>Menu</p>
         <ul className="space-y-0.5 px-2">
-          {NAV_PHASE1.filter(canSeeItem).map(({ href, label, Icon, badge }) => {
-            const active = pathname === href || pathname.startsWith(href + '/');
+          {NAV_PHASE1.filter(canSeeItem).map(({ href, label, Icon, badge, extraMatch }) => {
+            const active = pathname === href || pathname.startsWith(href + '/')
+              || (!!extraMatch && (pathname === extraMatch || pathname.startsWith(extraMatch + '/')));
             return (
               <li key={href}>
                 <Link href={href} onClick={onClose}
                   className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors"
-                  style={{
-                    backgroundColor: active ? '#2979ff' : 'transparent',
-                    color: active ? '#ffffff' : 'rgba(255,255,255,0.55)',
-                  }}
-                  onMouseEnter={e => { if (!active) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.07)'; }}
-                  onMouseLeave={e => { if (!active) e.currentTarget.style.backgroundColor = 'transparent'; }}>
+                  style={navItemStyle(active)}
+                  onMouseEnter={e => navItemHover(e, active)}
+                  onMouseLeave={e => navItemLeave(e, active)}>
                   <Icon className="w-4 h-4 flex-shrink-0" />
                   <span className="flex-1 truncate">{label}</span>
                   {badge && pendingRepairs > 0 && (
@@ -140,32 +156,22 @@ export default function Sidebar({ onClose }: SidebarProps) {
           })}
         </ul>
 
-        {/* Settings link */}
+        {/* Settings link — admin/superAdmin only */}
         {(user?.isSuperAdmin || user?.role === 'admin') && (
           <>
             <p className="px-4 mt-4 mb-1.5 text-[10px] font-semibold uppercase tracking-wider"
                style={{ color: 'rgba(255,255,255,0.3)' }}>ระบบ</p>
             <ul className="space-y-0.5 px-2">
-              {[
-                { href: '/settings/general', label: 'ตั้งค่าระบบ', Icon: Settings },
-              ].map(({ href, label, Icon }) => {
-                const active = pathname.startsWith(href.split('/')[1] ? `/${href.split('/')[1]}` : href);
-                return (
-                  <li key={href}>
-                    <Link href={href} onClick={onClose}
-                      className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors"
-                      style={{
-                        backgroundColor: pathname.startsWith('/settings') ? '#2979ff' : 'transparent',
-                        color: pathname.startsWith('/settings') ? '#ffffff' : 'rgba(255,255,255,0.55)',
-                      }}
-                      onMouseEnter={e => { if (!pathname.startsWith('/settings')) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.07)'; }}
-                      onMouseLeave={e => { if (!pathname.startsWith('/settings')) e.currentTarget.style.backgroundColor = 'transparent'; }}>
-                      <Icon className="w-4 h-4 flex-shrink-0" />
-                      <span className="flex-1 truncate">{label}</span>
-                    </Link>
-                  </li>
-                );
-              })}
+              <li>
+                <Link href="/settings/general" onClick={onClose}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors"
+                  style={navItemStyle(pathname.startsWith('/settings'))}
+                  onMouseEnter={e => navItemHover(e, pathname.startsWith('/settings'))}
+                  onMouseLeave={e => navItemLeave(e, pathname.startsWith('/settings'))}>
+                  <Settings className="w-4 h-4 flex-shrink-0" />
+                  <span className="flex-1 truncate">ตั้งค่าระบบ</span>
+                </Link>
+              </li>
             </ul>
           </>
         )}

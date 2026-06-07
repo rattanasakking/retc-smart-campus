@@ -11,7 +11,7 @@ interface PermGrouped { admins: ModuleUser[]; users: ModuleUser[] }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MODULES = ['DUTY','WORK_LOG','EQUIPMENT','HELPDESK','ROOM_BOOKING','LOST_FOUND'] as const;
+const MODULES = ['DUTY','WORK_LOG','EQUIPMENT','HELPDESK','ROOM_BOOKING','LOST_FOUND','PERSONNEL','LEAVE'] as const;
 type Mod = typeof MODULES[number];
 
 const MODULE_META: Record<Mod, { label: string; desc: string; color: string; bg: string }> = {
@@ -21,6 +21,8 @@ const MODULE_META: Record<Mod, { label: string; desc: string; color: string; bg:
   HELPDESK:     { label: 'Helpdesk แจ้งซ่อม', desc: 'แจ้งซ่อมและติดตามงานซ่อม',        color: '#dc2626', bg: '#fef2f2' },
   ROOM_BOOKING: { label: 'จองห้องประชุม',      desc: 'จองและอนุมัติการใช้ห้องประชุม',   color: '#b45309', bg: '#fffbeb' },
   LOST_FOUND:   { label: 'ของหาย',             desc: 'ระบบของหายและการติดตามคืนของ',     color: '#16a34a', bg: '#f0fdf4' },
+  PERSONNEL:    { label: 'บุคลากร',            desc: 'จัดการข้อมูลบุคลากรและโครงสร้าง', color: '#0369a1', bg: '#e0f2fe' },
+  LEAVE:        { label: 'ระบบการลา',          desc: 'ยื่นและอนุมัติใบลาบุคลากร',        color: '#7e22ce', bg: '#f5f3ff' },
 };
 
 const ALL_ROLES = ['admin','executive','teacher','staff'] as const;

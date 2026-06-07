@@ -91,4 +91,13 @@
   .skeleton {
     @apply animate-pulse bg-[#e8f0fe] rounded;
   }
+
+  /* ── Hide scrollbar (keep scrollable) ───────────────────────────────────── */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }

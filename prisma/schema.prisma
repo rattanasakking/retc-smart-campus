@@ -125,6 +125,19 @@ enum LostFoundStatus {
   archived
 }
 
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // ========== MODELS ==========
 
 model User {
@@ -158,9 +171,22 @@ model User {
   startDate    DateTime? @db.Date
   signature    String?
 
-  // Social / SSO (เพิ่มใหม่)
+  // Social / SSO
   lineUserId   String?   @unique
   googleId     String?   @unique
+
+  // การแจ้งเตือน
+  notifyByLine  Boolean  @default(true)
+  notifyByEmail Boolean  @default(false)
+
+  // บุคลากร
+  personnelTypeId  Int?
+  personnelType    PersonnelType? @relation(fields: [personnelTypeId], references: [id])
+  employmentType   String?
+  educationLevel   String?
+  emergencyContact String?
+  emergencyPhone   String?
+  address          String?   @db.Text
 
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -185,6 +211,12 @@ model User {
   lostFoundReports      LostFoundItem[]       @relation("LostFoundReporter")
   lostFoundClaims       LostFoundItem[]       @relation("LostFoundClaimer")
   modulePermissions     ModulePermission[]
+
+  // ─── บุคลากร / การลา ────────────────────────────────────────────────────────
+  leaveRequests    LeaveRequest[]  @relation("LeaveRequests")
+  substituteLeaves LeaveRequest[]  @relation("SubstituteLeaves")
+  leaveApprovals   LeaveApproval[] @relation("LeaveApprovals")
+  leaveBalances    LeaveBalance[]  @relation("LeaveBalances")
 
   @@map("users")
 }
@@ -594,4 +626,87 @@ model AcademicYear {
   createdAt DateTime @default(now())
 
   @@map("academic_years")
+}
+
+// ─── ระบบบุคลากร ─────────────────────────────────────────────────────────────
+
+model PersonnelType {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  leaveQuota  String?  @db.Text
+  isActive    Boolean  @default(true)
+  users       User[]
+  createdAt   DateTime @default(now())
+
+  @@map("personnel_types")
+}
+
+// ─── ระบบการลา ───────────────────────────────────────────────────────────────
+
+model LeaveType {
+  id                   Int      @id @default(autoincrement())
+  name                 String   @unique
+  icon                 String?  @default("🏥")
+  maxDaysPerYear       Float?
+  requireDocument      Boolean  @default(false)
+  requireApprovalLevel Int      @default(1)
+  allowHalfDay         Boolean  @default(true)
+  isActive             Boolean  @default(true)
+  leaveRequests        LeaveRequest[]
+  leaveBalances        LeaveBalance[]
+  createdAt            DateTime @default(now())
+
+  @@map("leave_types")
+}
+
+model LeaveRequest {
+  id            Int         @id @default(autoincrement())
+  userId        Int
+  user          User        @relation("LeaveRequests", fields: [userId], references: [id])
+  leaveTypeId   Int
+  leaveType     LeaveType   @relation(fields: [leaveTypeId], references: [id])
+  startDate     DateTime
+  endDate       DateTime
+  totalDays     Float
+  isHalfDay     Boolean     @default(false)
+  halfDayPeriod String?     @default("เต็มวัน")
+  reason        String      @db.Text
+  attachments   String?     @db.Text
+  substituteId  Int?
+  substitute    User?       @relation("SubstituteLeaves", fields: [substituteId], references: [id])
+  status        LeaveStatus @default(PENDING)
+  approvals     LeaveApproval[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@map("leave_requests")
+}
+
+model LeaveApproval {
+  id         Int            @id @default(autoincrement())
+  requestId  Int
+  request    LeaveRequest   @relation(fields: [requestId], references: [id])
+  approverId Int
+  approver   User           @relation("LeaveApprovals", fields: [approverId], references: [id])
+  level      Int            @default(1)
+  status     ApprovalStatus @default(PENDING)
+  comment    String?
+  createdAt  DateTime       @default(now())
+
+  @@map("leave_approvals")
+}
+
+model LeaveBalance {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  user        User      @relation("LeaveBalances", fields: [userId], references: [id])
+  leaveTypeId Int
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id])
+  year        Int
+  quota       Float     @default(0)
+  used        Float     @default(0)
+
+  @@unique([userId, leaveTypeId, year])
+  @@map("leave_balances")
 }

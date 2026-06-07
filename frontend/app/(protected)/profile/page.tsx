@@ -1,12 +1,13 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { api, USER_KEY } from '@/lib/api';
-import { Camera, Lock, Save, X, CheckCircle } from 'lucide-react';
+import { Camera, Lock, Save, X, CheckCircle, Bell } from 'lucide-react';
 
 interface UserProfile {
   id: number; name: string; email: string; employeeId: string;
   role: string; department?: string; phone?: string; nickname?: string;
   avatar?: string; position?: string;
+  notifyByLine?: boolean; notifyByEmail?: boolean;
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -39,6 +40,8 @@ export default function ProfilePage() {
   const [avatarBase64, setAvatarBase64]   = useState('');
 
   const [pwForm, setPwForm] = useState({ current: '', newPw: '', confirm: '' });
+  const [notifyForm, setNotifyForm] = useState({ notifyByLine: true, notifyByEmail: false });
+  const [notifySaving, setNotifySaving] = useState(false);
 
   const showToast = (msg: string, err = false) => {
     if (err) setToastErr(msg); else setToast(msg);
@@ -52,6 +55,10 @@ export default function ProfilePage() {
           setProfile(r.data);
           setForm({ name: r.data.name, phone: r.data.phone ?? '', nickname: r.data.nickname ?? '' });
           if (r.data.avatar) setAvatarPreview(r.data.avatar);
+          setNotifyForm({
+            notifyByLine:  r.data.notifyByLine  !== false,
+            notifyByEmail: r.data.notifyByEmail === true,
+          });
         }
       })
       .catch(() => {})
@@ -116,6 +123,16 @@ export default function ProfilePage() {
     } finally {
       setPwSaving(false);
     }
+  };
+
+  const handleNotifySave = async () => {
+    setNotifySaving(true);
+    try {
+      await api.put('/settings/me/notifications', notifyForm);
+      showToast('บันทึกการตั้งค่าการแจ้งเตือนสำเร็จ');
+    } catch (e) {
+      showToast((e as Error).message, true);
+    } finally { setNotifySaving(false); }
   };
 
   if (loading) {
@@ -227,6 +244,39 @@ export default function ProfilePage() {
           {pwSaving ? 'กำลังบันทึก...' : 'เปลี่ยนรหัสผ่าน'}
         </button>
       </form>
+
+      {/* ── Notification Preferences ─────────────────────────────────────── */}
+      <div className="card space-y-4">
+        <div className="flex items-center gap-2 pb-3 border-b border-[#dce6f9]">
+          <Bell className="w-4 h-4 text-[#1d6ae5]" />
+          <h2 className="font-semibold text-[#1a2744]">การรับการแจ้งเตือน</h2>
+        </div>
+
+        {([
+          { key: 'notifyByLine',  label: 'รับการแจ้งเตือนผ่าน LINE', desc: 'รับแจ้งเตือนสถานะการลา, อนุมัติ ฯลฯ ผ่าน LINE' },
+          { key: 'notifyByEmail', label: 'รับการแจ้งเตือนผ่านอีเมล',  desc: 'รับแจ้งเตือนทางอีเมล (ต้องตั้งค่า SMTP)' },
+        ] as const).map(({ key, label, desc }) => (
+          <div key={key} className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-[#1a2744]">{label}</p>
+              <p className="text-xs text-[#94a3b8] mt-0.5">{desc}</p>
+            </div>
+            <button
+              onClick={() => setNotifyForm(p => ({ ...p, [key]: !p[key] }))}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${notifyForm[key] ? 'bg-green-500' : 'bg-gray-300'}`}
+              role="switch"
+              aria-checked={notifyForm[key]}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${notifyForm[key] ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
+        ))}
+
+        <button onClick={handleNotifySave} disabled={notifySaving} className="btn-primary w-full flex items-center justify-center gap-2">
+          <Save className="w-4 h-4" />
+          {notifySaving ? 'กำลังบันทึก...' : 'บันทึกการแจ้งเตือน'}
+        </button>
+      </div>
     </div>
   );
 }

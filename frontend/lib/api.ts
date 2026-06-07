@@ -16,7 +16,7 @@ async function request<T = unknown>(endpoint: string, options: RequestInit = {})
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+  const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers, cache: 'no-store' });
 
   if (res.status === 401) {
     if (typeof window !== 'undefined') {

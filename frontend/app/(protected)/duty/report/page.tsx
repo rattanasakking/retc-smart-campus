@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { ChevronLeft, Download, X, Check, AlertTriangle, Image, Printer } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  ResponsiveContainer, CartesianGrid, XAxis, YAxis,
   Tooltip, LineChart, Line, PieChart, Pie, Cell,
 } from 'recharts';
 
@@ -35,15 +35,12 @@ function fmtDate(d: string) {
   return `${dt.getDate()} ${MONTH_SHORT[dt.getMonth()]} ${dt.getFullYear() + 543}`;
 }
 
-function PctBar({ pct }: { pct: number }) {
+function PctBadge({ pct }: { pct: number }) {
   const color = pct >= 80 ? '#0d9068' : pct >= 50 ? '#b45309' : '#dc2626';
+  const bg    = pct >= 80 ? '#e6f9f0' : pct >= 50 ? '#fffbeb' : '#fef2f2';
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: '#e8f0fe' }}>
-        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
-      </div>
-      <span className="text-xs font-medium w-8 text-right" style={{ color }}>{pct}%</span>
-    </div>
+    <span className="inline-block text-xs font-bold px-2.5 py-0.5 rounded-full"
+      style={{ backgroundColor: bg, color }}>{pct}%</span>
   );
 }
 
@@ -86,12 +83,6 @@ function PhotoModal({ photos, name, onClose }: { photos: PhotoEntry[]; name: str
 
 function DayDetailModal({ day, onClose }: { day: DailyEntry; onClose: () => void }) {
   const totalRate = day.totalLogs > 0 ? Math.round(day.totalPresent / day.totalLogs * 100) : 0;
-  const barData   = day.depts.map(d => ({
-    name: d.name,
-    มา:    d.present,
-    ไม่มา: d.total - d.present,
-    อัตรา: d.total > 0 ? Math.round(d.present / d.total * 100) : 0,
-  }));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -128,23 +119,6 @@ function DayDetailModal({ day, onClose }: { day: DailyEntry; onClose: () => void
             ))}
           </div>
 
-          {/* Chart */}
-          {barData.length > 0 && (
-            <div>
-              <p className="text-sm font-semibold text-[#1a2744] mb-2">สถิติรายแผนก</p>
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={barData} margin={{ top: 0, right: 8, left: -20, bottom: 30 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f4ff" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#4a6080' }} angle={-15} textAnchor="end" interval={0} />
-                  <YAxis tick={{ fontSize: 10, fill: '#4a6080' }} allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="มา"    fill="#0d9068" radius={[4,4,0,0]} stackId="a" />
-                  <Bar dataKey="ไม่มา" fill="#dc2626" radius={[0,0,0,0]} stackId="a" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-
           {/* Dept table */}
           <table className="w-full text-sm border border-[#dce6f9] rounded-xl overflow-hidden">
             <thead>
@@ -162,7 +136,7 @@ function DayDetailModal({ day, onClose }: { day: DailyEntry; onClose: () => void
                   <td className="px-3 py-2 text-center text-[#0d9068] font-medium">{d.present}</td>
                   <td className="px-3 py-2 text-center text-red-500 font-medium">{d.total - d.present}</td>
                   <td className="px-3 py-2 min-w-[80px]">
-                    <PctBar pct={d.total > 0 ? Math.round(d.present/d.total*100) : 0} />
+                    <PctBadge pct={d.total > 0 ? Math.round(d.present/d.total*100) : 0} />
                   </td>
                 </tr>
               ))}
@@ -340,16 +314,16 @@ export default function DutyReportPage() {
           {/* Dept chart */}
           {deptChartData.length > 0 && (
             <div className="card">
-              <p className="text-sm font-semibold text-[#1a2744] mb-3">อัตราเข้าเวรรายแผนก (%)</p>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={deptChartData} margin={{ top: 0, right: 8, left: -20, bottom: 40 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f4ff" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#4a6080' }} angle={-20} textAnchor="end" interval={0} />
-                  <YAxis tick={{ fontSize: 11, fill: '#4a6080' }} domain={[0, 100]} />
-                  <Tooltip formatter={(v: number) => [`${v}%`, 'อัตราเข้าเวร']} />
-                  <Bar dataKey="อัตรา" fill="#1d6ae5" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <p className="text-sm font-semibold text-[#1a2744] mb-3">อัตราเข้าเวรรายแผนก</p>
+              <div className="space-y-2">
+                {[...deptChartData].sort((a, b) => b.อัตรา - a.อัตรา).map(d => (
+                  <div key={d.name} className="flex items-center gap-3 px-3 py-2 rounded-lg" style={{ backgroundColor: '#f5f8ff' }}>
+                    <span className="text-xs flex-1 truncate" style={{ color: '#1a2744' }}>{d.name}</span>
+                    <span className="text-xs flex-shrink-0" style={{ color: '#4a6080' }}>{d.มา}/{d.มา + d.ไม่มา}</span>
+                    <PctBadge pct={d.อัตรา} />
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -386,7 +360,7 @@ export default function DutyReportPage() {
                       <td className="px-3 py-2.5 text-center font-medium">{t.total}</td>
                       <td className="px-3 py-2.5 text-center text-[#0d9068] font-medium">{t.present}</td>
                       <td className="px-3 py-2.5 text-center text-red-500 font-medium">{t.absent}</td>
-                      <td className="px-3 py-2.5 min-w-[100px]"><PctBar pct={t.rate} /></td>
+                      <td className="px-3 py-2.5 min-w-[100px]"><PctBadge pct={t.rate} /></td>
                       <td className="px-3 py-2.5">
                         {t.photos.length > 0 && (
                           <button onClick={() => setPhotoModal(t)}
@@ -423,7 +397,7 @@ export default function DutyReportPage() {
                       <td className="px-3 py-2.5 text-center">{d.totalLogs}</td>
                       <td className="px-3 py-2.5 text-center text-[#0d9068] font-medium">{d.presentLogs}</td>
                       <td className="px-3 py-2.5 text-center text-red-500 font-medium">{d.totalLogs - d.presentLogs}</td>
-                      <td className="px-3 py-2.5 min-w-[100px]"><PctBar pct={d.rate} /></td>
+                      <td className="px-3 py-2.5 min-w-[100px]"><PctBadge pct={d.rate} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -457,7 +431,7 @@ export default function DutyReportPage() {
                       <td className="px-3 py-2.5 text-center text-[#0d9068] font-medium">{dept.present}</td>
                       <td className="px-3 py-2.5 text-center text-red-500 font-medium">{dept.total - dept.present}</td>
                       <td className="px-3 py-2.5 min-w-[100px]">
-                        <PctBar pct={dept.total > 0 ? Math.round(dept.present / dept.total * 100) : 0} />
+                        <PctBadge pct={dept.total > 0 ? Math.round(dept.present / dept.total * 100) : 0} />
                       </td>
                     </tr>
                   )))}

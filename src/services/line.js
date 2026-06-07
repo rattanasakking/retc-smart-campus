@@ -3,8 +3,18 @@
  * ต้องตั้งค่า LINE_NOTIFY_TOKEN ใน .env
  * รับ token ได้จาก https://notify-bot.line.me/
  */
+const { PrismaClient } = require('@prisma/client');
+const _prisma = new PrismaClient();
 
 const NOTIFY_URL = 'https://notify-api.line.me/api/notify';
+
+/** ตรวจสอบว่าโมดูลนั้นเปิดการแจ้งเตือน LINE หรือไม่ (default: เปิด) */
+async function isModuleNotifyEnabled(module) {
+  try {
+    const row = await _prisma.systemSettings.findUnique({ where: { key: `notify_line_${module}` } });
+    return row ? row.value === 'true' : true;
+  } catch { return true; }
+}
 
 /**
  * ส่ง LINE Notify message
@@ -43,6 +53,7 @@ async function notify(message, opts = {}) {
 
 /** แจ้งเตือนซ่อมใหม่ */
 async function notifyRepairTicket(ticket) {
+  if (!await isModuleNotifyEnabled('HELPDESK')) return null;
   const urgencyLabel = { normal: 'ปกติ', urgent: '⚠️ เร่งด่วน', critical: '🚨 วิกฤต' };
   const msg = [
     '\n🔧 แจ้งซ่อมใหม่',
@@ -57,6 +68,7 @@ async function notifyRepairTicket(ticket) {
 
 /** แจ้งเตือนของหาย/ของได้ */
 async function notifyLostFound(item) {
+  if (!await isModuleNotifyEnabled('LOST_FOUND')) return null;
   const typeLabel = item.type === 'lost' ? '🔍 แจ้งของหาย' : '📦 แจ้งของได้';
   const msg = [
     `\n${typeLabel}`,
@@ -70,6 +82,7 @@ async function notifyLostFound(item) {
 
 /** แจ้งเตือนการจองห้อง (pending → approved/rejected) */
 async function notifyRoomBooking(booking, status) {
+  if (!await isModuleNotifyEnabled('ROOM_BOOKING')) return null;
   const statusLabel = { approved: '✅ อนุมัติ', rejected: '❌ ปฏิเสธ' };
   const msg = [
     `\n🏫 การจองห้องประชุม: ${statusLabel[status] ?? status}`,
@@ -80,4 +93,184 @@ async function notifyRoomBooking(booking, status) {
   return notify(msg);
 }
 
-module.exports = { sendLineNotify, notify, notifyRepairTicket, notifyLostFound, notifyRoomBooking };
+// ─── LINE Messaging API (Bot) ─────────────────────────────────────────────────
+const MESSAGING_API = 'https://api.line.me/v2/bot/message/push';
+
+async function pushMessage(lineUserId, messages) {
+  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  if (!token || !lineUserId) return null;
+  try {
+    const res = await fetch(MESSAGING_API, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: lineUserId, messages }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      console.error('[LINE Bot] push failed:', res.status, body);
+    }
+    return res.ok;
+  } catch (err) {
+    console.error('[LINE Bot] push error:', err.message);
+    return null;
+  }
+}
+
+function formatThaiDate(date) {
+  const d = new Date(date);
+  const buddhistYear = d.getFullYear() + 543;
+  return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
+    .replace(d.getFullYear().toString(), buddhistYear.toString());
+}
+
+function formatDateTime(date) {
+  const d = new Date(date);
+  return d.toLocaleString('th-TH', {
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  }).replace(d.getFullYear().toString(), (d.getFullYear() + 543).toString());
+}
+
+async function sendLeaveRequestFlex(approverLineId, request) {
+  if (!await isModuleNotifyEnabled('LEAVE')) return null;
+  const { id, user, leaveType, startDate, endDate, totalDays, isHalfDay, halfDayPeriod, reason } = request;
+  const typeIcon = leaveType?.icon || '📋';
+  const daysText = isHalfDay ? `ครึ่งวัน (${halfDayPeriod})` : `${totalDays} วันทำงาน`;
+  const dateText = isHalfDay || startDate === endDate
+    ? formatThaiDate(startDate)
+    : `${formatThaiDate(startDate)} – ${formatThaiDate(endDate)}`;
+
+  const flex = {
+    type: 'flex',
+    altText: `${user?.name ?? 'บุคลากร'} ขอลา${leaveType?.name ?? ''} ${daysText}`,
+    contents: {
+      type: 'bubble',
+      size: 'kilo',
+      header: {
+        type: 'box', layout: 'vertical',
+        backgroundColor: '#1565C0', paddingAll: '16px',
+        contents: [
+          { type: 'text', text: `${typeIcon} คำขอใบลา`, color: '#ffffff', size: 'md', weight: 'bold' },
+          { type: 'text', text: leaveType?.name ?? 'ไม่ระบุประเภท', color: '#BBDEFB', size: 'sm' },
+        ],
+      },
+      body: {
+        type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '16px',
+        contents: [
+          {
+            type: 'box', layout: 'horizontal', spacing: 'sm',
+            contents: [
+              { type: 'text', text: 'ผู้ขอลา', color: '#888888', size: 'sm', flex: 2 },
+              { type: 'text', text: user?.name ?? '-', color: '#111111', size: 'sm', flex: 4, wrap: true },
+            ],
+          },
+          {
+            type: 'box', layout: 'horizontal', spacing: 'sm',
+            contents: [
+              { type: 'text', text: 'ฝ่าย/งาน', color: '#888888', size: 'sm', flex: 2 },
+              { type: 'text', text: user?.department ?? '-', color: '#111111', size: 'sm', flex: 4, wrap: true },
+            ],
+          },
+          { type: 'separator' },
+          {
+            type: 'box', layout: 'horizontal', spacing: 'sm',
+            contents: [
+              { type: 'text', text: 'วันที่', color: '#888888', size: 'sm', flex: 2 },
+              { type: 'text', text: dateText, color: '#111111', size: 'sm', flex: 4, wrap: true },
+            ],
+          },
+          {
+            type: 'box', layout: 'horizontal', spacing: 'sm',
+            contents: [
+              { type: 'text', text: 'จำนวน', color: '#888888', size: 'sm', flex: 2 },
+              { type: 'text', text: daysText, color: '#1565C0', size: 'sm', flex: 4, weight: 'bold' },
+            ],
+          },
+          { type: 'separator' },
+          {
+            type: 'box', layout: 'horizontal', spacing: 'sm',
+            contents: [
+              { type: 'text', text: 'เหตุผล', color: '#888888', size: 'sm', flex: 2 },
+              { type: 'text', text: reason ?? '-', color: '#333333', size: 'sm', flex: 4, wrap: true },
+            ],
+          },
+        ],
+      },
+      footer: {
+        type: 'box', layout: 'horizontal', spacing: 'sm', paddingAll: '12px',
+        contents: [
+          {
+            type: 'button', style: 'primary', color: '#2E7D32', height: 'sm', flex: 1,
+            action: { type: 'postback', label: '✅ อนุมัติ', data: `action=approve&requestId=${id}` },
+          },
+          {
+            type: 'button', style: 'primary', color: '#C62828', height: 'sm', flex: 1,
+            action: { type: 'postback', label: '❌ ไม่อนุมัติ', data: `action=reject&requestId=${id}` },
+          },
+        ],
+      },
+    },
+  };
+
+  return pushMessage(approverLineId, [flex]);
+}
+
+async function sendLeaveStatusNotify(lineUserId, request, status, comment) {
+  if (!await isModuleNotifyEnabled('LEAVE')) return null;
+  const { leaveType, startDate, endDate, totalDays, isHalfDay } = request;
+  const statusText = status === 'APPROVED' ? '✅ อนุมัติแล้ว' : '❌ ไม่อนุมัติ';
+  const color = status === 'APPROVED' ? '#1B5E20' : '#B71C1C';
+  const daysText = isHalfDay ? 'ครึ่งวัน' : `${totalDays} วัน`;
+
+  const flex = {
+    type: 'flex',
+    altText: `ใบลา${leaveType?.name ?? ''}: ${statusText}`,
+    contents: {
+      type: 'bubble', size: 'kilo',
+      header: {
+        type: 'box', layout: 'vertical',
+        backgroundColor: color, paddingAll: '16px',
+        contents: [
+          { type: 'text', text: statusText, color: '#ffffff', size: 'md', weight: 'bold' },
+          { type: 'text', text: `ใบลา${leaveType?.name ?? ''}`, color: '#ffffffaa', size: 'sm' },
+        ],
+      },
+      body: {
+        type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '16px',
+        contents: [
+          {
+            type: 'box', layout: 'horizontal', spacing: 'sm',
+            contents: [
+              { type: 'text', text: 'วันที่ลา', color: '#888888', size: 'sm', flex: 2 },
+              { type: 'text', text: `${formatThaiDate(startDate)} – ${formatThaiDate(endDate)}`, color: '#111111', size: 'sm', flex: 4, wrap: true },
+            ],
+          },
+          {
+            type: 'box', layout: 'horizontal', spacing: 'sm',
+            contents: [
+              { type: 'text', text: 'จำนวน', color: '#888888', size: 'sm', flex: 2 },
+              { type: 'text', text: daysText, color: '#111111', size: 'sm', flex: 4 },
+            ],
+          },
+          ...(comment ? [{
+            type: 'separator',
+          }, {
+            type: 'box', layout: 'horizontal', spacing: 'sm',
+            contents: [
+              { type: 'text', text: 'หมายเหตุ', color: '#888888', size: 'sm', flex: 2 },
+              { type: 'text', text: comment, color: '#333333', size: 'sm', flex: 4, wrap: true },
+            ],
+          }] : []),
+        ],
+      },
+    },
+  };
+
+  return pushMessage(lineUserId, [flex]);
+}
+
+module.exports = {
+  sendLineNotify, notify, notifyRepairTicket, notifyLostFound, notifyRoomBooking,
+  sendLeaveRequestFlex, sendLeaveStatusNotify, formatThaiDate, formatDateTime,
+  isModuleNotifyEnabled,
+};

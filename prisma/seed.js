@@ -447,6 +447,39 @@ async function main() {
   }
   console.log('✓ ตัวอย่างข้อมูล Duty/WorkLog/RepairTicket (idempotent)');
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 11. Personnel Types
+  // ═══════════════════════════════════════════════════════════════════════════
+  const personnelTypeDefs = [
+    { name: 'ข้าราชการครู',             description: 'ครูผู้สอนที่เป็นข้าราชการพลเรือน' },
+    { name: 'ครูอัตราจ้าง',             description: 'ครูผู้สอนที่จ้างจากเงินนอกงบประมาณ' },
+    { name: 'พนักงานราชการ (ครู)',      description: 'พนักงานราชการตำแหน่งสายการสอน' },
+    { name: 'พนักงานราชการ (ทั่วไป)',  description: 'พนักงานราชการตำแหน่งสายสนับสนุน' },
+    { name: 'ลูกจ้างประจำ',             description: 'ลูกจ้างประจำของสถานศึกษา' },
+    { name: 'ลูกจ้างชั่วคราว',          description: 'ลูกจ้างชั่วคราวจ้างจากเงินนอกงบประมาณ' },
+  ];
+  for (const pt of personnelTypeDefs) {
+    await upsertByName(prisma.personnelType, pt.name, pt);
+  }
+  console.log(`✓ Personnel Types: ${personnelTypeDefs.length} รายการ`);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 12. Leave Types
+  // ═══════════════════════════════════════════════════════════════════════════
+  const leaveTypeDefs = [
+    { name: 'ลาป่วย',          icon: '🏥', maxDaysPerYear: 30,  requireDocument: true,  requireApprovalLevel: 1, allowHalfDay: true  },
+    { name: 'ลากิจ',           icon: '📋', maxDaysPerYear: 45,  requireDocument: false, requireApprovalLevel: 1, allowHalfDay: true  },
+    { name: 'ลาพักร้อน',      icon: '🏖️', maxDaysPerYear: 10,  requireDocument: false, requireApprovalLevel: 1, allowHalfDay: true  },
+    { name: 'ลาคลอด',         icon: '👶', maxDaysPerYear: 90,  requireDocument: true,  requireApprovalLevel: 2, allowHalfDay: false },
+    { name: 'ลาบวช',           icon: '🙏', maxDaysPerYear: 120, requireDocument: false, requireApprovalLevel: 2, allowHalfDay: false },
+    { name: 'ลาไปราชการ',     icon: '✈️', maxDaysPerYear: null, requireDocument: false, requireApprovalLevel: 1, allowHalfDay: false },
+    { name: 'ลาไปอบรม',      icon: '📚', maxDaysPerYear: null, requireDocument: false, requireApprovalLevel: 1, allowHalfDay: false },
+  ];
+  for (const lt of leaveTypeDefs) {
+    await upsertByName(prisma.leaveType, lt.name, lt);
+  }
+  console.log(`✓ Leave Types: ${leaveTypeDefs.length} รายการ`);
+
   // ─── summary ─────────────────────────────────────────────────────────────
   console.log('\n✅ Seed สำเร็จ!');
   console.log('─'.repeat(50));

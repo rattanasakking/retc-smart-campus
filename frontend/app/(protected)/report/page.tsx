@@ -6,8 +6,8 @@ import {
   PackageSearch, Printer, Download, ChevronDown,
 } from 'lucide-react';
 import {
-  ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
 import * as XLSX from 'xlsx';
 
@@ -314,15 +314,14 @@ export default function ReportOverviewPage() {
             {d.duty.byDept.length > 0 ? (
               <div>
                 <p className="text-xs font-semibold text-[#4a6080] mb-2">จำนวนเวรรายแผนก</p>
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={d.duty.byDept} margin={{ top: 0, right: 8, left: -20, bottom: 40 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f4ff" />
-                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#4a6080' }} angle={-25} textAnchor="end" interval={0} />
-                    <YAxis tick={{ fontSize: 11, fill: '#4a6080' }} allowDecimals={false} />
-                    <Tooltip formatter={(v: number) => [v, 'เวร']} />
-                    <Bar dataKey="count" fill="#1d6ae5" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <div className="space-y-1.5">
+                  {[...d.duty.byDept].sort((a, b) => b.count - a.count).map((dep, i) => (
+                    <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg" style={{ backgroundColor: '#f5f8ff' }}>
+                      <span className="text-xs flex-1 truncate" style={{ color: '#1a2744' }}>{dep.name}</span>
+                      <span className="text-xs font-semibold flex-shrink-0" style={{ color: '#1d6ae5' }}>{dep.count} เวร</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : <EmptyChart />}
           </SectionCard>
@@ -428,16 +427,14 @@ export default function ReportOverviewPage() {
               <div>
                 <p className="text-xs font-semibold text-[#4a6080] mb-2">ประเภทการซ่อม</p>
                 {d.helpdesk.byType.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={180}>
-                    <BarChart data={d.helpdesk.byType.slice(0, 6)} layout="vertical"
-                      margin={{ top: 0, right: 8, left: 40, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f4ff" />
-                      <XAxis type="number" tick={{ fontSize: 10, fill: '#4a6080' }} allowDecimals={false} />
-                      <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: '#4a6080' }} width={60} />
-                      <Tooltip formatter={(v: number) => [v, 'รายการ']} />
-                      <Bar dataKey="count" fill="#1d6ae5" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <div className="space-y-1.5">
+                    {d.helpdesk.byType.slice(0, 6).map((t, i) => (
+                      <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ backgroundColor: '#f5f8ff' }}>
+                        <span className="text-xs flex-1 truncate" style={{ color: '#1a2744' }}>{t.name}</span>
+                        <span className="text-xs font-semibold flex-shrink-0" style={{ color: '#1d6ae5' }}>{t.count}</span>
+                      </div>
+                    ))}
+                  </div>
                 ) : <EmptyChart />}
               </div>
             </div>
@@ -453,15 +450,15 @@ export default function ReportOverviewPage() {
             {d.room.byRoom.length > 0 ? (
               <div>
                 <p className="text-xs font-semibold text-[#4a6080] mb-2">ห้องที่ใช้มากที่สุด</p>
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={d.room.byRoom.slice(0, 8)} margin={{ top: 0, right: 8, left: -20, bottom: 40 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f4ff" />
-                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#4a6080' }} angle={-20} textAnchor="end" interval={0} />
-                    <YAxis tick={{ fontSize: 11, fill: '#4a6080' }} allowDecimals={false} />
-                    <Tooltip formatter={(v: number) => [v, 'ครั้ง']} />
-                    <Bar dataKey="count" fill="#0d9068" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <div className="space-y-1.5">
+                  {d.room.byRoom.slice(0, 8).map((r, i) => (
+                    <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg" style={{ backgroundColor: '#f5f8ff' }}>
+                      <span className="text-[11px] w-5 text-center font-bold flex-shrink-0" style={{ color: i === 0 ? '#0d9068' : '#94a3b8' }}>{i + 1}</span>
+                      <span className="text-xs flex-1 truncate" style={{ color: '#1a2744' }}>{r.name}</span>
+                      <span className="text-xs font-semibold flex-shrink-0" style={{ color: '#0d9068' }}>{r.count} ครั้ง</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : <EmptyChart />}
           </SectionCard>
@@ -478,19 +475,15 @@ export default function ReportOverviewPage() {
             {d.lostfound.total > 0 && (
               <div>
                 <p className="text-xs font-semibold text-[#4a6080] mb-2">อัตราการคืนของ</p>
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 h-4 rounded-full overflow-hidden" style={{ backgroundColor: '#e8f0fe' }}>
-                    <div
-                      className="h-full rounded-full transition-all duration-700"
-                      style={{ width: `${lfPct}%`, backgroundColor: '#0d9068' }}
-                    />
-                  </div>
-                  <span className="text-sm font-bold text-[#0d9068] w-12 text-right">{lfPct}%</span>
-                </div>
-                <div className="flex justify-between mt-1.5 text-xs text-[#94a3b8]">
-                  <span>0%</span>
-                  <span>คืนได้ {d.lostfound.claimed} จาก {d.lostfound.total} รายการ</span>
-                  <span>100%</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs" style={{ color: '#4a6080' }}>
+                    คืนได้ {d.lostfound.claimed} จาก {d.lostfound.total} รายการ
+                  </span>
+                  <span className="inline-block text-sm font-bold px-3 py-0.5 rounded-full"
+                    style={{
+                      backgroundColor: lfPct >= 80 ? '#e6f9f0' : lfPct >= 50 ? '#fffbeb' : '#fef2f2',
+                      color: lfPct >= 80 ? '#0d9068' : lfPct >= 50 ? '#b45309' : '#dc2626',
+                    }}>{lfPct}%</span>
                 </div>
               </div>
             )}
