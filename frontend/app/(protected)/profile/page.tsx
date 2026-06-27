@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api, USER_KEY, TOKEN_KEY } from '@/lib/api';
 import { Camera, Lock, Save, X, CheckCircle, Bell, Link2, Unlink } from 'lucide-react';
@@ -28,7 +28,7 @@ function Toast({ msg, err, onClose }: { msg: string; err?: boolean; onClose: () 
   );
 }
 
-export default function ProfilePage() {
+function ProfileContent() {
   const searchParams = useSearchParams();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -379,5 +379,13 @@ export default function ProfilePage() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-gray-400">กำลังโหลด...</div>}>
+      <ProfileContent />
+    </Suspense>
   );
 }

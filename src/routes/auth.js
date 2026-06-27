@@ -452,32 +452,63 @@ router.get('/line/callback', oauthCallback('line'));
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 router.get('/google/callback', oauthCallback('google'));
 
-// ─── LINE Link / Unlink ───────────────────────────────────────────────────────
+// ─── LINE Link / Unlink (manual OAuth — ไม่ใช้ passport strategy) ────────────
 router.get('/line/link', async (req, res) => {
   const token = req.query.token;
   if (!token) return res.redirect(`${FRONTEND_URL}/profile?error=unauthorized`);
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.session.linkUserId = decoded.id;
-    await new Promise(resolve => req.session.save(resolve));
-    passport.authenticate('line-link')(req, res, () => {
-      res.redirect(`${FRONTEND_URL}/profile?error=line_auth_failed`);
+    const state = Buffer.from(JSON.stringify({ id: decoded.id, ts: Date.now() })).toString('base64url');
+    const callbackURL = `${FRONTEND_URL}/api/auth/line/link/callback`;
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id:     process.env.LINE_CLIENT_ID || '',
+      redirect_uri:  callbackURL,
+      state,
+      scope:         'profile openid',
     });
+    res.redirect(`https://access.line.me/oauth2/v2.1/authorize?${params}`);
   } catch {
     res.redirect(`${FRONTEND_URL}/profile?error=invalid_token`);
   }
 });
 
-router.get('/line/link/callback', (req, res, next) => {
-  passport.authenticate('line-link', { session: false }, (err, data, info) => {
-    req.session.linkUserId = null;
-    req.session.save(() => {});
-    if (err || !data) {
-      const code = info?.message || 'link_error';
-      return res.redirect(`${FRONTEND_URL}/profile?error=${encodeURIComponent(code)}`);
-    }
-    return res.redirect(`${FRONTEND_URL}/profile?linked=line`);
-  })(req, res, next);
+router.get('/line/link/callback', async (req, res) => {
+  const { code, state, error: oauthErr } = req.query;
+  if (oauthErr || !code || !state) return res.redirect(`${FRONTEND_URL}/profile?error=line_cancelled`);
+  try {
+    const { id: userId } = JSON.parse(Buffer.from(String(state), 'base64url').toString());
+    const callbackURL = `${FRONTEND_URL}/api/auth/line/link/callback`;
+    // Exchange code for access token
+    const tokenRes = await fetch('https://api.line.me/oauth2/v2.1/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type:    'authorization_code',
+        code:          String(code),
+        redirect_uri:  callbackURL,
+        client_id:     process.env.LINE_CLIENT_ID || '',
+        client_secret: process.env.LINE_CLIENT_SECRET || '',
+      }),
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenData.access_token) return res.redirect(`${FRONTEND_URL}/profile?error=token_error`);
+    // Get LINE profile
+    const profileRes = await fetch('https://api.line.me/v2/profile', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+    const lineProfile = await profileRes.json();
+    const lineUserId = lineProfile.userId;
+    if (!lineUserId) return res.redirect(`${FRONTEND_URL}/profile?error=profile_error`);
+    // Check not already linked to other account
+    const existing = await prisma.user.findFirst({ where: { lineUserId } });
+    if (existing && existing.id !== userId) return res.redirect(`${FRONTEND_URL}/profile?error=already_linked_to_other`);
+    await prisma.user.update({ where: { id: userId }, data: { lineUserId } });
+    res.redirect(`${FRONTEND_URL}/profile?linked=line`);
+  } catch (e) {
+    console.error('[LINE link callback]', e);
+    res.redirect(`${FRONTEND_URL}/profile?error=link_error`);
+  }
 });
 
 router.delete('/line/unlink', auth, async (req, res) => {
@@ -487,32 +518,64 @@ router.delete('/line/unlink', auth, async (req, res) => {
   } catch (e) { res.status(500).json(error('เกิดข้อผิดพลาด')); }
 });
 
-// ─── Google Link / Unlink ─────────────────────────────────────────────────────
+// ─── Google Link / Unlink (manual OAuth) ─────────────────────────────────────
 router.get('/google/link', async (req, res) => {
   const token = req.query.token;
   if (!token) return res.redirect(`${FRONTEND_URL}/profile?error=unauthorized`);
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.session.linkUserId = decoded.id;
-    await new Promise(resolve => req.session.save(resolve));
-    passport.authenticate('google-link', { scope: ['profile', 'email'] })(req, res, () => {
-      res.redirect(`${FRONTEND_URL}/profile?error=google_auth_failed`);
+    const state = Buffer.from(JSON.stringify({ id: decoded.id, ts: Date.now() })).toString('base64url');
+    const callbackURL = `${FRONTEND_URL}/api/auth/google/link/callback`;
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id:     process.env.GOOGLE_CLIENT_ID || '',
+      redirect_uri:  callbackURL,
+      state,
+      scope:         'openid profile email',
+      access_type:   'online',
     });
+    res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
   } catch {
     res.redirect(`${FRONTEND_URL}/profile?error=invalid_token`);
   }
 });
 
-router.get('/google/link/callback', (req, res, next) => {
-  passport.authenticate('google-link', { session: false }, (err, data, info) => {
-    req.session.linkUserId = null;
-    req.session.save(() => {});
-    if (err || !data) {
-      const code = info?.message || 'link_error';
-      return res.redirect(`${FRONTEND_URL}/profile?error=${encodeURIComponent(code)}`);
-    }
-    return res.redirect(`${FRONTEND_URL}/profile?linked=google`);
-  })(req, res, next);
+router.get('/google/link/callback', async (req, res) => {
+  const { code, state, error: oauthErr } = req.query;
+  if (oauthErr || !code || !state) return res.redirect(`${FRONTEND_URL}/profile?error=google_cancelled`);
+  try {
+    const { id: userId } = JSON.parse(Buffer.from(String(state), 'base64url').toString());
+    const callbackURL = `${FRONTEND_URL}/api/auth/google/link/callback`;
+    // Exchange code for token
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code:          String(code),
+        client_id:     process.env.GOOGLE_CLIENT_ID || '',
+        client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
+        redirect_uri:  callbackURL,
+        grant_type:    'authorization_code',
+      }),
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenData.access_token) return res.redirect(`${FRONTEND_URL}/profile?error=token_error`);
+    // Get Google profile
+    const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+    const gProfile = await profileRes.json();
+    const googleId = gProfile.sub;
+    if (!googleId) return res.redirect(`${FRONTEND_URL}/profile?error=profile_error`);
+    // Check not already linked to other account
+    const existing = await prisma.user.findFirst({ where: { googleId } });
+    if (existing && existing.id !== userId) return res.redirect(`${FRONTEND_URL}/profile?error=already_linked_to_other`);
+    await prisma.user.update({ where: { id: userId }, data: { googleId } });
+    res.redirect(`${FRONTEND_URL}/profile?linked=google`);
+  } catch (e) {
+    console.error('[Google link callback]', e);
+    res.redirect(`${FRONTEND_URL}/profile?error=link_error`);
+  }
 });
 
 router.delete('/google/unlink', auth, async (req, res) => {
