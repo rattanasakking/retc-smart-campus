@@ -428,10 +428,6 @@ router.put('/users/:id/reset-password', auth, requireAdmin, async (req, res) => 
 // OAuth — LINE + Google
 // ═════════════════════════════════════════════════════════════════════════════
 
-const passport = require('../config/passport');
-
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
-
 function oauthCallback(strategy) {
   return (req, res, next) => {
     passport.authenticate(strategy, { session: true }, (err, userInfo, info) => {
