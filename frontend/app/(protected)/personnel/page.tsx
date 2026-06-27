@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Search, Plus, X, Pencil, ToggleLeft, ToggleRight,
   Loader2, Users, ChevronLeft, ChevronRight, CalendarDays, Camera, Trash2,
-  Phone, Mail, MapPin, IdCard, GraduationCap, UserCircle,
+  Phone, Mail, MapPin, CreditCard, GraduationCap, UserCircle,
 } from 'lucide-react';
 import { api, USER_KEY } from '@/lib/api';
 
@@ -517,7 +517,7 @@ export default function PersonnelPage() {
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     {[
-                      { Icon: IdCard, label: 'เลขบัตรประชาชน', value: viewTarget.nationalId },
+                      { Icon: CreditCard, label: 'เลขบัตรประชาชน', value: viewTarget.nationalId },
                       { Icon: Phone, label: 'โทรศัพท์', value: viewTarget.phone },
                       { Icon: Mail, label: 'อีเมล', value: viewTarget.email },
                       { Icon: UserCircle, label: 'ชื่อเล่น', value: viewTarget.nickname },
