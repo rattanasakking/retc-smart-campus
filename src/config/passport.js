@@ -108,6 +108,67 @@ try {
   console.warn('[Passport] Google strategy not loaded:', e.message);
 }
 
+// ─── LINE Link Strategy ───────────────────────────────────────────────────────
+try {
+  const LineStrategy = require('passport-line-auth').Strategy;
+  const baseUrl = (process.env.FRONTEND_URL || 'http://localhost:3001').replace(/\/$/, '');
+  passport.use('line-link',
+    new LineStrategy(
+      {
+        channelID:        process.env.LINE_CLIENT_ID,
+        channelSecret:    process.env.LINE_CLIENT_SECRET,
+        callbackURL:      `${baseUrl}/api/auth/line/link/callback`,
+        scope:            ['profile', 'openid'],
+        passReqToCallback: true,
+      },
+      async (req, accessToken, refreshToken, params, profile, done) => {
+        try {
+          const lineUserId = profile.id;
+          const userId = req.session?.linkUserId;
+          if (!userId) return done(null, false, { message: 'session_expired' });
+          const existing = await prisma.user.findFirst({ where: { lineUserId } });
+          if (existing && existing.id !== userId)
+            return done(null, false, { message: 'already_linked_to_other' });
+          await prisma.user.update({ where: { id: userId }, data: { lineUserId } });
+          return done(null, { linked: 'line' });
+        } catch (err) { return done(err); }
+      }
+    )
+  );
+} catch (e) {
+  console.warn('[Passport] LINE link strategy not loaded:', e.message);
+}
+
+// ─── Google Link Strategy ─────────────────────────────────────────────────────
+try {
+  const GoogleStrategy = require('passport-google-oauth20').Strategy;
+  const baseUrl = (process.env.FRONTEND_URL || 'http://localhost:3001').replace(/\/$/, '');
+  passport.use('google-link',
+    new GoogleStrategy(
+      {
+        clientID:          process.env.GOOGLE_CLIENT_ID,
+        clientSecret:      process.env.GOOGLE_CLIENT_SECRET,
+        callbackURL:       `${baseUrl}/api/auth/google/link/callback`,
+        passReqToCallback: true,
+      },
+      async (req, accessToken, refreshToken, profile, done) => {
+        try {
+          const googleId = profile.id;
+          const userId = req.session?.linkUserId;
+          if (!userId) return done(null, false, { message: 'session_expired' });
+          const existing = await prisma.user.findFirst({ where: { googleId } });
+          if (existing && existing.id !== userId)
+            return done(null, false, { message: 'already_linked_to_other' });
+          await prisma.user.update({ where: { id: userId }, data: { googleId } });
+          return done(null, { linked: 'google' });
+        } catch (err) { return done(err); }
+      }
+    )
+  );
+} catch (e) {
+  console.warn('[Passport] Google link strategy not loaded:', e.message);
+}
+
 passport.serializeUser((info, done) => done(null, info));
 passport.deserializeUser((info, done) => done(null, info));
 

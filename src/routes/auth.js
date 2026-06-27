@@ -1,15 +1,17 @@
-const express = require('express');
-const bcrypt  = require('bcrypt');
-const jwt     = require('jsonwebtoken');
-const path    = require('path');
-const fs      = require('fs');
+const express  = require('express');
+const bcrypt   = require('bcrypt');
+const jwt      = require('jsonwebtoken');
+const path     = require('path');
+const fs       = require('fs');
+const passport = require('../config/passport');
 const { PrismaClient } = require('@prisma/client');
 const auth             = require('../middleware/auth');
 const { requireAdmin } = require('../middleware/roles');
 const { success, error, paginate } = require('../utils/response');
 
-const router = express.Router();
-const prisma  = new PrismaClient();
+const router       = express.Router();
+const prisma       = new PrismaClient();
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 function saveAvatar(base64) {
   const data = base64.replace(/^data:image\/\w+;base64,/, '');
@@ -36,12 +38,14 @@ const USER_SELECT = {
 // List view — เพิ่ม relation names + personal fields
 const LIST_SELECT = {
   ...USER_SELECT,
-  nickname:  true,
-  startDate: true,
-  birthDate: true,
-  division:  { select: { id: true, name: true, code: true } },
-  workUnit:  { select: { id: true, name: true, code: true } },
-  deptGroup: { select: { id: true, name: true, code: true } },
+  nickname:   true,
+  startDate:  true,
+  birthDate:  true,
+  lineUserId: true,
+  googleId:   true,
+  division:   { select: { id: true, name: true, code: true } },
+  workUnit:   { select: { id: true, name: true, code: true } },
+  deptGroup:  { select: { id: true, name: true, code: true } },
 };
 
 // Detail view — ทุก field ยกเว้น password / sensitive auth fields
@@ -447,5 +451,75 @@ router.get('/line/callback', oauthCallback('line'));
 // Google
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 router.get('/google/callback', oauthCallback('google'));
+
+// ─── LINE Link / Unlink ───────────────────────────────────────────────────────
+router.get('/line/link', async (req, res) => {
+  const token = req.query.token;
+  if (!token) return res.redirect(`${FRONTEND_URL}/profile?error=unauthorized`);
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.session.linkUserId = decoded.id;
+    await new Promise(resolve => req.session.save(resolve));
+    passport.authenticate('line-link')(req, res, () => {
+      res.redirect(`${FRONTEND_URL}/profile?error=line_auth_failed`);
+    });
+  } catch {
+    res.redirect(`${FRONTEND_URL}/profile?error=invalid_token`);
+  }
+});
+
+router.get('/line/link/callback', (req, res, next) => {
+  passport.authenticate('line-link', { session: false }, (err, data, info) => {
+    req.session.linkUserId = null;
+    req.session.save(() => {});
+    if (err || !data) {
+      const code = info?.message || 'link_error';
+      return res.redirect(`${FRONTEND_URL}/profile?error=${encodeURIComponent(code)}`);
+    }
+    return res.redirect(`${FRONTEND_URL}/profile?linked=line`);
+  })(req, res, next);
+});
+
+router.delete('/line/unlink', auth, async (req, res) => {
+  try {
+    await prisma.user.update({ where: { id: req.user.id }, data: { lineUserId: null } });
+    res.json(success(null, 'ยกเลิกการเชื่อมต่อ LINE สำเร็จ'));
+  } catch (e) { res.status(500).json(error('เกิดข้อผิดพลาด')); }
+});
+
+// ─── Google Link / Unlink ─────────────────────────────────────────────────────
+router.get('/google/link', async (req, res) => {
+  const token = req.query.token;
+  if (!token) return res.redirect(`${FRONTEND_URL}/profile?error=unauthorized`);
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.session.linkUserId = decoded.id;
+    await new Promise(resolve => req.session.save(resolve));
+    passport.authenticate('google-link', { scope: ['profile', 'email'] })(req, res, () => {
+      res.redirect(`${FRONTEND_URL}/profile?error=google_auth_failed`);
+    });
+  } catch {
+    res.redirect(`${FRONTEND_URL}/profile?error=invalid_token`);
+  }
+});
+
+router.get('/google/link/callback', (req, res, next) => {
+  passport.authenticate('google-link', { session: false }, (err, data, info) => {
+    req.session.linkUserId = null;
+    req.session.save(() => {});
+    if (err || !data) {
+      const code = info?.message || 'link_error';
+      return res.redirect(`${FRONTEND_URL}/profile?error=${encodeURIComponent(code)}`);
+    }
+    return res.redirect(`${FRONTEND_URL}/profile?linked=google`);
+  })(req, res, next);
+});
+
+router.delete('/google/unlink', auth, async (req, res) => {
+  try {
+    await prisma.user.update({ where: { id: req.user.id }, data: { googleId: null } });
+    res.json(success(null, 'ยกเลิกการเชื่อมต่อ Google สำเร็จ'));
+  } catch (e) { res.status(500).json(error('เกิดข้อผิดพลาด')); }
+});
 
 module.exports = router;

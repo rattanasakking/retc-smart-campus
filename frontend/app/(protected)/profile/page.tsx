@@ -1,13 +1,15 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { api, USER_KEY } from '@/lib/api';
-import { Camera, Lock, Save, X, CheckCircle, Bell } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import { api, USER_KEY, TOKEN_KEY } from '@/lib/api';
+import { Camera, Lock, Save, X, CheckCircle, Bell, Link2, Unlink } from 'lucide-react';
 
 interface UserProfile {
   id: number; name: string; email: string; employeeId: string;
   role: string; department?: string; phone?: string; nickname?: string;
   avatar?: string; position?: string;
   notifyByLine?: boolean; notifyByEmail?: boolean;
+  lineUserId?: string | null; googleId?: string | null;
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -27,6 +29,7 @@ function Toast({ msg, err, onClose }: { msg: string; err?: boolean; onClose: () 
 }
 
 export default function ProfilePage() {
+  const searchParams = useSearchParams();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
@@ -42,13 +45,14 @@ export default function ProfilePage() {
   const [pwForm, setPwForm] = useState({ current: '', newPw: '', confirm: '' });
   const [notifyForm, setNotifyForm] = useState({ notifyByLine: true, notifyByEmail: false });
   const [notifySaving, setNotifySaving] = useState(false);
+  const [unlinking, setUnlinking] = useState<string | null>(null);
 
   const showToast = (msg: string, err = false) => {
     if (err) setToastErr(msg); else setToast(msg);
     setTimeout(() => { setToast(''); setToastErr(''); }, 3500);
   };
 
-  useEffect(() => {
+  const loadProfile = () =>
     api.get<{ success: boolean; data: UserProfile }>('/auth/me')
       .then(r => {
         if (r.success) {
@@ -63,7 +67,46 @@ export default function ProfilePage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+
+  useEffect(() => { loadProfile(); }, []);
+
+  // Handle OAuth callback params
+  useEffect(() => {
+    const linked = searchParams.get('linked');
+    const err    = searchParams.get('error');
+    if (linked === 'line')   { showToast('เชื่อมต่อ LINE สำเร็จ'); loadProfile(); }
+    if (linked === 'google') { showToast('เชื่อมต่อ Google สำเร็จ'); loadProfile(); }
+    if (err) {
+      const msgs: Record<string, string> = {
+        already_linked_to_other: 'บัญชีนี้ถูกเชื่อมกับผู้ใช้รายอื่นแล้ว',
+        session_expired: 'Session หมดอายุ กรุณาลองใหม่',
+      };
+      showToast(msgs[err] ?? `เกิดข้อผิดพลาด: ${err}`, true);
+    }
+  }, [searchParams]);
+
+  const handleLinkLine = () => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) { showToast('กรุณา login ใหม่', true); return; }
+    window.location.href = `/api/auth/line/link?token=${encodeURIComponent(token)}`;
+  };
+
+  const handleLinkGoogle = () => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) { showToast('กรุณา login ใหม่', true); return; }
+    window.location.href = `/api/auth/google/link?token=${encodeURIComponent(token)}`;
+  };
+
+  const handleUnlink = async (provider: 'line' | 'google') => {
+    setUnlinking(provider);
+    try {
+      await api.delete(`/auth/${provider}/unlink`);
+      showToast(`ยกเลิกการเชื่อมต่อ ${provider === 'line' ? 'LINE' : 'Google'} สำเร็จ`);
+      loadProfile();
+    } catch (e) {
+      showToast((e as Error).message, true);
+    } finally { setUnlinking(null); }
+  };
 
   const handleAvatar = (file: File) => {
     const reader = new FileReader();
@@ -244,6 +287,64 @@ export default function ProfilePage() {
           {pwSaving ? 'กำลังบันทึก...' : 'เปลี่ยนรหัสผ่าน'}
         </button>
       </form>
+
+      {/* ── Social Account Links ─────────────────────────────────────────── */}
+      <div className="card space-y-4">
+        <div className="flex items-center gap-2 pb-3 border-b border-[#dce6f9]">
+          <Link2 className="w-4 h-4 text-[#1d6ae5]" />
+          <h2 className="font-semibold text-[#1a2744]">เชื่อมต่อบัญชี</h2>
+        </div>
+
+        {/* LINE */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: '#06C755' }}>L</div>
+            <div>
+              <p className="text-sm font-medium text-[#1a2744]">LINE</p>
+              <p className="text-xs text-[#94a3b8]">{profile?.lineUserId ? 'เชื่อมต่อแล้ว' : 'ยังไม่เชื่อมต่อ'}</p>
+            </div>
+          </div>
+          {profile?.lineUserId ? (
+            <button onClick={() => handleUnlink('line')} disabled={unlinking === 'line'}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors">
+              <Unlink className="w-3.5 h-3.5" />
+              {unlinking === 'line' ? 'กำลังยกเลิก...' : 'ยกเลิก'}
+            </button>
+          ) : (
+            <button onClick={handleLinkLine}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg text-white transition-colors" style={{ backgroundColor: '#06C755' }}>
+              <Link2 className="w-3.5 h-3.5" />
+              เชื่อมต่อ LINE
+            </button>
+          )}
+        </div>
+
+        {/* Google */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: '#4285F4' }}>G</div>
+            <div>
+              <p className="text-sm font-medium text-[#1a2744]">Google</p>
+              <p className="text-xs text-[#94a3b8]">{profile?.googleId ? 'เชื่อมต่อแล้ว' : 'ยังไม่เชื่อมต่อ'}</p>
+            </div>
+          </div>
+          {profile?.googleId ? (
+            <button onClick={() => handleUnlink('google')} disabled={unlinking === 'google'}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors">
+              <Unlink className="w-3.5 h-3.5" />
+              {unlinking === 'google' ? 'กำลังยกเลิก...' : 'ยกเลิก'}
+            </button>
+          ) : (
+            <button onClick={handleLinkGoogle}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg text-white transition-colors" style={{ backgroundColor: '#4285F4' }}>
+              <Link2 className="w-3.5 h-3.5" />
+              เชื่อมต่อ Google
+            </button>
+          )}
+        </div>
+
+        <p className="text-xs text-[#94a3b8]">หลังเชื่อมต่อแล้ว สามารถ login ด้วย LINE หรือ Google แทน email/password ได้</p>
+      </div>
 
       {/* ── Notification Preferences ─────────────────────────────────────── */}
       <div className="card space-y-4">
