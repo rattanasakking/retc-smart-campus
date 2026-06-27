@@ -9,7 +9,8 @@
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
-    "build:frontend": "cd frontend && npm run build",
+    "install:frontend": "cd frontend && npm install",
+    "build:frontend": "cd frontend && npm install && npm run build",
     "deploy:migrate": "dotenv -e .env -- npx prisma migrate deploy",
     "postinstall": "npx prisma generate",
     "db:push": "dotenv -e .env -- npx prisma db push",
