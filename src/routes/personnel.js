@@ -541,7 +541,7 @@ router.get('/:id', auth, async (req, res) => {
 router.post('/', auth, requireSuperAdmin, async (req, res) => {
   try {
     const {
-      nationalId, name, email, password, role, position, isSuperAdmin,
+      employeeId, nationalId, name, email, password, role, position, isSuperAdmin,
       personnelTypeId, educationLevel,
       divisionId, workUnitId, departmentId,
       phone, nickname, birthDate, startDate,
@@ -553,6 +553,13 @@ router.post('/', auth, requireSuperAdmin, async (req, res) => {
     if (password.length < 8)
       return res.status(400).json(error('รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร'));
 
+    // Auto-generate employeeId if not provided
+    let empId = employeeId?.trim() || null;
+    if (!empId) {
+      const last = await prisma.user.findFirst({ orderBy: { id: 'desc' }, select: { id: true } });
+      empId = `EMP${String((last?.id ?? 0) + 1).padStart(3, '0')}`;
+    }
+
     let avatarUrl = null;
     if (avatar && typeof avatar === 'string' && avatar.startsWith('data:')) {
       try { avatarUrl = saveAvatarBase64(avatar); } catch (e) { console.warn('[avatar save]', e.message); }
@@ -561,6 +568,7 @@ router.post('/', auth, requireSuperAdmin, async (req, res) => {
     const hashed = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
       data: {
+        employeeId:      empId,
         nationalId:      nationalId || null,
         name:            name.trim(),
         email:           email.trim().toLowerCase(),
