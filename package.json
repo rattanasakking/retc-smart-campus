@@ -18,7 +18,8 @@
     "db:migrate": "dotenv -e .env -- npx prisma migrate dev",
     "db:studio": "dotenv -e .env -- npx prisma studio",
     "db:seed": "dotenv -e .env -- node prisma/seed.js",
-    "db:generate": "dotenv -e .env -- npx prisma generate"
+    "db:generate": "dotenv -e .env -- npx prisma generate",
+    "git:pull": "git pull origin main"
   },
   "dependencies": {
     "@prisma/client": "^5.7.0",
