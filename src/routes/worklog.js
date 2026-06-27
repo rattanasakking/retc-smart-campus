@@ -406,7 +406,9 @@ router.delete('/:id', auth, async (req, res, next) => {
   try {
     const log = await prisma.workLog.findUnique({ where: { id: intId(req.params.id) } });
     if (!log) return res.status(404).json(error('ไม่พบบันทึก'));
-    if (log.userId !== req.user.id) return res.status(403).json(error('ไม่มีสิทธิ์'));
+    const isOwner = log.userId === req.user.id;
+    const isAdmin = req.user.isSuperAdmin || req.user.role === 'admin';
+    if (!isOwner && !isAdmin) return res.status(403).json(error('ไม่มีสิทธิ์'));
     if (log.status === 'approved') return res.status(400).json(error('ไม่สามารถลบบันทึกที่อนุมัติแล้ว'));
     await prisma.workLog.delete({ where: { id: intId(req.params.id) } });
     res.json(success(null, 'ลบสำเร็จ'));
