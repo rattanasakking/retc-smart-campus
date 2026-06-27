@@ -4,19 +4,19 @@
   "description": "ระบบบริหารงานวิทยาลัยเทคนิคร้อยเอ็ด",
   "main": "app.js",
   "prisma": {
-    "seed": "node prisma/seed.js"
+    "seed": "dotenv -e .env -- node prisma/seed.js"
   },
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
     "build:frontend": "cd frontend && npm run build",
-    "deploy:migrate": "npx prisma migrate deploy",
+    "deploy:migrate": "dotenv -e .env -- npx prisma migrate deploy",
     "postinstall": "npx prisma generate",
-    "db:push": "prisma db push",
-    "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio",
-    "db:seed": "node prisma/seed.js",
-    "db:generate": "prisma generate"
+    "db:push": "dotenv -e .env -- npx prisma db push",
+    "db:migrate": "dotenv -e .env -- npx prisma migrate dev",
+    "db:studio": "dotenv -e .env -- npx prisma studio",
+    "db:seed": "dotenv -e .env -- node prisma/seed.js",
+    "db:generate": "dotenv -e .env -- npx prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^5.7.0",
@@ -31,6 +31,7 @@
     "passport-line-auth": "^0.2.9"
   },
   "devDependencies": {
+    "dotenv-cli": "^11.0.0",
     "nodemon": "^3.0.2",
     "prisma": "^5.7.0"
   },
