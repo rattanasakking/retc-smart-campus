@@ -6,6 +6,7 @@ import {
   AlertTriangle, Pencil, UserX, UserCheck, RefreshCw, Users,
 } from 'lucide-react';
 import { api, USER_KEY } from '@/lib/api';
+import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -561,12 +562,7 @@ function FormModal({
                 </div>
                 <div>
                   <label className="block text-xs font-medium mb-1" style={{ color: '#4a6080' }}>วันเกิด</label>
-                  <input
-                    className="input-field"
-                    type="date"
-                    value={form.birthDate}
-                    onChange={(e) => set('birthDate', e.target.value)}
-                  />
+                  <ThaiDatePicker value={form.birthDate} onChange={v => set('birthDate', v)} />
                 </div>
               </div>
             </div>
@@ -646,12 +642,7 @@ function FormModal({
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1" style={{ color: '#4a6080' }}>วันที่เริ่มงาน</label>
-                <input
-                  className="input-field"
-                  type="date"
-                  value={form.startDate}
-                  onChange={(e) => set('startDate', e.target.value)}
-                />
+                <ThaiDatePicker value={form.startDate} onChange={v => set('startDate', v)} />
               </div>
               {isSuperAdminViewer && (
                 <div

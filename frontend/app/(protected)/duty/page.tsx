@@ -6,6 +6,7 @@ import {
   Loader2, Pencil, Trash2, X,
 } from 'lucide-react';
 import { api, USER_KEY } from '@/lib/api';
+import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -95,8 +96,7 @@ function EditModal({ schedule, onClose, onSaved }: EditModalProps) {
           </div>
           <div>
             <label className="block text-xs font-medium text-[#4a6080] mb-1">วันที่ *</label>
-            <input type="date" value={form.dutyDate} onChange={e => setForm(p => ({ ...p, dutyDate: e.target.value }))}
-              required className="input-field" />
+            <ThaiDatePicker value={form.dutyDate} onChange={v => setForm(p => ({ ...p, dutyDate: v }))} />
           </div>
           <div>
             <label className="block text-xs font-medium text-[#4a6080] mb-1">หมายเหตุ</label>

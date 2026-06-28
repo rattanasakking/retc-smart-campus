@@ -6,6 +6,7 @@ import {
   MapPin, Clock, User, Package, ChevronRight, ExternalLink,
 } from 'lucide-react';
 import { api, USER_KEY } from '@/lib/api';
+import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -66,7 +67,7 @@ function AssignModal({ ticket, techs, onClose, onDone }: { ticket: Ticket; techs
         </select>
       </ModalField>
       <ModalField label="กำหนดเสร็จ">
-        <input type="date" className="input-field" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+        <ThaiDatePicker value={dueDate} onChange={setDueDate} />
       </ModalField>
       <ModalFooter onClose={() => !saving && onClose()} onSave={handle} saving={saving} saveLabel="มอบหมาย" />
     </Modal>

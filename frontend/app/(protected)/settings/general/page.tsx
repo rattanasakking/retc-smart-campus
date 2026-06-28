@@ -5,6 +5,7 @@ import {
   Upload, Check, AlertTriangle, Loader2, Plus, X, Star, MessageSquare,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -775,18 +776,10 @@ export default function GeneralPage() {
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="วันที่เริ่ม *">
-                    <input
-                      className="input-field" type="date"
-                      value={yearForm.sem1Start}
-                      onChange={(e) => setYearForm((f) => ({ ...f, sem1Start: e.target.value }))}
-                    />
+                    <ThaiDatePicker value={yearForm.sem1Start} onChange={v => setYearForm(f => ({ ...f, sem1Start: v }))} />
                   </Field>
                   <Field label="วันที่สิ้นสุด *">
-                    <input
-                      className="input-field" type="date"
-                      value={yearForm.sem1End}
-                      onChange={(e) => setYearForm((f) => ({ ...f, sem1End: e.target.value }))}
-                    />
+                    <ThaiDatePicker value={yearForm.sem1End} min={yearForm.sem1Start} onChange={v => setYearForm(f => ({ ...f, sem1End: v }))} />
                   </Field>
                 </div>
               </div>
@@ -801,18 +794,10 @@ export default function GeneralPage() {
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="วันที่เริ่ม">
-                    <input
-                      className="input-field" type="date"
-                      value={yearForm.sem2Start}
-                      onChange={(e) => setYearForm((f) => ({ ...f, sem2Start: e.target.value }))}
-                    />
+                    <ThaiDatePicker value={yearForm.sem2Start} onChange={v => setYearForm(f => ({ ...f, sem2Start: v }))} />
                   </Field>
                   <Field label="วันที่สิ้นสุด">
-                    <input
-                      className="input-field" type="date"
-                      value={yearForm.sem2End}
-                      onChange={(e) => setYearForm((f) => ({ ...f, sem2End: e.target.value }))}
-                    />
+                    <ThaiDatePicker value={yearForm.sem2End} min={yearForm.sem2Start} onChange={v => setYearForm(f => ({ ...f, sem2End: v }))} />
                   </Field>
                 </div>
               </div>

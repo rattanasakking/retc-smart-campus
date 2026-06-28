@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, Check, AlertTriangle, Loader2, X, Plus } from 'lucide-react';
 import { api } from '@/lib/api';
+import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
 
 interface Category   { id: number; name: string }
 interface Department { id: number; name: string; code: string }
@@ -195,7 +196,7 @@ export function EquipmentForm({ mode, initialData, equipmentId }: {
             </div>
             <div>
               <label className="block text-xs font-medium mb-1.5" style={{ color: '#4a6080' }}>วันที่ซื้อ</label>
-              <input type="date" className="input-field" value={form.acquiredDate} onChange={e => set('acquiredDate', e.target.value)} />
+              <ThaiDatePicker value={form.acquiredDate} onChange={v => set('acquiredDate', v)} />
             </div>
             <div className="col-span-2">
               <label className="block text-xs font-medium mb-1.5" style={{ color: '#4a6080' }}>แหล่งที่มา/งบประมาณ</label>

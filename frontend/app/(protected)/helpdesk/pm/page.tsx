@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, Plus, X, Loader2, Check, AlertTriangle, Search, Wrench } from 'lucide-react';
 import { api, USER_KEY } from '@/lib/api';
+import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
 
 interface Equipment  { id: number; code: string; name: string; department: string }
 interface TechUser   { id: number; name: string }
@@ -289,7 +290,7 @@ export default function PMPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1" style={{ color: '#4a6080' }}>วันที่กำหนด *</label>
-                <input type="date" className="input-field" value={pmForm.scheduledDate} onChange={(e) => setPmForm((f) => ({ ...f, scheduledDate: e.target.value }))} />
+                <ThaiDatePicker value={pmForm.scheduledDate} onChange={(v) => setPmForm((f) => ({ ...f, scheduledDate: v }))} />
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1" style={{ color: '#4a6080' }}>ช่างผู้รับผิดชอบ</label>

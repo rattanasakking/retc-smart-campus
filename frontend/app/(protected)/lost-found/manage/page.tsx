@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
+import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
 import Link from 'next/link';
 import {
   Plus, Search, MapPin, Calendar, Package, X, Camera, Upload,
@@ -576,8 +577,7 @@ export default function ManageLostFoundPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-[#4a6080] mb-1">วันที่พบ</label>
-                  <input type="date" value={form.foundDate} onChange={e => setForm(p => ({ ...p, foundDate: e.target.value }))}
-                    className="input-field" />
+                  <ThaiDatePicker value={form.foundDate} onChange={v => setForm(p => ({ ...p, foundDate: v }))} />
                 </div>
               </div>
 

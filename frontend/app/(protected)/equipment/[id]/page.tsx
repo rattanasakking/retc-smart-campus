@@ -6,6 +6,7 @@ import {
   Package, Wrench, ArrowLeftRight, ClipboardCheck, X, Plus,
 } from 'lucide-react';
 import { api, USER_KEY } from '@/lib/api';
+import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -433,8 +434,7 @@ export default function EquipmentDetailPage() {
             <div className="px-5 py-4 space-y-3">
               <div>
                 <label className="block text-xs font-medium mb-1" style={{ color: '#4a6080' }}>วันที่ตรวจสอบ *</label>
-                <input type="date" className="input-field" value={inspForm.inspectDate}
-                  onChange={(e) => setInspForm((f) => ({ ...f, inspectDate: e.target.value }))} />
+                <ThaiDatePicker value={inspForm.inspectDate} onChange={v => setInspForm(f => ({ ...f, inspectDate: v }))} />
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1" style={{ color: '#4a6080' }}>สภาพ *</label>

@@ -6,6 +6,7 @@ import {
   Phone, Mail, MapPin, CreditCard, GraduationCap, UserCircle,
 } from 'lucide-react';
 import { api, USER_KEY } from '@/lib/api';
+import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -783,7 +784,7 @@ export default function PersonnelPage() {
                     </div>
                     <div>
                       <label className="text-xs text-gray-500 mb-1 block">วันเกิด</label>
-                      <input type="date" value={form.birthDate} onChange={(e) => setF('birthDate', e.target.value)} className={inp} />
+                      <ThaiDatePicker value={form.birthDate} onChange={v => setF('birthDate', v)} />
                     </div>
                   </div>
                   <div>
@@ -857,7 +858,7 @@ export default function PersonnelPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs text-gray-500 mb-1 block">วันเริ่มงาน</label>
-                      <input type="date" value={form.startDate} onChange={(e) => setF('startDate', e.target.value)} className={inp} />
+                      <ThaiDatePicker value={form.startDate} onChange={v => setF('startDate', v)} />
                     </div>
                   </div>
                   <div>

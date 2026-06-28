@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus, Star, Trash2, Pencil, X, Loader2, AlertTriangle, CheckCircle } from 'lucide-react';
 import { api } from '@/lib/api';
+import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
 
 interface AcademicYear {
   id: number; year: number; semester: number;
@@ -253,15 +254,13 @@ export default function AcademicYearPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-400 mb-1.5">วันที่เริ่ม *</label>
-                  <input type="date" value={modal.form.startDate}
-                    onChange={(e) => setModal((m) => ({ ...m, form: { ...m.form, startDate: e.target.value } }))}
-                    className="input-field" />
+                  <ThaiDatePicker value={modal.form.startDate}
+                    onChange={(v) => setModal((m) => ({ ...m, form: { ...m.form, startDate: v } }))} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-400 mb-1.5">วันที่สิ้นสุด *</label>
-                  <input type="date" value={modal.form.endDate}
-                    onChange={(e) => setModal((m) => ({ ...m, form: { ...m.form, endDate: e.target.value } }))}
-                    className="input-field" />
+                  <ThaiDatePicker value={modal.form.endDate} min={modal.form.startDate}
+                    onChange={(v) => setModal((m) => ({ ...m, form: { ...m.form, endDate: v } }))} />
                 </div>
               </div>
             </div>

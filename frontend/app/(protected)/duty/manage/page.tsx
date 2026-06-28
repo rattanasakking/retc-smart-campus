@@ -5,6 +5,7 @@ import {
   Plus, Trash2, X, Check, AlertTriangle, Loader2, CalendarCheck, RefreshCw,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -217,11 +218,11 @@ export default function DutyManagePage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-[#4a6080] mb-1">วันเริ่มต้น *</label>
-              <input type="date" value={weekly.startDate} onChange={e => setWeekly(p => ({ ...p, startDate: e.target.value }))} className="input-field" />
+              <ThaiDatePicker value={weekly.startDate} onChange={v => setWeekly(p => ({ ...p, startDate: v }))} />
             </div>
             <div>
               <label className="block text-xs font-medium text-[#4a6080] mb-1">วันสิ้นสุด *</label>
-              <input type="date" value={weekly.endDate} onChange={e => setWeekly(p => ({ ...p, endDate: e.target.value }))} className="input-field" />
+              <ThaiDatePicker value={weekly.endDate} min={weekly.startDate} onChange={v => setWeekly(p => ({ ...p, endDate: v }))} />
             </div>
           </div>
           <div>
@@ -257,13 +258,8 @@ export default function DutyManagePage() {
             <div key={row.id} className="px-4 py-3 space-y-2">
               <div className="flex items-start gap-3">
                 {/* Date */}
-                <input
-                  type="date"
-                  value={row.date}
-                  onChange={(e) => setDate(row.id, e.target.value)}
-                  className="input-field text-sm py-1.5"
-                  style={{ width: 160, flexShrink: 0 }}
-                />
+                <ThaiDatePicker value={row.date} onChange={v => setDate(row.id, v)}
+                  className="text-sm" />
                 {/* Departments list */}
                 <div className="flex-1 space-y-1.5">
                   {row.depts.map((d, di) => (

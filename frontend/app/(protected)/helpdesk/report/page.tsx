@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import { ChevronLeft, Download, Loader2, AlertTriangle } from 'lucide-react';
 import { api } from '@/lib/api';
+import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -104,11 +105,11 @@ export default function HelpdeskReportPage() {
         <div className="flex flex-wrap gap-3">
           <div className="flex items-center gap-2">
             <label className="text-xs font-medium" style={{ color: '#4a6080' }}>ตั้งแต่</label>
-            <input type="date" className="input-field text-sm py-1.5 w-auto" value={from} onChange={(e) => setFrom(e.target.value)} />
+            <ThaiDatePicker value={from} onChange={setFrom} className="w-44" />
           </div>
           <div className="flex items-center gap-2">
             <label className="text-xs font-medium" style={{ color: '#4a6080' }}>ถึง</label>
-            <input type="date" className="input-field text-sm py-1.5 w-auto" value={to} onChange={(e) => setTo(e.target.value)} />
+            <ThaiDatePicker value={to} onChange={setTo} min={from} className="w-44" />
           </div>
           <select className="input-field text-sm py-1.5 w-auto" value={statusF} onChange={(e) => setStatusF(e.target.value)}>
             <option value="">สถานะทั้งหมด</option>
