@@ -84,20 +84,17 @@ const ROLE_LABEL: Record<string, string> = {
   admin: 'ผู้ดูแลระบบ', executive: 'ผู้บริหาร', teacher: 'ครู/อาจารย์', staff: 'บุคลากร',
 };
 
-const POSITION_OPTIONS = [
-  { value: 'director',        label: 'ผู้อำนวยการ'     },
-  { value: 'deputy_director', label: 'รองผู้อำนวยการ'   },
-  { value: 'division_chief',  label: 'หัวหน้าฝ่าย'     },
-  { value: 'work_unit_chief', label: 'หัวหน้างาน'      },
-  { value: 'department_chief',label: 'หัวหน้าแผนก'     },
-  { value: 'teacher',         label: 'ครู/อาจารย์'      },
-  { value: 'specialist',      label: 'ผู้เชี่ยวชาญ'     },
-  { value: 'officer',         label: 'เจ้าหน้าที่'      },
-  { value: 'worker',          label: 'พนักงาน'          },
-] as const;
-const POSITION_LABEL: Record<string, string> = Object.fromEntries(
-  POSITION_OPTIONS.map(({ value, label }) => [value, label])
-);
+// ตำแหน่งจัดการผ่าน /settings/positions (ดึงจาก DB)
+const LEGACY_POSITION_LABEL: Record<string, string> = {
+  director: 'ผู้อำนวยการ', deputy_director: 'รองผู้อำนวยการ',
+  division_chief: 'หัวหน้าฝ่าย', work_unit_chief: 'หัวหน้างาน',
+  department_chief: 'หัวหน้าแผนก', teacher: 'ครู/อาจารย์',
+  specialist: 'ผู้เชี่ยวชาญ', officer: 'เจ้าหน้าที่', worker: 'พนักงาน',
+};
+function posLabel(pos: string | null | undefined) {
+  if (!pos) return '';
+  return LEGACY_POSITION_LABEL[pos] ?? pos;
+}
 
 const EDUCATION_LEVELS = ['ต่ำกว่าปริญญาตรี', 'ปริญญาตรี', 'ปริญญาโท', 'ปริญญาเอก', 'อื่นๆ'];
 const LIMIT = 20;
@@ -112,6 +109,7 @@ export default function PersonnelPage() {
   const [divisions, setDivisions]   = useState<Division[]>([]);
   const [workUnits, setWorkUnits]   = useState<WorkUnit[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [positions, setPositions]   = useState<string[]>([]);
   const [loading, setLoading]       = useState(true);
   const [page, setPage]             = useState(1);
   const [total, setTotal]           = useState(0);
@@ -176,6 +174,7 @@ export default function PersonnelPage() {
     api.get<any>('/personnel/types?active=true').then((r) => setTypes(r.data ?? []));
     api.get<any>('/settings/divisions').then((r) => setDivisions(r.data ?? []));
     api.get<any>('/settings/departments').then((r) => setDepartments(r.data ?? []));
+    api.get<any>('/settings/positions').then((r) => setPositions(r.data ?? []));
   }, []);
 
   function openNew() {
@@ -409,7 +408,7 @@ export default function PersonnelPage() {
                       </button>
                     </td>
                     <td className="py-3 px-4 hidden md:table-cell">
-                      <div className="text-gray-700">{p.position ? (POSITION_LABEL[p.position] ?? p.position) : (p.personnelType?.name ?? '—')}</div>
+                      <div className="text-gray-700">{p.position ? (posLabel(p.position) ?? p.position) : (p.personnelType?.name ?? '—')}</div>
                       <span className="inline-block mt-0.5 text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">
                         {ROLE_LABEL[p.role] ?? p.role}
                       </span>
@@ -487,7 +486,7 @@ export default function PersonnelPage() {
                 <p className="text-sm text-white/70">{viewTarget.email}</p>
                 <div className="flex gap-2 mt-1 flex-wrap">
                   <span className="text-xs px-2 py-0.5 rounded-full bg-white/20 text-white">{ROLE_LABEL[viewTarget.role] ?? viewTarget.role}</span>
-                  {viewTarget.position && <span className="text-xs px-2 py-0.5 rounded-full bg-white/20 text-white">{POSITION_LABEL[viewTarget.position] ?? viewTarget.position}</span>}
+                  {viewTarget.position && <span className="text-xs px-2 py-0.5 rounded-full bg-white/20 text-white">{posLabel(viewTarget.position) ?? viewTarget.position}</span>}
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${viewTarget.isActive ? 'bg-green-400/30 text-green-100' : 'bg-red-400/30 text-red-100'}`}>
                     {viewTarget.isActive ? 'ใช้งาน' : 'ปิดการใช้งาน'}
                   </span>
@@ -831,7 +830,11 @@ export default function PersonnelPage() {
                       <label className="text-xs text-gray-500 mb-1 block">ตำแหน่ง</label>
                       <select value={form.position} onChange={(e) => setF('position', e.target.value)} className={sel}>
                         <option value="">-- เลือกตำแหน่ง --</option>
-                        {POSITION_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        {positions.map((p) => <option key={p} value={p}>{p}</option>)}
+                        {/* แสดงค่าเดิม (enum) ถ้ายังไม่อยู่ในรายการใหม่ */}
+                        {form.position && !positions.includes(form.position) && (
+                          <option value={form.position}>{posLabel(form.position)}</option>
+                        )}
                       </select>
                     </div>
                   </div>
