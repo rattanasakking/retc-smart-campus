@@ -26,31 +26,63 @@ async function getChannelSecret() {
   } catch { return ''; }
 }
 
+// LINE Webhook Diagnostic — GET /api/webhook/line/debug
+router.get('/line/debug', async (req, res) => {
+  try {
+    const [secretRow, tokenRow] = await Promise.all([
+      prisma.systemSettings.findUnique({ where: { key: 'line_messaging_secret' } }),
+      prisma.systemSettings.findUnique({ where: { key: 'line_messaging_token'  } }),
+    ]);
+    const admins = await prisma.user.findMany({
+      where: { isActive: true, role: { in: ['admin', 'executive'] } },
+      select: { id: true, name: true, role: true, lineUserId: true },
+    });
+    const pendingBookings = await prisma.roomBooking.findMany({
+      where: { status: 'pending' },
+      select: { id: true, title: true, startTime: true },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
+    res.json({
+      messaging_secret_set: !!(secretRow?.value),
+      messaging_token_set:  !!(tokenRow?.value),
+      env_secret_set: !!(process.env.LINE_CHANNEL_SECRET),
+      env_token_set:  !!(process.env.LINE_CHANNEL_ACCESS_TOKEN),
+      admins: admins.map(a => ({ id: a.id, name: a.name, role: a.role, hasLineUserId: !!(a.lineUserId), lineUserId: a.lineUserId })),
+      pending_bookings: pendingBookings,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // LINE Webhook — POST /api/webhook/line
 router.post('/line', async (req, res) => {
   const signature = req.headers['x-line-signature'];
   const rawBody   = req.rawBody;
 
+  // ต้อง return 200 เสมอ ไม่งั้น LINE จะหยุดส่ง event
+  res.status(200).json({ success: true });
+
   const secret = await getChannelSecret();
   if (secret) {
     if (!signature || !rawBody || !verifyLineSignature(rawBody, signature, secret)) {
-      console.warn('[Webhook] invalid LINE signature');
-      return res.status(401).json({ error: 'Invalid signature' });
+      console.warn('[Webhook] invalid LINE signature — skipping event processing');
+      return; // return 200 แล้ว แต่ไม่ process
     }
   } else {
-    console.warn('[Webhook] LINE_CHANNEL_SECRET not set — skipping signature verification');
+    console.warn('[Webhook] line_messaging_secret not set — skipping signature verification');
   }
 
-  res.status(200).json({ success: true });
-
   const events = req.body?.events ?? [];
+  console.log(`[Webhook] received ${events.length} event(s):`, events.map(e => e.type));
   for (const event of events) {
     try {
       if (event.type === 'postback') {
         await handlePostback(event);
       }
     } catch (err) {
-      console.error('[Webhook] event error:', err.message);
+      console.error('[Webhook] event error:', err.message, err.stack);
     }
   }
 });
