@@ -533,7 +533,7 @@ router.get('/line/callback', async (req, res) => {
     const email = emailFromIdToken(tokenData.id_token);
     const { user, status } = await resolveOAuthUser('lineUserId', lineProfile.userId, email);
     if (status !== 'active') return res.redirect(`${FRONTEND_URL}/login?error=${encodeURIComponent(status)}`);
-    res.redirect(`${FRONTEND_URL}/dashboard?token=${encodeURIComponent(signOAuthToken(user))}`);
+    res.redirect(`${FRONTEND_URL}/login?token=${encodeURIComponent(signOAuthToken(user))}`);
   } catch (e) {
     console.error('[LINE login callback]', e);
     res.redirect(`${FRONTEND_URL}/login?error=server_error`);
@@ -586,7 +586,7 @@ router.get('/google/callback', async (req, res) => {
     const gProfile = await profileRes.json();
     const { user, status } = await resolveOAuthUser('googleId', gProfile.sub, gProfile.email);
     if (status !== 'active') return res.redirect(`${FRONTEND_URL}/login?error=${encodeURIComponent(status)}`);
-    res.redirect(`${FRONTEND_URL}/dashboard?token=${encodeURIComponent(signOAuthToken(user))}`);
+    res.redirect(`${FRONTEND_URL}/login?token=${encodeURIComponent(signOAuthToken(user))}`);
   } catch (e) {
     console.error('[Google login callback]', e);
     res.redirect(`${FRONTEND_URL}/login?error=server_error`);
