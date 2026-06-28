@@ -73,6 +73,45 @@ function lineMsg(booking, type) {
   return '';
 }
 
+// ─── Room Status ─────────────────────────────────────────────────────────────
+
+// GET /api/room/status  — all rooms with busy flag + upcoming bookings
+router.get('/status', auth, async (req, res, next) => {
+  try {
+    const now   = new Date();
+    const limit = new Date(now); limit.setDate(limit.getDate() + 14);
+
+    const rooms = await prisma.room.findMany({
+      where: { status: 'active' },
+      orderBy: { name: 'asc' },
+    });
+
+    const upcoming = await prisma.roomBooking.findMany({
+      where: {
+        status:    { in: ['pending', 'approved'] },
+        endTime:   { gt: now },
+        startTime: { lte: limit },
+      },
+      orderBy: { startTime: 'asc' },
+      include: { room: { select: { id: true } } },
+    });
+
+    const data = rooms.map((room) => {
+      const roomBookings = upcoming.filter((b) => b.roomId === room.id);
+      const isBusy = roomBookings.some((b) => b.startTime <= now && b.endTime >= now && b.status === 'approved');
+      return {
+        ...room,
+        isBusy,
+        upcomingBookings: roomBookings.slice(0, 5).map((b) => ({
+          id: b.id, title: b.title, startTime: b.startTime, endTime: b.endTime, status: b.status,
+        })),
+      };
+    });
+
+    res.json(success(data));
+  } catch (e) { next(e); }
+});
+
 // ─── Rooms ────────────────────────────────────────────────────────────────────
 
 router.get('/rooms', auth, async (req, res, next) => {

@@ -163,7 +163,8 @@ export default function RoomPage() {
   const [loading, setLoading]       = useState(true);
   const [weekStart, setWeekStart]   = useState<Date>(() => getWeekStart(new Date()));
   const [activeTab, setActiveTab]   = useState<'calendar'|'mine'|'pending'|'report'>('calendar');
-  const [calView, setCalView]       = useState<'week'|'list'>('week');
+  const [calView, setCalView]       = useState<'status'|'week'|'list'>('status');
+  const [statusData, setStatusData] = useState<(Room & { isBusy: boolean; upcomingBookings: { id: number; title: string; startTime: string; endTime: string; status: string }[] })[]>([]);
   const [roomFilter, setRoomFilter] = useState('');
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [isAdmin, setAdmin]         = useState(false);
@@ -203,6 +204,16 @@ export default function RoomPage() {
   useEffect(() => {
     api.get<{ data: Room[] }>('/room/rooms').then((r) => setRooms(Array.isArray(r.data) ? r.data : [])).catch(() => {});
   }, []);
+
+  // Load room status cards
+  const loadStatus = useCallback(async () => {
+    try {
+      const res = await api.get<{ data: typeof statusData }>('/room/status');
+      setStatusData(Array.isArray(res.data) ? res.data : []);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => { if (calView === 'status') loadStatus(); }, [calView, loadStatus]);
 
   // Load calendar data
   const loadCal = useCallback(async () => {
@@ -333,7 +344,7 @@ export default function RoomPage() {
             </div>
             {/* View toggle */}
             <div className="flex rounded-xl overflow-hidden ml-auto" style={{ border: '1px solid #dce6f9' }}>
-              {[{ v: 'week', l: 'สัปดาห์', icon: Calendar }, { v: 'list', l: 'รายการ', icon: List }].map(({ v, l, icon: Icon }) => (
+              {[{ v: 'status', l: 'สถานะ', icon: Users }, { v: 'week', l: 'สัปดาห์', icon: Calendar }, { v: 'list', l: 'รายการ', icon: List }].map(({ v, l, icon: Icon }) => (
                 <button key={v} onClick={() => setCalView(v as typeof calView)}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium"
                   style={calView === v ? { backgroundColor: '#1d6ae5', color: '#fff' } : { color: '#4a6080', backgroundColor: '#fff' }}>
@@ -342,6 +353,78 @@ export default function RoomPage() {
               ))}
             </div>
           </div>
+
+          {/* Status card view */}
+          {calView === 'status' && (
+            <div>
+              <p className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: '#1a2744' }}>
+                <Users className="w-4 h-4" style={{ color: '#1d6ae5' }} />
+                สถานะห้องประชุม ณ ปัจจุบัน
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {statusData.map((room) => (
+                  <div key={room.id} className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                    style={{ border: '1px solid #dce6f9' }}
+                    onClick={() => router.push(`/room/new?roomId=${room.id}`)}>
+                    {/* Image */}
+                    <div className="relative h-44 bg-gray-100 overflow-hidden">
+                      {room.image ? (
+                        <img src={room.image} alt={room.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: '#e8f0fe' }}>
+                          <Users className="w-12 h-12" style={{ color: '#a5c0f0' }} />
+                        </div>
+                      )}
+                      {/* Gradient overlay */}
+                      <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 55%)' }} />
+                      {/* Status badge */}
+                      <div className="absolute top-3 right-3">
+                        <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold shadow"
+                          style={room.isBusy
+                            ? { backgroundColor: '#dc2626', color: '#fff' }
+                            : { backgroundColor: '#16a34a', color: '#fff' }}>
+                          <span className="w-1.5 h-1.5 rounded-full bg-white opacity-90" />
+                          {room.isBusy ? 'ไม่ว่าง' : 'ห้องว่าง'}
+                        </span>
+                      </div>
+                      {/* Room name on image */}
+                      <div className="absolute bottom-0 left-0 right-0 px-4 pb-3">
+                        <p className="text-white font-bold text-base leading-tight">{room.name}</p>
+                        <p className="text-white/80 text-xs flex items-center gap-1 mt-0.5">
+                          <Users className="w-3 h-3" /> ความจุ {room.capacity} ท่าน
+                        </p>
+                      </div>
+                    </div>
+                    {/* Upcoming bookings */}
+                    <div className="px-4 py-3">
+                      <p className="text-xs font-semibold mb-2" style={{ color: '#4a6080' }}>การจองที่กำลังจะมาถึง</p>
+                      {room.upcomingBookings.length === 0 ? (
+                        <p className="text-xs text-center py-3" style={{ color: '#94a3b8' }}>ว่างยาวๆ ไม่มีคิวจองเร็วๆ นี้</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {room.upcomingBookings.map((b) => (
+                            <div key={b.id} className="flex items-start justify-between gap-2"
+                              onClick={(e) => { e.stopPropagation(); api.get<{ data: Booking }>(`/room/bookings/${b.id}`).then(r => setSelectedBooking(r.data)).catch(() => {}); }}>
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium truncate" style={{ color: '#1a2744' }}>{b.title}</p>
+                                <p className="text-[11px]" style={{ color: '#94a3b8' }}>
+                                  {fmtDate(b.startTime)}
+                                </p>
+                              </div>
+                              <span className="flex-shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap"
+                                style={{ backgroundColor: '#e8f0fe', color: '#1d6ae5' }}>
+                                {fmtTime(b.startTime)}-{fmtTime(b.endTime)} น.
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Weekly grid view */}
           {calView === 'week' && (
