@@ -585,6 +585,37 @@ router.post('/test-line', superAdmin, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// POST /api/settings/test-email  — ทดสอบส่ง Email
+router.post('/test-email', superAdmin, async (req, res, next) => {
+  try {
+    const { to, provider, resend_api_key, email_from, smtp_host, smtp_port, smtp_user, smtp_pass } = req.body;
+    if (!to) return res.status(400).json(error('กรุณาระบุอีเมลปลายทาง'));
+
+    const subject = '✅ ทดสอบการส่ง Email จาก RETC Smart Campus';
+    const html    = `<p>ทดสอบส่ง Email สำเร็จ 🎉</p><p style="color:#888;font-size:12px">${new Date().toLocaleString('th-TH')}</p>`;
+    const text    = `ทดสอบส่ง Email สำเร็จ — ${new Date().toLocaleString('th-TH')}`;
+
+    const { sendViaResend, sendViaSmtp } = require('../services/email');
+    let result;
+
+    if (provider === 'resend') {
+      if (!resend_api_key) return res.status(400).json(error('กรุณากรอก Resend API Key'));
+      result = await sendViaResend({ apiKey: resend_api_key, from: email_from || 'Smart Campus <onboarding@resend.dev>', to, subject, html, text });
+    } else if (provider === 'smtp') {
+      if (!smtp_host || !smtp_user || !smtp_pass) return res.status(400).json(error('กรุณากรอก SMTP Host, User, และ Password'));
+      result = await sendViaSmtp({ host: smtp_host, port: parseInt(smtp_port ?? '587', 10), user: smtp_user, pass: smtp_pass, from: email_from || smtp_user, to, subject, html, text });
+    } else {
+      return res.status(400).json(error('กรุณาเลือก Email Provider'));
+    }
+
+    if (result) {
+      res.json(success(null, 'ส่ง Email ทดสอบสำเร็จ ✅ ตรวจสอบใน Inbox ของคุณ'));
+    } else {
+      res.status(400).json(error('ส่ง Email ไม่สำเร็จ กรุณาตรวจสอบการตั้งค่า'));
+    }
+  } catch (e) { next(e); }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ระบบจัดการผู้ใช้งาน
 // ═══════════════════════════════════════════════════════════════════════════════
