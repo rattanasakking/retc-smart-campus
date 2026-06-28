@@ -183,8 +183,9 @@ export default function RoomPage() {
     const raw = localStorage.getItem(USER_KEY);
     if (raw) { try { const u = JSON.parse(raw); setUserId(u.id); } catch { /* */ } }
     // Fetch fresh user data to get up-to-date modulePermissions
-    api.get<{ id: number; isSuperAdmin: boolean; role: string; modulePermissions?: string[] }>('/auth/me')
-      .then((u) => {
+    api.get<{ data: { id: number; isSuperAdmin: boolean; role: string; modulePermissions?: string[] } }>('/auth/me')
+      .then((res) => {
+        const u = res.data;
         const admin = !!u.isSuperAdmin || u.role === 'admin' || u.role === 'executive'
           || (u.modulePermissions ?? []).includes('ROOM_BOOKING');
         setAdmin(admin);
