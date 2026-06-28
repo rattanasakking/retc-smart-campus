@@ -1,6 +1,7 @@
 const express  = require('express');
 const bcrypt   = require('bcrypt');
 const jwt      = require('jsonwebtoken');
+const crypto   = require('crypto');
 const path     = require('path');
 const fs       = require('fs');
 const passport = require('../config/passport');
@@ -12,6 +13,48 @@ const { success, error, paginate } = require('../utils/response');
 const router       = express.Router();
 const prisma       = new PrismaClient();
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+// ─── OAuth helpers ────────────────────────────────────────────────────────────
+
+async function getOAuthConfig() {
+  const rows = await prisma.systemSettings.findMany({
+    where: { key: { in: ['line_channel_id', 'line_channel_secret', 'google_client_id', 'google_client_secret'] } },
+  });
+  const m = Object.fromEntries(rows.map(r => [r.key, r.value]));
+  return {
+    line:   { clientId: m.line_channel_id     || process.env.LINE_CLIENT_ID     || '', clientSecret: m.line_channel_secret  || process.env.LINE_CLIENT_SECRET  || '' },
+    google: { clientId: m.google_client_id    || process.env.GOOGLE_CLIENT_ID   || '', clientSecret: m.google_client_secret || process.env.GOOGLE_CLIENT_SECRET || '' },
+  };
+}
+
+function signOAuthToken(user) {
+  return jwt.sign(
+    { id: user.id, employeeId: user.employeeId, email: user.email, name: user.name, role: user.role, isSuperAdmin: user.isSuperAdmin, departmentId: user.departmentId, department: user.department, divisionId: user.divisionId, workUnitId: user.workUnitId, position: user.position },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRE || '7d' }
+  );
+}
+
+async function resolveOAuthUser(providerField, providerId, email) {
+  let user = await prisma.user.findFirst({ where: { [providerField]: providerId } });
+  if (user) return { user, status: user.isActive ? 'active' : 'inactive' };
+  if (email) {
+    user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    if (user) {
+      if (!user.isActive) return { user: null, status: 'inactive' };
+      user = await prisma.user.update({ where: { id: user.id }, data: { [providerField]: providerId } });
+      return { user, status: 'active' };
+    }
+  }
+  return { user: null, status: 'not_found' };
+}
+
+function emailFromIdToken(idToken) {
+  if (!idToken) return null;
+  try {
+    return JSON.parse(Buffer.from(idToken.split('.')[1], 'base64url').toString()).email || null;
+  } catch { return null; }
+}
 
 function saveAvatar(base64) {
   const data = base64.replace(/^data:image\/\w+;base64,/, '');
@@ -425,41 +468,128 @@ router.put('/users/:id/reset-password', auth, requireAdmin, async (req, res) => 
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// OAuth — LINE + Google
+// OAuth — LINE + Google  (ดึง client_id/secret จาก DB เสมอ)
 // ═════════════════════════════════════════════════════════════════════════════
 
-function oauthCallback(strategy) {
-  return (req, res, next) => {
-    passport.authenticate(strategy, { session: true }, (err, userInfo, info) => {
-      if (err || !userInfo) {
-        const code = info?.message || 'server_error';
-        return res.redirect(`${FRONTEND_URL}/login?error=${encodeURIComponent(code)}`);
-      }
-      res.redirect(`${FRONTEND_URL}/dashboard?token=${encodeURIComponent(userInfo.token)}`);
-    })(req, res, next);
-  };
-}
+// ─── LINE Login ───────────────────────────────────────────────────────────────
+router.get('/line', async (req, res) => {
+  try {
+    const { line } = await getOAuthConfig();
+    if (!line.clientId) return res.redirect(`${FRONTEND_URL}/login?error=line_not_configured`);
+    const state = crypto.randomBytes(16).toString('hex');
+    req.session.oauthState = state;
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id:     line.clientId,
+      redirect_uri:  `${FRONTEND_URL}/api/auth/line/callback`,
+      state,
+      scope:         'profile openid email',
+    });
+    res.redirect(`https://access.line.me/oauth2/v2.1/authorize?${params}`);
+  } catch (e) {
+    console.error('[LINE login]', e);
+    res.redirect(`${FRONTEND_URL}/login?error=server_error`);
+  }
+});
 
-// LINE
-router.get('/line', passport.authenticate('line'));
-router.get('/line/callback', oauthCallback('line'));
+router.get('/line/callback', async (req, res) => {
+  const { code, error: oauthErr } = req.query;
+  if (oauthErr || !code) return res.redirect(`${FRONTEND_URL}/login?error=line_cancelled`);
+  try {
+    const { line } = await getOAuthConfig();
+    const tokenRes = await fetch('https://api.line.me/oauth2/v2.1/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type:    'authorization_code',
+        code:          String(code),
+        redirect_uri:  `${FRONTEND_URL}/api/auth/line/callback`,
+        client_id:     line.clientId,
+        client_secret: line.clientSecret,
+      }),
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenData.access_token) return res.redirect(`${FRONTEND_URL}/login?error=token_error`);
+    const profileRes = await fetch('https://api.line.me/v2/profile', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+    const lineProfile = await profileRes.json();
+    const email = emailFromIdToken(tokenData.id_token);
+    const { user, status } = await resolveOAuthUser('lineUserId', lineProfile.userId, email);
+    if (status !== 'active') return res.redirect(`${FRONTEND_URL}/login?error=${encodeURIComponent(status)}`);
+    res.redirect(`${FRONTEND_URL}/dashboard?token=${encodeURIComponent(signOAuthToken(user))}`);
+  } catch (e) {
+    console.error('[LINE login callback]', e);
+    res.redirect(`${FRONTEND_URL}/login?error=server_error`);
+  }
+});
 
-// Google
-router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-router.get('/google/callback', oauthCallback('google'));
+// ─── Google Login ─────────────────────────────────────────────────────────────
+router.get('/google', async (req, res) => {
+  try {
+    const { google } = await getOAuthConfig();
+    if (!google.clientId) return res.redirect(`${FRONTEND_URL}/login?error=google_not_configured`);
+    const state = crypto.randomBytes(16).toString('hex');
+    req.session.oauthState = state;
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id:     google.clientId,
+      redirect_uri:  `${FRONTEND_URL}/api/auth/google/callback`,
+      state,
+      scope:         'openid profile email',
+      access_type:   'online',
+    });
+    res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+  } catch (e) {
+    console.error('[Google login]', e);
+    res.redirect(`${FRONTEND_URL}/login?error=server_error`);
+  }
+});
 
-// ─── LINE Link / Unlink (manual OAuth — ไม่ใช้ passport strategy) ────────────
+router.get('/google/callback', async (req, res) => {
+  const { code, error: oauthErr } = req.query;
+  if (oauthErr || !code) return res.redirect(`${FRONTEND_URL}/login?error=google_cancelled`);
+  try {
+    const { google } = await getOAuthConfig();
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code:          String(code),
+        client_id:     google.clientId,
+        client_secret: google.clientSecret,
+        redirect_uri:  `${FRONTEND_URL}/api/auth/google/callback`,
+        grant_type:    'authorization_code',
+      }),
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenData.access_token) return res.redirect(`${FRONTEND_URL}/login?error=token_error`);
+    const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+    const gProfile = await profileRes.json();
+    const { user, status } = await resolveOAuthUser('googleId', gProfile.sub, gProfile.email);
+    if (status !== 'active') return res.redirect(`${FRONTEND_URL}/login?error=${encodeURIComponent(status)}`);
+    res.redirect(`${FRONTEND_URL}/dashboard?token=${encodeURIComponent(signOAuthToken(user))}`);
+  } catch (e) {
+    console.error('[Google login callback]', e);
+    res.redirect(`${FRONTEND_URL}/login?error=server_error`);
+  }
+});
+
+// ─── LINE Link / Unlink ───────────────────────────────────────────────────────
 router.get('/line/link', async (req, res) => {
   const token = req.query.token;
   if (!token) return res.redirect(`${FRONTEND_URL}/profile?error=unauthorized`);
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const { line } = await getOAuthConfig();
+    if (!line.clientId) return res.redirect(`${FRONTEND_URL}/profile?error=line_not_configured`);
     const state = Buffer.from(JSON.stringify({ id: decoded.id, ts: Date.now() })).toString('base64url');
-    const callbackURL = `${FRONTEND_URL}/api/auth/line/link/callback`;
     const params = new URLSearchParams({
       response_type: 'code',
-      client_id:     process.env.LINE_CLIENT_ID || '',
-      redirect_uri:  callbackURL,
+      client_id:     line.clientId,
+      redirect_uri:  `${FRONTEND_URL}/api/auth/line/link/callback`,
       state,
       scope:         'profile openid',
     });
@@ -474,29 +604,26 @@ router.get('/line/link/callback', async (req, res) => {
   if (oauthErr || !code || !state) return res.redirect(`${FRONTEND_URL}/profile?error=line_cancelled`);
   try {
     const { id: userId } = JSON.parse(Buffer.from(String(state), 'base64url').toString());
-    const callbackURL = `${FRONTEND_URL}/api/auth/line/link/callback`;
-    // Exchange code for access token
+    const { line } = await getOAuthConfig();
     const tokenRes = await fetch('https://api.line.me/oauth2/v2.1/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         grant_type:    'authorization_code',
         code:          String(code),
-        redirect_uri:  callbackURL,
-        client_id:     process.env.LINE_CLIENT_ID || '',
-        client_secret: process.env.LINE_CLIENT_SECRET || '',
+        redirect_uri:  `${FRONTEND_URL}/api/auth/line/link/callback`,
+        client_id:     line.clientId,
+        client_secret: line.clientSecret,
       }),
     });
     const tokenData = await tokenRes.json();
     if (!tokenData.access_token) return res.redirect(`${FRONTEND_URL}/profile?error=token_error`);
-    // Get LINE profile
     const profileRes = await fetch('https://api.line.me/v2/profile', {
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
     const lineProfile = await profileRes.json();
     const lineUserId = lineProfile.userId;
     if (!lineUserId) return res.redirect(`${FRONTEND_URL}/profile?error=profile_error`);
-    // Check not already linked to other account
     const existing = await prisma.user.findFirst({ where: { lineUserId } });
     if (existing && existing.id !== userId) return res.redirect(`${FRONTEND_URL}/profile?error=already_linked_to_other`);
     await prisma.user.update({ where: { id: userId }, data: { lineUserId } });
@@ -514,18 +641,19 @@ router.delete('/line/unlink', auth, async (req, res) => {
   } catch (e) { res.status(500).json(error('เกิดข้อผิดพลาด')); }
 });
 
-// ─── Google Link / Unlink (manual OAuth) ─────────────────────────────────────
+// ─── Google Link / Unlink ─────────────────────────────────────────────────────
 router.get('/google/link', async (req, res) => {
   const token = req.query.token;
   if (!token) return res.redirect(`${FRONTEND_URL}/profile?error=unauthorized`);
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const { google } = await getOAuthConfig();
+    if (!google.clientId) return res.redirect(`${FRONTEND_URL}/profile?error=google_not_configured`);
     const state = Buffer.from(JSON.stringify({ id: decoded.id, ts: Date.now() })).toString('base64url');
-    const callbackURL = `${FRONTEND_URL}/api/auth/google/link/callback`;
     const params = new URLSearchParams({
       response_type: 'code',
-      client_id:     process.env.GOOGLE_CLIENT_ID || '',
-      redirect_uri:  callbackURL,
+      client_id:     google.clientId,
+      redirect_uri:  `${FRONTEND_URL}/api/auth/google/link/callback`,
       state,
       scope:         'openid profile email',
       access_type:   'online',
@@ -541,29 +669,26 @@ router.get('/google/link/callback', async (req, res) => {
   if (oauthErr || !code || !state) return res.redirect(`${FRONTEND_URL}/profile?error=google_cancelled`);
   try {
     const { id: userId } = JSON.parse(Buffer.from(String(state), 'base64url').toString());
-    const callbackURL = `${FRONTEND_URL}/api/auth/google/link/callback`;
-    // Exchange code for token
+    const { google } = await getOAuthConfig();
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         code:          String(code),
-        client_id:     process.env.GOOGLE_CLIENT_ID || '',
-        client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
-        redirect_uri:  callbackURL,
+        client_id:     google.clientId,
+        client_secret: google.clientSecret,
+        redirect_uri:  `${FRONTEND_URL}/api/auth/google/link/callback`,
         grant_type:    'authorization_code',
       }),
     });
     const tokenData = await tokenRes.json();
     if (!tokenData.access_token) return res.redirect(`${FRONTEND_URL}/profile?error=token_error`);
-    // Get Google profile
     const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
     const gProfile = await profileRes.json();
     const googleId = gProfile.sub;
     if (!googleId) return res.redirect(`${FRONTEND_URL}/profile?error=profile_error`);
-    // Check not already linked to other account
     const existing = await prisma.user.findFirst({ where: { googleId } });
     if (existing && existing.id !== userId) return res.redirect(`${FRONTEND_URL}/profile?error=already_linked_to_other`);
     await prisma.user.update({ where: { id: userId }, data: { googleId } });

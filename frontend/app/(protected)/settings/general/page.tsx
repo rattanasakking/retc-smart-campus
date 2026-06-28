@@ -506,6 +506,11 @@ export default function GeneralPage() {
                   show={!!show.line_channel_secret}
                   onChange={(v) => set('line_channel_secret', v)}
                   onToggle={() => tog('line_channel_secret')} />
+                <Field label="Callback URL (ลงทะเบียนใน LINE Developers)">
+                  <div className="input-field cursor-text text-xs select-all" style={{ backgroundColor: '#f5f8ff', color: '#4a6080' }}>
+                    {typeof window !== 'undefined' ? `${window.location.origin}/api/auth/line/callback` : ''}
+                  </div>
+                </Field>
               </CardSection>
 
               {/* LINE Notify */}
