@@ -180,7 +180,7 @@ export default function RoomPage() {
 
   useEffect(() => {
     const raw = localStorage.getItem(USER_KEY);
-    if (raw) { try { const u = JSON.parse(raw); setAdmin(!!u.isSuperAdmin || u.role==='admin' || u.role==='executive'); setUserId(u.id); } catch { /* */ } }
+    if (raw) { try { const u = JSON.parse(raw); setAdmin(!!u.isSuperAdmin || u.role==='admin' || u.role==='executive' || (u.modulePermissions ?? []).includes('ROOM_BOOKING')); setUserId(u.id); } catch { /* */ } }
   }, []);
 
   // Load rooms

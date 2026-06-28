@@ -28,7 +28,13 @@ function processRoomImage(image) {
 }
 
 const intId    = (s) => parseInt(s, 10);
-const canAdmin = (u) => u.isSuperAdmin || u.role === 'admin' || u.role === 'executive';
+async function canAdmin(u) {
+  if (u.isSuperAdmin || u.role === 'admin' || u.role === 'executive') return true;
+  const perm = await prisma.modulePermission.findFirst({
+    where: { userId: u.id, module: 'ROOM_BOOKING' },
+  });
+  return !!perm;
+}
 
 const BOOKING_INC = {
   room:      { select: { id: true, name: true, capacity: true, requireApproval: true, image: true } },
@@ -85,7 +91,7 @@ router.get('/rooms/all', auth, async (req, res, next) => {
 
 router.post('/rooms', auth, async (req, res, next) => {
   try {
-    if (!canAdmin(req.user)) return res.status(403).json(error('ต้องการสิทธิ์ Admin'));
+    if (!await canAdmin(req.user)) return res.status(403).json(error('ต้องการสิทธิ์ Admin'));
     const { name, capacity, facilities, image, requireApproval, note } = req.body;
     if (!name?.trim() || !capacity) return res.status(400).json(error('กรุณากรอกชื่อและความจุ'));
     const room = await prisma.room.create({
@@ -105,7 +111,7 @@ router.post('/rooms', auth, async (req, res, next) => {
 
 router.put('/rooms/:id', auth, async (req, res, next) => {
   try {
-    if (!canAdmin(req.user)) return res.status(403).json(error('ต้องการสิทธิ์ Admin'));
+    if (!await canAdmin(req.user)) return res.status(403).json(error('ต้องการสิทธิ์ Admin'));
     const { name, capacity, facilities, image, requireApproval, status, note } = req.body;
     const room = await prisma.room.update({
       where: { id: intId(req.params.id) },
@@ -128,7 +134,7 @@ router.put('/rooms/:id', auth, async (req, res, next) => {
 
 router.delete('/rooms/:id', auth, async (req, res, next) => {
   try {
-    if (!canAdmin(req.user)) return res.status(403).json(error('ต้องการสิทธิ์ Admin'));
+    if (!await canAdmin(req.user)) return res.status(403).json(error('ต้องการสิทธิ์ Admin'));
     const id = intId(req.params.id);
     const bookingCount = await prisma.roomBooking.count({
       where: { roomId: id, status: { in: ['pending', 'approved'] } },
@@ -214,7 +220,7 @@ router.get('/bookings', auth, async (req, res, next) => {
     if (status) where.status = status;
     if (roomId) where.roomId = intId(roomId);
     if (userId) where.userId = intId(userId);
-    if (!canAdmin(req.user)) where.userId = req.user.id;
+    if (!await canAdmin(req.user)) where.userId = req.user.id;
     if (date) {
       const d = new Date(date);
       where.startTime = { gte: d, lt: new Date(d.getTime() + 86400000) };
@@ -278,7 +284,7 @@ router.put('/bookings/:id/cancel', auth, async (req, res, next) => {
   try {
     const b = await prisma.roomBooking.findUnique({ where: { id: intId(req.params.id) } });
     if (!b) return res.status(404).json(error('ไม่พบการจอง'));
-    if (b.userId !== req.user.id && !canAdmin(req.user)) return res.status(403).json(error('ไม่มีสิทธิ์'));
+    if (b.userId !== req.user.id && !await canAdmin(req.user)) return res.status(403).json(error('ไม่มีสิทธิ์'));
     if (!['pending','approved'].includes(b.status)) return res.status(400).json(error('ไม่สามารถยกเลิกได้'));
     await prisma.roomBooking.update({ where: { id: intId(req.params.id) }, data: { status: 'cancelled' } });
     res.json(success(null, 'ยกเลิกการจองสำเร็จ'));
@@ -287,7 +293,7 @@ router.put('/bookings/:id/cancel', auth, async (req, res, next) => {
 
 router.put('/bookings/:id/approve', auth, async (req, res, next) => {
   try {
-    if (!canAdmin(req.user)) return res.status(403).json(error('ต้องการสิทธิ์ Admin'));
+    if (!await canAdmin(req.user)) return res.status(403).json(error('ต้องการสิทธิ์ Admin'));
     const { note } = req.body;
     const b = await prisma.roomBooking.findUnique({ where: { id: intId(req.params.id) } });
     if (!b) return res.status(404).json(error('ไม่พบการจอง'));
@@ -304,7 +310,7 @@ router.put('/bookings/:id/approve', auth, async (req, res, next) => {
 
 router.put('/bookings/:id/reject', auth, async (req, res, next) => {
   try {
-    if (!canAdmin(req.user)) return res.status(403).json(error('ต้องการสิทธิ์ Admin'));
+    if (!await canAdmin(req.user)) return res.status(403).json(error('ต้องการสิทธิ์ Admin'));
     const { note } = req.body;
     const b = await prisma.roomBooking.findUnique({ where: { id: intId(req.params.id) } });
     if (!b) return res.status(404).json(error('ไม่พบการจอง'));
