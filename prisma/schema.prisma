@@ -203,10 +203,10 @@ model User {
   modulePermissions     ModulePermission[]
 
   // ─── หัวหน้างาน / หัวหน้าแผนก ──────────────────────────────────────────────
-  headOfWorkUnits   WorkUnit[]   @relation("WorkUnitHead")
-  deputyOfWorkUnits WorkUnit[]   @relation("WorkUnitDeputy")
-  headOfDepts       Department[] @relation("DeptHead")
-  deputyOfDepts     Department[] @relation("DeptDeputy")
+  headOfWorkUnits   WorkUnit[]         @relation("WorkUnitHead")
+  deputyOfWorkUnits WorkUnitDeputy[]   @relation("WorkUnitDeputies")
+  headOfDepts       Department[]       @relation("DeptHead")
+  deputyOfDepts     DepartmentDeputy[] @relation("DeptDeputies")
 
   // ─── บุคลากร / การลา ────────────────────────────────────────────────────────
   leaveRequests    LeaveRequest[]  @relation("LeaveRequests")
@@ -518,35 +518,53 @@ model Division {
 }
 
 model WorkUnit {
-  id           Int      @id @default(autoincrement())
-  name         String
-  code         String   @unique
-  divisionId   Int
-  division     Division @relation(fields: [divisionId], references: [id])
-  isActive     Boolean  @default(true)
-  headId       Int?
-  head         User?    @relation("WorkUnitHead",   fields: [headId],       references: [id])
-  deputyHeadId Int?
-  deputyHead   User?    @relation("WorkUnitDeputy", fields: [deputyHeadId], references: [id])
+  id         Int      @id @default(autoincrement())
+  name       String
+  code       String   @unique
+  divisionId Int
+  division   Division @relation(fields: [divisionId], references: [id])
+  isActive   Boolean  @default(true)
+  headId     Int?
+  head       User?    @relation("WorkUnitHead", fields: [headId], references: [id])
 
-  users User[]
+  users    User[]
+  deputies WorkUnitDeputy[]
 
   @@map("work_units")
 }
 
-model Department {
-  id           Int     @id @default(autoincrement())
-  name         String  @unique
-  code         String  @unique
-  isActive     Boolean @default(true)
-  headId       Int?
-  head         User?   @relation("DeptHead",   fields: [headId],       references: [id])
-  deputyHeadId Int?
-  deputyHead   User?   @relation("DeptDeputy", fields: [deputyHeadId], references: [id])
+model WorkUnitDeputy {
+  workUnitId Int
+  userId     Int
+  workUnit   WorkUnit @relation(fields: [workUnitId], references: [id], onDelete: Cascade)
+  user       User     @relation("WorkUnitDeputies", fields: [userId], references: [id])
 
-  users User[]
+  @@id([workUnitId, userId])
+  @@map("work_unit_deputies")
+}
+
+model Department {
+  id       Int     @id @default(autoincrement())
+  name     String  @unique
+  code     String  @unique
+  isActive Boolean @default(true)
+  headId   Int?
+  head     User?   @relation("DeptHead", fields: [headId], references: [id])
+
+  users    User[]
+  deputies DepartmentDeputy[]
 
   @@map("departments")
+}
+
+model DepartmentDeputy {
+  departmentId Int
+  userId       Int
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  user         User       @relation("DeptDeputies", fields: [userId], references: [id])
+
+  @@id([departmentId, userId])
+  @@map("department_deputies")
 }
 
 // ─── ของหาย / ของได้ ─────────────────────────────────────────────────────────

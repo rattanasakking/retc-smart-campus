@@ -110,6 +110,8 @@ router.delete('/divisions/:id', superAdmin, async (req, res, next) => {
 
 const HEAD_SELECT = { id: true, name: true, position: true, employeeId: true };
 
+const DEPUTIES_INCLUDE = { deputies: { include: { user: { select: HEAD_SELECT } } } };
+
 // GET /api/settings/workunits?divisionId=
 router.get('/workunits', auth, async (req, res, next) => {
   try {
@@ -120,10 +122,10 @@ router.get('/workunits', auth, async (req, res, next) => {
       where,
       orderBy: [{ divisionId: 'asc' }, { id: 'asc' }],
       include: {
-        division:   { select: { id: true, name: true, code: true } },
-        head:       { select: HEAD_SELECT },
-        deputyHead: { select: HEAD_SELECT },
-        _count:     { select: { users: true } },
+        division: { select: { id: true, name: true, code: true } },
+        head:     { select: HEAD_SELECT },
+        ...DEPUTIES_INCLUDE,
+        _count:   { select: { users: true } },
       },
     });
     res.json(success(rows));
@@ -162,36 +164,39 @@ router.post('/workunits', superAdmin, async (req, res, next) => {
 router.put('/workunits/:id', superAdmin, async (req, res, next) => {
   try {
     const id = intId(req.params.id);
-    const { name, code, divisionId, isActive, headId, deputyHeadId } = req.body;
+    const { name, code, divisionId, isActive, headId, deputyIds } = req.body;
 
-    // Cascade: update user.department string for all users in this workunit
     if (name !== undefined) {
       const old = await prisma.workUnit.findUnique({ where: { id }, select: { name: true } });
       if (old && old.name !== name.trim()) {
-        await prisma.user.updateMany({
-          where: { workUnitId: id },
-          data:  { department: name.trim() },
-        });
+        await prisma.user.updateMany({ where: { workUnitId: id }, data: { department: name.trim() } });
       }
     }
 
-    const row = await prisma.workUnit.update({
-      where: { id },
-      data: {
-        ...(name         !== undefined && { name: name.trim() }),
-        ...(code         !== undefined && { code: code.trim().toUpperCase() }),
-        ...(divisionId   !== undefined && { divisionId: intId(divisionId) }),
-        ...(isActive     !== undefined && { isActive }),
-        ...(headId       !== undefined && { headId:       headId       ? intId(headId)       : null }),
-        ...(deputyHeadId !== undefined && { deputyHeadId: deputyHeadId ? intId(deputyHeadId) : null }),
-      },
-      include: {
-        division:   { select: { id: true, name: true, code: true } },
-        head:       { select: HEAD_SELECT },
-        deputyHead: { select: HEAD_SELECT },
-        _count:     { select: { users: true } },
-      },
-    });
+    const [row] = await prisma.$transaction([
+      prisma.workUnit.update({
+        where: { id },
+        data: {
+          ...(name       !== undefined && { name: name.trim() }),
+          ...(code       !== undefined && { code: code.trim().toUpperCase() }),
+          ...(divisionId !== undefined && { divisionId: intId(divisionId) }),
+          ...(isActive   !== undefined && { isActive }),
+          ...(headId     !== undefined && { headId: headId ? intId(headId) : null }),
+          ...(Array.isArray(deputyIds) && {
+            deputies: {
+              deleteMany: {},
+              create: deputyIds.filter(Boolean).map((uid) => ({ userId: intId(uid) })),
+            },
+          }),
+        },
+        include: {
+          division: { select: { id: true, name: true, code: true } },
+          head:     { select: HEAD_SELECT },
+          ...DEPUTIES_INCLUDE,
+          _count:   { select: { users: true } },
+        },
+      }),
+    ]);
     res.json(success(row, 'แก้ไขงานสำเร็จ'));
   } catch (e) {
     if (e.code === 'P2025') return res.status(404).json(error('ไม่พบงานที่ต้องการแก้ไข'));
@@ -226,9 +231,9 @@ router.get('/departments', auth, async (req, res, next) => {
     const rows = await prisma.department.findMany({
       orderBy: { id: 'asc' },
       include: {
-        head:       { select: HEAD_SELECT },
-        deputyHead: { select: HEAD_SELECT },
-        _count:     { select: { users: true } },
+        head: { select: HEAD_SELECT },
+        deputies: { include: { user: { select: HEAD_SELECT } } },
+        _count: { select: { users: true } },
       },
     });
     res.json(success(rows));
@@ -257,7 +262,7 @@ router.post('/departments', superAdmin, async (req, res, next) => {
 router.put('/departments/:id', superAdmin, async (req, res, next) => {
   try {
     const id = intId(req.params.id);
-    const { name, code, isActive, headId, deputyHeadId } = req.body;
+    const { name, code, isActive, headId, deputyIds } = req.body;
 
     // Cascade: update user.department string for all users in this department
     if (name !== undefined) {
@@ -274,22 +279,28 @@ router.put('/departments/:id', superAdmin, async (req, res, next) => {
         });
       }
     }
-
-    const row = await prisma.department.update({
-      where: { id },
-      data: {
-        ...(name         !== undefined && { name: name.trim() }),
-        ...(code         !== undefined && { code: code.trim().toUpperCase() }),
-        ...(isActive     !== undefined && { isActive }),
-        ...(headId       !== undefined && { headId:       headId       ? intId(headId)       : null }),
-        ...(deputyHeadId !== undefined && { deputyHeadId: deputyHeadId ? intId(deputyHeadId) : null }),
-      },
-      include: {
-        head:       { select: HEAD_SELECT },
-        deputyHead: { select: HEAD_SELECT },
-        _count:     { select: { users: true } },
-      },
-    });
+    const [row] = await prisma.$transaction([
+      prisma.department.update({
+        where: { id },
+        data: {
+          ...(name     !== undefined && { name: name.trim() }),
+          ...(code     !== undefined && { code: code.trim().toUpperCase() }),
+          ...(isActive !== undefined && { isActive }),
+          ...(headId   !== undefined && { headId: headId ? intId(headId) : null }),
+          ...(Array.isArray(deputyIds) && {
+            deputies: {
+              deleteMany: {},
+              create: deputyIds.filter(Boolean).map((uid) => ({ userId: intId(uid) })),
+            },
+          }),
+        },
+        include: {
+          head:     { select: HEAD_SELECT },
+          deputies: { include: { user: { select: HEAD_SELECT } } },
+          _count:   { select: { users: true } },
+        },
+      }),
+    ]);
     res.json(success(row, 'แก้ไขแผนกวิชาสำเร็จ'));
   } catch (e) {
     if (e.code === 'P2025') return res.status(404).json(error('ไม่พบแผนกวิชาที่ต้องการแก้ไข'));
