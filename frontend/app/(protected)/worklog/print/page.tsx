@@ -80,15 +80,6 @@ export default function WorklogPdfPage() {
 
   const YEARS = Array.from({ length: 5 }, (_, i) => String(now.getFullYear() + 543 - i));
 
-  // Summary by category
-  const catSummary = data ? (() => {
-    const m = new Map<string, number>();
-    for (const l of data.logs) {
-      const c = l.workType?.category ?? 'ไม่ระบุ';
-      m.set(c, (m.get(c) ?? 0) + 1);
-    }
-    return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
-  })() : [];
 
   return (
     <>
@@ -178,29 +169,12 @@ export default function WorklogPdfPage() {
             {data.user.deptGroup && <InfoRow label="แผนก" value={data.user.deptGroup.name} />}
           </div>
 
-          {/* Summary */}
-          <div className="mb-4 flex flex-wrap gap-4 text-sm">
-            <div className="px-4 py-2 rounded-lg text-center" style={{ backgroundColor: '#e8f0fe', minWidth: 80 }}>
-              <p className="font-bold text-lg" style={{ color: '#1d6ae5' }}>{data.logs.length}</p>
-              <p style={{ color: '#4a6080' }}>รายการทั้งหมด</p>
-            </div>
-            <div className="px-4 py-2 rounded-lg text-center" style={{ backgroundColor: '#e6f9f0', minWidth: 80 }}>
-              <p className="font-bold text-lg" style={{ color: '#0d9068' }}>{data.logs.filter(l => l.status === 'approved').length}</p>
-              <p style={{ color: '#4a6080' }}>อนุมัติแล้ว</p>
-            </div>
-            {catSummary.map(([cat, cnt]) => (
-              <div key={cat} className="px-4 py-2 rounded-lg text-center" style={{ backgroundColor: '#f5f8ff', minWidth: 80 }}>
-                <p className="font-bold text-lg" style={{ color: '#1a2744' }}>{cnt}</p>
-                <p style={{ color: '#4a6080' }}>{cat}</p>
-              </div>
-            ))}
-          </div>
 
           {/* Table */}
           <table className="w-full text-sm mb-8" style={{ borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ backgroundColor: '#1a2744' }}>
-                {['#', 'วันที่', 'หมวดหมู่', 'ประเภทงาน', 'หัวข้อ/รายละเอียด', 'สถานะ'].map(h => (
+                {['#', 'วันที่', 'หมวดหมู่', 'ประเภทงาน', 'หัวข้อ/รายละเอียด'].map(h => (
                   <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-white"
                     style={{ border: '1px solid #c8d8f0' }}>{h}</th>
                 ))}
@@ -223,11 +197,6 @@ export default function WorklogPdfPage() {
                   <td className="px-3 py-2 text-xs" style={{ border: '1px solid #dce6f9', color: '#1a2744' }}>
                     <span className="font-medium">{l.title}</span>
                     {l.detail && <span className="block text-[11px] mt-0.5" style={{ color: '#94a3b8' }}>{l.detail.slice(0, 80)}{l.detail.length > 80 ? '...' : ''}</span>}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-center" style={{ border: '1px solid #dce6f9' }}>
-                    <span style={{ color: l.status === 'approved' ? '#0d9068' : l.status === 'submitted' ? '#b45309' : '#64748b' }}>
-                      {STATUS_TH[l.status] ?? l.status}
-                    </span>
                   </td>
                 </tr>
               ))}
