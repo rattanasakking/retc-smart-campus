@@ -5,7 +5,7 @@ import { api } from '@/lib/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = 'divisions' | 'workunits' | 'departments';
+type Tab = 'divisions' | 'workunits' | 'departments' | 'positions';
 
 export interface Division {
   id: number; name: string; code: string; isActive: boolean;
@@ -28,6 +28,7 @@ const TAB_CONFIG: { key: Tab; label: string }[] = [
   { key: 'divisions',   label: 'ฝ่าย' },
   { key: 'workunits',   label: 'งาน' },
   { key: 'departments', label: 'แผนกวิชา' },
+  { key: 'positions',   label: 'ตำแหน่ง' },
 ];
 const DEFAULT_FORM: FormState = { name: '', code: '', divisionId: '', isActive: true };
 
@@ -40,6 +41,12 @@ export default function OrgStructureManager({ isAdmin = false }: Props) {
   const [divisions, setDivisions] = useState<Division[]>([]);
   const [workUnits, setWorkUnits] = useState<WorkUnit[]>([]);
   const [departments, setDepts]   = useState<Department[]>([]);
+  const [positions, setPositions] = useState<string[]>([]);
+  const [posNewName, setPosNew]   = useState('');
+  const [posAdding, setPosAdding] = useState(false);
+  const [posEditIdx, setPosEditIdx] = useState<number | null>(null);
+  const [posEditName, setPosEditName] = useState('');
+  const [posEditSaving, setPosEditSaving] = useState(false);
   const [loading, setLoading]     = useState(true);
   const [search, setSearch]       = useState('');
   const [divFilter, setDivFilter] = useState('');
@@ -67,14 +74,16 @@ export default function OrgStructureManager({ isAdmin = false }: Props) {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [dr, wr, dpr] = await Promise.all([
+      const [dr, wr, dpr, pr] = await Promise.all([
         api.get<{ data: Division[] }>('/settings/divisions'),
         api.get<{ data: WorkUnit[] }>('/settings/workunits'),
         api.get<{ data: Department[] }>('/settings/departments'),
+        api.get<{ data: string[] }>('/settings/positions'),
       ]);
       setDivisions(dr.data);
       setWorkUnits(wr.data);
       setDepts(dpr.data);
+      setPositions(pr.data ?? []);
     } catch (e: unknown) {
       showToast((e as Error).message ?? 'โหลดข้อมูลไม่สำเร็จ', true);
     } finally { setLoading(false); }
@@ -143,7 +152,33 @@ export default function OrgStructureManager({ isAdmin = false }: Props) {
   };
 
   const tabLabel = TAB_CONFIG.find((c) => c.key === tab)?.label ?? '';
-  const counts   = { divisions: divisions.length, workunits: workUnits.length, departments: departments.length };
+  const counts   = { divisions: divisions.length, workunits: workUnits.length, departments: departments.length, positions: positions.length };
+
+  const handlePosAdd = async () => {
+    if (!posNewName.trim()) return;
+    setPosAdding(true);
+    try {
+      const r = await api.post<{ data: string[] }>('/settings/positions', { name: posNewName.trim() });
+      setPositions(r.data ?? []); setPosNew(''); showToast('เพิ่มตำแหน่งสำเร็จ');
+    } catch (e) { showToast((e as Error).message, true); }
+    finally { setPosAdding(false); }
+  };
+  const handlePosEdit = async (idx: number) => {
+    if (!posEditName.trim()) return;
+    setPosEditSaving(true);
+    try {
+      const r = await api.put<{ data: string[] }>(`/settings/positions/${idx}`, { name: posEditName.trim() });
+      setPositions(r.data ?? []); setPosEditIdx(null); showToast('แก้ไขสำเร็จ');
+    } catch (e) { showToast((e as Error).message, true); }
+    finally { setPosEditSaving(false); }
+  };
+  const handlePosDelete = async (idx: number) => {
+    if (!confirm(`ลบตำแหน่ง "${positions[idx]}" ?`)) return;
+    try {
+      const r = await api.delete<{ data: string[] }>(`/settings/positions/${idx}`);
+      setPositions(r.data ?? []); showToast('ลบตำแหน่งสำเร็จ');
+    } catch (e) { showToast((e as Error).message, true); }
+  };
 
   return (
     <>
@@ -178,34 +213,109 @@ export default function OrgStructureManager({ isAdmin = false }: Props) {
           ))}
         </div>
 
-        {/* Toolbar */}
-        <div className="flex items-center gap-3 px-4 py-3" style={{ borderBottom: '1px solid #f0f4ff' }}>
-          <div className="flex items-center gap-2 px-3 py-2 rounded-xl flex-1 max-w-xs"
-            style={{ backgroundColor: '#f5f8ff', border: '1px solid #dce6f9' }}>
-            <Search className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#94a3b8' }} />
-            <input value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder={`ค้นหา${tabLabel}...`}
-              className="flex-1 bg-transparent text-sm outline-none placeholder-[#94a3b8]"
-              style={{ color: '#1a2744' }} />
-            {search && <button onClick={() => setSearch('')}><X className="w-3 h-3" style={{ color: '#94a3b8' }} /></button>}
+        {/* Toolbar — positions tab has its own inline-add UI */}
+        {tab !== 'positions' && (
+          <div className="flex items-center gap-3 px-4 py-3" style={{ borderBottom: '1px solid #f0f4ff' }}>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl flex-1 max-w-xs"
+              style={{ backgroundColor: '#f5f8ff', border: '1px solid #dce6f9' }}>
+              <Search className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#94a3b8' }} />
+              <input value={search} onChange={(e) => setSearch(e.target.value)}
+                placeholder={`ค้นหา${tabLabel}...`}
+                className="flex-1 bg-transparent text-sm outline-none placeholder-[#94a3b8]"
+                style={{ color: '#1a2744' }} />
+              {search && <button onClick={() => setSearch('')}><X className="w-3 h-3" style={{ color: '#94a3b8' }} /></button>}
+            </div>
+
+            {tab === 'workunits' && (
+              <select value={divFilter} onChange={(e) => setDivFilter(e.target.value)}
+                className="input-field text-sm py-2 w-auto">
+                <option value="">— ทุกฝ่าย —</option>
+                {divisions.map((d) => <option key={d.id} value={String(d.id)}>{d.name}</option>)}
+              </select>
+            )}
+
+            {isAdmin && (
+              <button onClick={openAdd} className="btn-primary flex items-center gap-1.5 ml-auto text-sm">
+                <Plus className="w-3.5 h-3.5" /> เพิ่ม{tabLabel}
+              </button>
+            )}
           </div>
+        )}
 
-          {tab === 'workunits' && (
-            <select value={divFilter} onChange={(e) => setDivFilter(e.target.value)}
-              className="input-field text-sm py-2 w-auto">
-              <option value="">— ทุกฝ่าย —</option>
-              {divisions.map((d) => <option key={d.id} value={String(d.id)}>{d.name}</option>)}
-            </select>
-          )}
+        {/* Positions tab — inline list */}
+        {tab === 'positions' && (
+          <div className="p-4 space-y-3">
+            {isAdmin && (
+              <div className="flex gap-2">
+                <input
+                  className="input-field flex-1 text-sm"
+                  placeholder="ชื่อตำแหน่งใหม่ เช่น ครูอัตราจ้าง"
+                  value={posNewName}
+                  onChange={e => setPosNew(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handlePosAdd()}
+                />
+                <button onClick={handlePosAdd} disabled={posAdding || !posNewName.trim()}
+                  className="btn-primary flex items-center gap-1.5 text-sm px-4">
+                  {posAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} เพิ่ม
+                </button>
+              </div>
+            )}
+            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #dce6f9' }}>
+              {loading ? (
+                <div className="flex items-center justify-center py-10 gap-2" style={{ color: '#94a3b8' }}>
+                  <Loader2 className="w-4 h-4 animate-spin" /> กำลังโหลด...
+                </div>
+              ) : positions.length === 0 ? (
+                <p className="py-10 text-center text-sm" style={{ color: '#94a3b8' }}>ยังไม่มีตำแหน่ง — เพิ่มตำแหน่งแรกด้านบน</p>
+              ) : (
+                <ul className="divide-y" style={{ '--tw-divide-opacity': 1 } as React.CSSProperties}>
+                  {positions.map((pos, idx) => (
+                    <li key={idx} className="flex items-center gap-2 px-4 py-2.5">
+                      {posEditIdx === idx ? (
+                        <>
+                          <input
+                            className="input-field flex-1 text-sm py-1.5"
+                            value={posEditName}
+                            onChange={e => setPosEditName(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && handlePosEdit(idx)}
+                            autoFocus
+                          />
+                          <button onClick={() => handlePosEdit(idx)} disabled={posEditSaving}
+                            className="p-1.5 rounded-lg text-green-600 hover:bg-green-50">
+                            {posEditSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                          </button>
+                          <button onClick={() => setPosEditIdx(null)}
+                            className="p-1.5 rounded-lg hover:bg-gray-50" style={{ color: '#94a3b8' }}>
+                            <X className="w-4 h-4" />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="flex-1 text-sm" style={{ color: '#1a2744' }}>{pos}</span>
+                          {isAdmin && (
+                            <>
+                              <button onClick={() => { setPosEditIdx(idx); setPosEditName(pos); }}
+                                className="p-1.5 rounded-lg hover:bg-[#f5f8ff]" style={{ color: '#4a6080' }}>
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={() => handlePosDelete(idx)}
+                                className="p-1.5 rounded-lg text-red-400 hover:bg-red-50">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
 
-          {isAdmin && (
-            <button onClick={openAdd} className="btn-primary flex items-center gap-1.5 ml-auto text-sm">
-              <Plus className="w-3.5 h-3.5" /> เพิ่ม{tabLabel}
-            </button>
-          )}
-        </div>
-
-        {/* Table */}
+        {/* Table — for divisions / workunits / departments */}
+        {tab !== 'positions' && (
         <div className="overflow-x-auto">
           {loading ? (
             <div className="flex items-center justify-center py-16 gap-3" style={{ color: '#94a3b8' }}>
@@ -251,6 +361,7 @@ export default function OrgStructureManager({ isAdmin = false }: Props) {
             </table>
           )}
         </div>
+        )}
       </div>
 
       {/* Modal */}
