@@ -14,9 +14,10 @@ interface LogItem {
 }
 interface UserInfo {
   name: string; position: string | null; employeeId: string | null; nationalId: string | null;
-  division:  { name: string } | null;
-  workUnit:  { name: string } | null;
-  deptGroup: { name: string } | null;
+  division:      { name: string } | null;
+  workUnit:      { name: string } | null;
+  deptGroup:     { name: string } | null;
+  personnelType: { name: string } | null;
 }
 interface PdfData { user: UserInfo; logs: LogItem[]; month: number; year: number }
 
@@ -93,14 +94,23 @@ export default function WorklogPdfPage() {
     <>
       {/* ── Print styles ── */}
       <style>{`
+        @page { size: A4 portrait; margin: 15mm 15mm 20mm 15mm; }
         @media print {
+          html, body { width: 210mm; }
           body * { visibility: hidden !important; }
           #print-area, #print-area * { visibility: visible !important; }
-          #print-area { position: fixed; inset: 0; padding: 20mm 15mm; font-family: 'Sarabun', sans-serif; }
+          #print-area {
+            position: fixed; inset: 0;
+            font-family: 'Sarabun', sans-serif;
+            font-size: 10pt;
+          }
           .no-print { display: none !important; }
-          table { border-collapse: collapse; width: 100%; font-size: 10pt; }
-          th, td { border: 1px solid #333; padding: 4px 6px; }
-          th { background: #f0f0f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          table { border-collapse: collapse; width: 100%; font-size: 9.5pt; }
+          th, td { border: 1px solid #333; padding: 3px 5px; }
+          th { background: #1a2744 !important; color: #fff !important;
+               -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          tr:nth-child(even) td { background: #f8faff !important;
+               -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
       `}</style>
 
@@ -159,13 +169,13 @@ export default function WorklogPdfPage() {
 
           {/* User info */}
           <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 mb-6 text-sm">
-            <InfoRow label="ชื่อ-สกุล" value={data.user.name} />
+            <InfoRow label="ชื่อ-สกุล"       value={data.user.name} />
             <InfoRow label="เลขบัตรประชาชน" value={data.user.nationalId ?? '—'} />
-            <InfoRow label="ตำแหน่ง" value={posLabel(data.user.position)} />
-            <InfoRow label="รหัสพนักงาน" value={data.user.employeeId ?? '—'} />
-            {data.user.division  && <InfoRow label="ฝ่าย"   value={data.user.division.name}  />}
-            {data.user.workUnit  && <InfoRow label="งาน"    value={data.user.workUnit.name}  />}
-            {data.user.deptGroup && <InfoRow label="แผนก"  value={data.user.deptGroup.name} />}
+            <InfoRow label="ตำแหน่ง"        value={posLabel(data.user.position)} />
+            <InfoRow label="ประเภทบุคลากร"  value={data.user.personnelType?.name ?? '—'} />
+            {data.user.division  && <InfoRow label="ฝ่าย"  value={data.user.division.name}  />}
+            {data.user.workUnit  && <InfoRow label="งาน"   value={data.user.workUnit.name}  />}
+            {data.user.deptGroup && <InfoRow label="แผนก" value={data.user.deptGroup.name} />}
           </div>
 
           {/* Summary */}

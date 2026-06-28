@@ -227,9 +227,10 @@ router.get('/my-pdf', auth, async (req, res, next) => {
         where: { id: req.user.id },
         select: {
           name: true, position: true, employeeId: true, nationalId: true,
-          division:  { select: { name: true } },
-          workUnit:  { select: { name: true } },
-          deptGroup: { select: { name: true } },
+          division:      { select: { name: true } },
+          workUnit:      { select: { name: true } },
+          deptGroup:     { select: { name: true } },
+          personnelType: { select: { name: true } },
         },
       }),
     ]);
