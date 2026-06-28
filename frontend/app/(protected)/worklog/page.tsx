@@ -432,7 +432,7 @@ export default function WorkLogPage() {
               <select className="input-field text-sm py-2 w-auto" value={year} onChange={(e) => setYear(e.target.value)}>
                 {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
               </select>
-              <button onClick={() => router.push('/worklog/pdf')} className="btn-secondary flex items-center gap-1.5 text-sm py-2">
+              <button onClick={() => router.push('/worklog/print')} className="btn-secondary flex items-center gap-1.5 text-sm py-2">
                 <Eye className="w-3.5 h-3.5" /> รายงาน PDF
               </button>
               <button onClick={() => router.push('/worklog/new')} className="btn-primary flex items-center gap-1.5 text-sm py-2">
