@@ -1,8 +1,8 @@
 'use client';
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api, USER_KEY, TOKEN_KEY } from '@/lib/api';
-import { Camera, Lock, Save, X, CheckCircle, Bell, Link2, Unlink } from 'lucide-react';
+import { Camera, Lock, Save, X, CheckCircle, Bell, Link2, Unlink, LogOut } from 'lucide-react';
 
 interface UserProfile {
   id: number; name: string; email: string; employeeId: string;
@@ -29,6 +29,7 @@ function Toast({ msg, err, onClose }: { msg: string; err?: boolean; onClose: () 
 }
 
 function ProfileContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -166,6 +167,12 @@ function ProfileContent() {
     } finally {
       setPwSaving(false);
     }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    router.push('/login');
   };
 
   const handleNotifySave = async () => {
@@ -376,6 +383,17 @@ function ProfileContent() {
         <button onClick={handleNotifySave} disabled={notifySaving} className="btn-primary w-full flex items-center justify-center gap-2">
           <Save className="w-4 h-4" />
           {notifySaving ? 'กำลังบันทึก...' : 'บันทึกการแจ้งเตือน'}
+        </button>
+      </div>
+
+      {/* ── Logout ───────────────────────────────────────────────────────── */}
+      <div className="card">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium text-red-600 border border-red-200 hover:bg-red-50 transition-colors"
+        >
+          <LogOut className="w-4 h-4" />
+          ออกจากระบบ
         </button>
       </div>
     </div>

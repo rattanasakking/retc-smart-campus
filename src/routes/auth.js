@@ -467,6 +467,22 @@ router.put('/users/:id/reset-password', auth, requireAdmin, async (req, res) => 
   }
 });
 
+// GET /api/auth/oauth-debug  — ดูค่า config ที่จะใช้จริง (ไม่แสดง secret)
+router.get('/oauth-debug', async (req, res) => {
+  try {
+    const cfg = await getOAuthConfig();
+    res.json({
+      FRONTEND_URL,
+      line:   { clientId: cfg.line.clientId   ? cfg.line.clientId.slice(0, 4) + '…'   : '(empty)', hasSecret: !!cfg.line.clientSecret },
+      google: { clientId: cfg.google.clientId ? cfg.google.clientId.slice(0, 8) + '…' : '(empty)', hasSecret: !!cfg.google.clientSecret },
+      googleLoginCallback:  `${FRONTEND_URL}/api/auth/google/callback`,
+      googleLinkCallback:   `${FRONTEND_URL}/api/auth/google/link/callback`,
+      lineLoginCallback:    `${FRONTEND_URL}/api/auth/line/callback`,
+      lineLinkCallback:     `${FRONTEND_URL}/api/auth/line/link/callback`,
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ═════════════════════════════════════════════════════════════════════════════
 // OAuth — LINE + Google  (ดึง client_id/secret จาก DB เสมอ)
 // ═════════════════════════════════════════════════════════════════════════════
