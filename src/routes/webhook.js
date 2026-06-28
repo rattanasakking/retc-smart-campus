@@ -1,7 +1,7 @@
 const express  = require('express');
 const crypto   = require('crypto');
 const { PrismaClient } = require('@prisma/client');
-const { sendLeaveStatusNotify, sendLeaveRequestFlex, sendRoomBookingStatusFlex } = require('../services/line');
+const { sendLeaveStatusNotify, sendLeaveRequestFlex, sendRoomBookingStatusFlex, pushMessage } = require('../services/line');
 const { sendRoomBookingApprovedEmail, sendRoomBookingRejectedEmail } = require('../services/email');
 
 const router = express.Router();
@@ -68,11 +68,18 @@ async function handlePostback(event) {
     if (!bookingId) return;
 
     const approver = await prisma.user.findFirst({ where: { lineUserId, isActive: true } });
-    if (!approver) return;
+    if (!approver) {
+      console.warn('[Webhook] room postback: approver not found for lineUserId', lineUserId);
+      pushMessage(lineUserId, [{ type: 'text', text: '❌ ไม่พบบัญชีผู้ใช้ในระบบ กรุณาเชื่อมต่อ LINE กับบัญชีของคุณก่อน' }]).catch(() => {});
+      return;
+    }
 
     const isRoomAdmin = approver.isSuperAdmin || ['admin', 'executive'].includes(approver.role)
       || !!(await prisma.modulePermission.findFirst({ where: { userId: approver.id, module: 'ROOM_BOOKING' } }));
-    if (!isRoomAdmin) return;
+    if (!isRoomAdmin) {
+      pushMessage(lineUserId, [{ type: 'text', text: '❌ คุณไม่มีสิทธิ์อนุมัติการจองห้องประชุม' }]).catch(() => {});
+      return;
+    }
 
     const booking = await prisma.roomBooking.findUnique({
       where: { id: bookingId },
@@ -81,7 +88,15 @@ async function handlePostback(event) {
         user: { select: { id: true, name: true, department: true, lineUserId: true, email: true } },
       },
     });
-    if (!booking || booking.status !== 'pending') return;
+    if (!booking) {
+      pushMessage(lineUserId, [{ type: 'text', text: '❌ ไม่พบข้อมูลการจอง' }]).catch(() => {});
+      return;
+    }
+    if (booking.status !== 'pending') {
+      const already = booking.status === 'approved' ? 'อนุมัติแล้ว' : booking.status === 'rejected' ? 'ปฏิเสธแล้ว' : 'ยกเลิกแล้ว';
+      pushMessage(lineUserId, [{ type: 'text', text: `ℹ️ การจองนี้ถูก${already} ไม่สามารถดำเนินการซ้ำได้` }]).catch(() => {});
+      return;
+    }
 
     const newStatus = action === 'room_approve' ? 'approved' : 'rejected';
     await prisma.$transaction([
@@ -89,6 +104,17 @@ async function handlePostback(event) {
       prisma.roomBookingApproval.create({ data: { bookingId, approverId: approver.id, status: newStatus, note: null } }),
     ]);
 
+    // แจ้ง admin ว่าดำเนินการสำเร็จ
+    const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+    const dt = new Date(booking.startTime);
+    const dateStr = `${dt.getDate()} ${MONTHS[dt.getMonth()]} ${dt.getFullYear() + 543}`;
+    const timeStr = `${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+    const confirmText = newStatus === 'approved'
+      ? `✅ อนุมัติสำเร็จ\n🏢 ${booking.room?.name}\n👤 ${booking.user?.name}\n📅 ${dateStr} ${timeStr} น.`
+      : `❌ ปฏิเสธสำเร็จ\n🏢 ${booking.room?.name}\n👤 ${booking.user?.name}\n📅 ${dateStr} ${timeStr} น.`;
+    pushMessage(lineUserId, [{ type: 'text', text: confirmText }]).catch(() => {});
+
+    // แจ้งผู้จอง
     const bookerLine  = booking.user?.lineUserId;
     const bookerEmail = booking.user?.email;
     if (bookerLine)  sendRoomBookingStatusFlex(bookerLine, booking, newStatus, null).catch(() => {});

@@ -426,6 +426,7 @@ module.exports = {
   sendLineNotify, notify, notifyRepairTicket, notifyLostFound, notifyRoomBooking,
   sendLeaveRequestFlex, sendLeaveStatusNotify,
   sendRoomBookingRequestFlex, sendRoomBookingStatusFlex,
+  pushMessage,
   formatThaiDate, formatDateTime,
   isModuleNotifyEnabled,
 };
