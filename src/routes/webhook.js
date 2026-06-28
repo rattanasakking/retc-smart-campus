@@ -1,7 +1,8 @@
 const express  = require('express');
 const crypto   = require('crypto');
 const { PrismaClient } = require('@prisma/client');
-const { sendLeaveStatusNotify, sendLeaveRequestFlex } = require('../services/line');
+const { sendLeaveStatusNotify, sendLeaveRequestFlex, sendRoomBookingStatusFlex } = require('../services/line');
+const { sendRoomBookingApprovedEmail, sendRoomBookingRejectedEmail } = require('../services/email');
 
 const router = express.Router();
 const prisma  = new PrismaClient();
@@ -41,12 +42,52 @@ router.post('/line', async (req, res) => {
 });
 
 async function handlePostback(event) {
-  const params    = new URLSearchParams(event.postback?.data ?? '');
-  const action    = params.get('action');
-  const requestId = parseInt(params.get('requestId') ?? '0', 10);
+  const params     = new URLSearchParams(event.postback?.data ?? '');
+  const action     = params.get('action');
   const lineUserId = event.source?.userId;
 
-  if (!action || !requestId || !lineUserId) return;
+  if (!action || !lineUserId) return;
+
+  // ─── Room booking approve/reject ────────────────────────────────────────────
+  if (action === 'room_approve' || action === 'room_reject') {
+    const bookingId = parseInt(params.get('bookingId') ?? '0', 10);
+    if (!bookingId) return;
+
+    const approver = await prisma.user.findFirst({ where: { lineUserId, isActive: true } });
+    if (!approver) return;
+
+    const isRoomAdmin = approver.isSuperAdmin || ['admin', 'executive'].includes(approver.role)
+      || !!(await prisma.modulePermission.findFirst({ where: { userId: approver.id, module: 'ROOM_BOOKING' } }));
+    if (!isRoomAdmin) return;
+
+    const booking = await prisma.roomBooking.findUnique({
+      where: { id: bookingId },
+      include: {
+        room: { select: { id: true, name: true, capacity: true, requireApproval: true, image: true } },
+        user: { select: { id: true, name: true, department: true, lineUserId: true, email: true } },
+      },
+    });
+    if (!booking || booking.status !== 'pending') return;
+
+    const newStatus = action === 'room_approve' ? 'approved' : 'rejected';
+    await prisma.$transaction([
+      prisma.roomBooking.update({ where: { id: bookingId }, data: { status: newStatus } }),
+      prisma.roomBookingApproval.create({ data: { bookingId, approverId: approver.id, status: newStatus, note: null } }),
+    ]);
+
+    const bookerLine  = booking.user?.lineUserId;
+    const bookerEmail = booking.user?.email;
+    if (bookerLine)  sendRoomBookingStatusFlex(bookerLine, booking, newStatus, null).catch(() => {});
+    if (bookerEmail) {
+      const emailFn = newStatus === 'approved' ? sendRoomBookingApprovedEmail : sendRoomBookingRejectedEmail;
+      emailFn({ to: bookerEmail, booking }).catch(() => {});
+    }
+    return;
+  }
+
+  // ─── Leave request approve/reject ────────────────────────────────────────────
+  const requestId = parseInt(params.get('requestId') ?? '0', 10);
+  if (!requestId) return;
 
   const approver = await prisma.user.findFirst({ where: { lineUserId, isActive: true } });
   if (!approver || !['admin', 'executive'].includes(approver.role)) return;

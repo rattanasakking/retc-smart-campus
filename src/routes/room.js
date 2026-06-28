@@ -4,7 +4,8 @@ const fs      = require('fs');
 const { PrismaClient } = require('@prisma/client');
 const auth = require('../middleware/auth');
 const { success, error, paginate } = require('../utils/response');
-const { notify } = require('../services/line');
+const { notify, sendRoomBookingRequestFlex, sendRoomBookingStatusFlex } = require('../services/line');
+const { sendRoomBookingRequestEmail, sendRoomBookingApprovedEmail, sendRoomBookingRejectedEmail } = require('../services/email');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -38,9 +39,54 @@ async function canAdmin(u) {
 
 const BOOKING_INC = {
   room:      { select: { id: true, name: true, capacity: true, requireApproval: true, image: true } },
-  user:      { select: { id: true, name: true, department: true } },
+  user:      { select: { id: true, name: true, department: true, email: true, lineUserId: true } },
   approvals: { include: { approver: { select: { id: true, name: true } } }, orderBy: { createdAt: 'desc' } },
 };
+
+/** หา admins ที่มีสิทธิ์จัดการ ROOM_BOOKING ทั้งหมด */
+async function getRoomAdmins() {
+  const [sysAdmins, moduleAdmins] = await Promise.all([
+    prisma.user.findMany({
+      where: { isActive: true, role: { in: ['admin', 'executive'] } },
+      select: { id: true, name: true, email: true, lineUserId: true },
+    }),
+    prisma.modulePermission.findMany({
+      where: { module: 'ROOM_BOOKING' },
+      include: { user: { select: { id: true, name: true, email: true, lineUserId: true, isActive: true } } },
+    }),
+  ]);
+  const map = new Map();
+  for (const u of sysAdmins) map.set(u.id, u);
+  for (const p of moduleAdmins) if (p.user?.isActive) map.set(p.user.id, p.user);
+  return [...map.values()];
+}
+
+/** ส่งแจ้งเตือนไปหา admin ทุกคนเมื่อมีการจองใหม่ */
+async function notifyAdminsNewBooking(booking) {
+  const frontendUrl = process.env.FRONTEND_URL ?? 'https://app.retc.ac.th';
+  const admins = await getRoomAdmins();
+  for (const admin of admins) {
+    if (admin.lineUserId) sendRoomBookingRequestFlex(admin.lineUserId, booking).catch(() => {});
+    if (admin.email) {
+      sendRoomBookingRequestEmail({
+        to: admin.email, adminName: admin.name, booking,
+        approveUrl: `${frontendUrl}/api/room/bookings/${booking.id}/approve-link?token=${Buffer.from(`${booking.id}:approve`).toString('base64')}`,
+        rejectUrl:  `${frontendUrl}/api/room/bookings/${booking.id}/approve-link?token=${Buffer.from(`${booking.id}:reject`).toString('base64')}`,
+      }).catch(() => {});
+    }
+  }
+}
+
+/** ส่งแจ้งเตือนไปหาผู้จองเมื่อสถานะเปลี่ยน */
+async function notifyBookerStatus(booking, status, note) {
+  const bookerLine  = booking.user?.lineUserId;
+  const bookerEmail = booking.user?.email;
+  if (bookerLine)  sendRoomBookingStatusFlex(bookerLine, booking, status, note).catch(() => {});
+  if (bookerEmail) {
+    const emailFn = status === 'approved' ? sendRoomBookingApprovedEmail : sendRoomBookingRejectedEmail;
+    emailFn({ to: bookerEmail, booking, note }).catch(() => {});
+  }
+}
 
 function lineMsg(booking, type) {
   const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
@@ -306,7 +352,8 @@ router.post('/bookings', auth, async (req, res, next) => {
       include: BOOKING_INC,
     });
 
-    if (room.requireApproval) notify(lineMsg(booking, 'request')).catch(() => {});
+    if (room.requireApproval) notifyAdminsNewBooking(booking).catch(() => {});
+    else notify(lineMsg(booking, 'approved')).catch(() => {});
     res.status(201).json(success(booking, room.requireApproval ? 'ส่งคำขอจองสำเร็จ รอการอนุมัติ' : 'จองห้องสำเร็จ'));
   } catch (e) { next(e); }
 });
@@ -342,7 +389,7 @@ router.put('/bookings/:id/approve', auth, async (req, res, next) => {
       prisma.roomBookingApproval.create({ data: { bookingId: intId(req.params.id), approverId: req.user.id, status: 'approved', note: note?.trim() || null } }),
     ]);
     const updated = await prisma.roomBooking.findUnique({ where: { id: intId(req.params.id) }, include: BOOKING_INC });
-    notify(lineMsg(updated, 'approved')).catch(() => {});
+    notifyBookerStatus(updated, 'approved', note?.trim() || null).catch(() => {});
     res.json(success(null, 'อนุมัติสำเร็จ'));
   } catch (e) { next(e); }
 });
@@ -359,7 +406,7 @@ router.put('/bookings/:id/reject', auth, async (req, res, next) => {
       prisma.roomBookingApproval.create({ data: { bookingId: intId(req.params.id), approverId: req.user.id, status: 'rejected', note: note?.trim() || null } }),
     ]);
     const updated = await prisma.roomBooking.findUnique({ where: { id: intId(req.params.id) }, include: BOOKING_INC });
-    notify(lineMsg(updated, 'rejected')).catch(() => {});
+    notifyBookerStatus(updated, 'rejected', note?.trim() || null).catch(() => {});
     res.json(success(null, 'ปฏิเสธสำเร็จ'));
   } catch (e) { next(e); }
 });

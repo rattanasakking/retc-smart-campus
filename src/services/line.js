@@ -269,8 +269,136 @@ async function sendLeaveStatusNotify(lineUserId, request, status, comment) {
   return pushMessage(lineUserId, [flex]);
 }
 
+// ─── Room Booking Flex messages ───────────────────────────────────────────────
+
+/** ส่ง Flex ให้ admin เมื่อมีคำขอจองห้องใหม่ (พร้อมปุ่มอนุมัติ/ไม่อนุมัติ) */
+async function sendRoomBookingRequestFlex(adminLineId, booking) {
+  if (!await isModuleNotifyEnabled('ROOM_BOOKING')) return null;
+  const { id, title, startTime, endTime, attendees, purpose, room, user } = booking;
+  const dateText = formatThaiDate(startTime);
+  const timeText = `${new Date(startTime).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})} – ${new Date(endTime).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})} น.`;
+
+  const flex = {
+    type: 'flex',
+    altText: `${user?.name ?? 'บุคลากร'} ขอจองห้อง ${room?.name ?? ''}`,
+    contents: {
+      type: 'bubble',
+      size: 'kilo',
+      header: {
+        type: 'box', layout: 'vertical',
+        backgroundColor: '#1565C0', paddingAll: '16px',
+        contents: [
+          { type: 'text', text: '🚪 คำขอจองห้องประชุม', color: '#ffffff', size: 'md', weight: 'bold' },
+          { type: 'text', text: room?.name ?? '', color: '#BBDEFB', size: 'sm' },
+        ],
+      },
+      body: {
+        type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '16px',
+        contents: [
+          { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+            { type: 'text', text: 'ผู้จอง', color: '#888888', size: 'sm', flex: 2 },
+            { type: 'text', text: user?.name ?? '-', color: '#111111', size: 'sm', flex: 4, wrap: true },
+          ]},
+          ...(user?.department ? [{ type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+            { type: 'text', text: 'ฝ่าย/งาน', color: '#888888', size: 'sm', flex: 2 },
+            { type: 'text', text: user.department, color: '#111111', size: 'sm', flex: 4, wrap: true },
+          ]}] : []),
+          { type: 'separator' },
+          { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+            { type: 'text', text: 'วันที่', color: '#888888', size: 'sm', flex: 2 },
+            { type: 'text', text: dateText, color: '#111111', size: 'sm', flex: 4, wrap: true },
+          ]},
+          { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+            { type: 'text', text: 'เวลา', color: '#888888', size: 'sm', flex: 2 },
+            { type: 'text', text: timeText, color: '#111111', size: 'sm', flex: 4 },
+          ]},
+          { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+            { type: 'text', text: 'หัวข้อ', color: '#888888', size: 'sm', flex: 2 },
+            { type: 'text', text: title, color: '#111111', size: 'sm', flex: 4, wrap: true },
+          ]},
+          ...(attendees ? [{ type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+            { type: 'text', text: 'ผู้เข้าร่วม', color: '#888888', size: 'sm', flex: 2 },
+            { type: 'text', text: `${attendees} คน`, color: '#1565C0', size: 'sm', flex: 4, weight: 'bold' },
+          ]}] : []),
+          ...(purpose ? [{ type: 'separator' }, { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+            { type: 'text', text: 'วัตถุประสงค์', color: '#888888', size: 'sm', flex: 2 },
+            { type: 'text', text: purpose, color: '#333333', size: 'sm', flex: 4, wrap: true },
+          ]}] : []),
+        ],
+      },
+      footer: {
+        type: 'box', layout: 'horizontal', spacing: 'sm', paddingAll: '12px',
+        contents: [
+          { type: 'button', style: 'primary', color: '#2E7D32', height: 'sm', flex: 1,
+            action: { type: 'postback', label: '✅ อนุมัติ', data: `action=room_approve&bookingId=${id}` } },
+          { type: 'button', style: 'primary', color: '#C62828', height: 'sm', flex: 1,
+            action: { type: 'postback', label: '❌ ไม่อนุมัติ', data: `action=room_reject&bookingId=${id}` } },
+        ],
+      },
+    },
+  };
+
+  return pushMessage(adminLineId, [flex]);
+}
+
+/** แจ้งผู้จองเมื่อได้รับการอนุมัติหรือปฏิเสธ */
+async function sendRoomBookingStatusFlex(lineUserId, booking, status, note) {
+  if (!await isModuleNotifyEnabled('ROOM_BOOKING')) return null;
+  const { title, startTime, endTime, room } = booking;
+  const approved   = status === 'approved';
+  const color      = approved ? '#1B5E20' : '#B71C1C';
+  const labelColor = approved ? '#A5D6A7' : '#FFCDD2';
+  const statusText = approved ? '✅ การจองได้รับการอนุมัติ' : '❌ การจองถูกปฏิเสธ';
+  const dateText   = formatThaiDate(startTime);
+  const timeText   = `${new Date(startTime).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})} – ${new Date(endTime).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})} น.`;
+
+  const bodyContents = [
+    { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+      { type: 'text', text: 'ห้องประชุม', color: '#888888', size: 'sm', flex: 3 },
+      { type: 'text', text: room?.name ?? '-', color: '#111111', size: 'sm', flex: 4, wrap: true, weight: 'bold' },
+    ]},
+    { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+      { type: 'text', text: 'วันที่', color: '#888888', size: 'sm', flex: 3 },
+      { type: 'text', text: dateText, color: '#111111', size: 'sm', flex: 4, wrap: true },
+    ]},
+    { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+      { type: 'text', text: 'เวลา', color: '#888888', size: 'sm', flex: 3 },
+      { type: 'text', text: timeText, color: '#111111', size: 'sm', flex: 4 },
+    ]},
+    { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+      { type: 'text', text: 'หัวข้อ', color: '#888888', size: 'sm', flex: 3 },
+      { type: 'text', text: title, color: '#111111', size: 'sm', flex: 4, wrap: true },
+    ]},
+    ...(note ? [{ type: 'separator' }, { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+      { type: 'text', text: 'หมายเหตุ', color: '#888888', size: 'sm', flex: 3 },
+      { type: 'text', text: note, color: approved ? '#333' : '#C62828', size: 'sm', flex: 4, wrap: true },
+    ]}] : []),
+  ];
+
+  const flex = {
+    type: 'flex',
+    altText: `${statusText}: ${room?.name ?? ''}`,
+    contents: {
+      type: 'bubble', size: 'kilo',
+      header: {
+        type: 'box', layout: 'vertical',
+        backgroundColor: color, paddingAll: '16px',
+        contents: [
+          { type: 'text', text: statusText, color: '#ffffff', size: 'md', weight: 'bold' },
+          { type: 'text', text: room?.name ?? '', color: labelColor, size: 'sm' },
+        ],
+      },
+      body: { type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '16px', contents: bodyContents },
+    },
+  };
+
+  return pushMessage(lineUserId, [flex]);
+}
+
 module.exports = {
   sendLineNotify, notify, notifyRepairTicket, notifyLostFound, notifyRoomBooking,
-  sendLeaveRequestFlex, sendLeaveStatusNotify, formatThaiDate, formatDateTime,
+  sendLeaveRequestFlex, sendLeaveStatusNotify,
+  sendRoomBookingRequestFlex, sendRoomBookingStatusFlex,
+  formatThaiDate, formatDateTime,
   isModuleNotifyEnabled,
 };
