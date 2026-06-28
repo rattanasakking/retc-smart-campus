@@ -8,21 +8,20 @@ const router = express.Router();
 const prisma  = new PrismaClient();
 
 function verifyLineSignature(rawBody, signature, secret) {
-  const hash = crypto
-    .createHmac('SHA256', secret)
-    .update(rawBody)
-    .digest('base64');
-  return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(signature));
+  try {
+    const hash    = crypto.createHmac('SHA256', secret).update(rawBody).digest('base64');
+    const bufHash = Buffer.from(hash);
+    const bufSig  = Buffer.from(signature);
+    if (bufHash.length !== bufSig.length) return false;
+    return crypto.timingSafeEqual(bufHash, bufSig);
+  } catch { return false; }
 }
 
 async function getChannelSecret() {
   if (process.env.LINE_CHANNEL_SECRET) return process.env.LINE_CHANNEL_SECRET;
   try {
-    // ลองอ่าน Messaging API secret ก่อน ถ้าไม่มีใช้ line_channel_secret แทน
-    const row = await prisma.systemSettings.findFirst({
-      where: { key: { in: ['line_messaging_secret', 'line_channel_secret'] } },
-      orderBy: { key: 'asc' }, // line_messaging_secret มาก่อน alphabetically
-    });
+    // ใช้เฉพาะ line_messaging_secret เท่านั้น (ไม่ fallback line_channel_secret ซึ่งเป็นของ LINE Login คนละ channel)
+    const row = await prisma.systemSettings.findUnique({ where: { key: 'line_messaging_secret' } });
     return row?.value ?? '';
   } catch { return ''; }
 }
