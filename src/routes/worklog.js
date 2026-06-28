@@ -316,6 +316,37 @@ router.get('/report', auth, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// GET /api/worklog/monthly-chart?year=2568
+router.get('/monthly-chart', auth, async (req, res, next) => {
+  try {
+    const { year } = req.query;
+    const ceYear = year ? intId(year) - 543 : new Date().getFullYear();
+
+    const canSeeAll = req.user.isSuperAdmin || ['admin', 'executive'].includes(req.user.role);
+    const where = {
+      logDate: { gte: new Date(ceYear, 0, 1), lte: new Date(ceYear, 11, 31, 23, 59, 59) },
+    };
+    if (!canSeeAll) where.userId = req.user.id;
+
+    const logs = await prisma.workLog.findMany({
+      where, select: { logDate: true, status: true },
+    });
+
+    const months = Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      total: 0, approved: 0, submitted: 0, draft: 0, returned: 0, rejected: 0,
+    }));
+
+    for (const l of logs) {
+      const m = new Date(l.logDate).getMonth(); // 0-based
+      months[m].total++;
+      if (months[m][l.status] !== undefined) months[m][l.status]++;
+    }
+
+    res.json(success(months));
+  } catch (e) { next(e); }
+});
+
 // ─── CRUD ─────────────────────────────────────────────────────────────────────
 
 // GET /api/worklog

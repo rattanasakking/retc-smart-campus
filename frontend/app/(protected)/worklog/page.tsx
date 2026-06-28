@@ -6,6 +6,10 @@ import {
   Pencil, Trash2, Send, Eye, Settings, X,
 } from 'lucide-react';
 import { api, USER_KEY } from '@/lib/api';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Cell,
+} from 'recharts';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -318,6 +322,7 @@ export default function WorkLogPage() {
   const [statusFilter, setFilter]   = useState('');
   const [isApprover, setApprover]   = useState(false);
   const [isAdmin, setAdmin]         = useState(false);
+  const [chartData, setChartData]   = useState<{ month: number; total: number; approved: number }[]>([]);
   const [deleting, setDeleting]     = useState<number | null>(null);
   const [submitting, setSubmitting] = useState<number | null>(null);
   const [toast, setToast]           = useState('');
@@ -361,8 +366,18 @@ export default function WorkLogPage() {
     } catch { /* ignore */ }
   }, [isApprover]);
 
+  const loadChart = useCallback(async () => {
+    try {
+      const res = await api.get<{ data: { month: number; total: number; approved: number }[] }>(
+        `/worklog/monthly-chart?year=${year}`
+      );
+      setChartData(res.data);
+    } catch { /* ignore */ }
+  }, [year]);
+
   useEffect(() => { loadLogs(); }, [loadLogs]);
   useEffect(() => { loadPending(); }, [loadPending]);
+  useEffect(() => { loadChart(); }, [loadChart]);
 
   const handleDelete = async (id: number) => {
     if (!confirm('ยืนยันลบบันทึกนี้?')) return;
@@ -468,6 +483,42 @@ export default function WorkLogPage() {
               );
             })}
           </div>
+
+          {/* Monthly chart */}
+          {chartData.length > 0 && chartData.some((d) => d.total > 0) && (
+            <div className="bg-white rounded-xl p-4" style={{ border: '1px solid #dce6f9' }}>
+              <p className="text-sm font-semibold mb-3" style={{ color: '#1a2744' }}>
+                จำนวนการปฏิบัติงานรายเดือน ปี {year}
+              </p>
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={chartData} barSize={22} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f4ff" />
+                  <XAxis
+                    dataKey="month"
+                    tickFormatter={(m) => MONTHS[m - 1]}
+                    tick={{ fontSize: 11, fill: '#94a3b8' }}
+                    axisLine={false} tickLine={false}
+                  />
+                  <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <Tooltip
+                    formatter={(val: number, name: string) =>
+                      [val, name === 'approved' ? 'อนุมัติ' : 'ทั้งหมด']
+                    }
+                    labelFormatter={(m) => `${MONTHS[Number(m) - 1]} ${year}`}
+                    contentStyle={{ borderRadius: 10, border: '1px solid #dce6f9', fontSize: 12 }}
+                  />
+                  <Bar dataKey="total" radius={[4, 4, 0, 0]} name="total">
+                    {chartData.map((d) => (
+                      <Cell
+                        key={d.month}
+                        fill={d.month === parseInt(month) ? '#1d6ae5' : '#dce6f9'}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
 
           {/* Status filter tabs */}
           <div className="flex gap-1 overflow-x-auto pb-1">
