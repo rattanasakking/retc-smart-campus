@@ -275,15 +275,19 @@ function EmailSection({ showToast }: { showToast: (msg: string, ok: boolean) => 
   );
 }
 
-// ─── LINE Notify section ───────────────────────────────────────────────────────
+// ─── LINE section (Notify + Bot) ──────────────────────────────────────────────
 
 function LineSection({ showToast }: { showToast: (msg: string, ok: boolean) => void }) {
-  const [token, setToken]         = useState('');
-  const [enabled, setEnabled]     = useState(false);
-  const [showToken, setShowToken] = useState(false);
-  const [loading, setLoading]     = useState(true);
-  const [saving, setSaving]       = useState(false);
-  const [testing, setTesting]     = useState(false);
+  const [token, setToken]           = useState('');
+  const [enabled, setEnabled]       = useState(false);
+  const [accessToken, setAccessToken] = useState('');
+  const [channelSecret, setChannelSecret] = useState('');
+  const [showToken, setShowToken]   = useState(false);
+  const [showAT, setShowAT]         = useState(false);
+  const [showCS, setShowCS]         = useState(false);
+  const [loading, setLoading]       = useState(true);
+  const [saving, setSaving]         = useState(false);
+  const [testing, setTesting]       = useState(false);
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -291,6 +295,8 @@ function LineSection({ showToast }: { showToast: (msg: string, ok: boolean) => v
       const map = res.data ?? {};
       setToken(map['line_notify_token'] ?? '');
       setEnabled(map['line_notify_enabled'] === 'true');
+      setAccessToken(map['line_channel_access_token'] ?? '');
+      setChannelSecret(map['line_channel_secret'] ?? '');
     } finally { setLoading(false); }
   }, []);
 
@@ -300,10 +306,12 @@ function LineSection({ showToast }: { showToast: (msg: string, ok: boolean) => v
     setSaving(true);
     try {
       await api.put('/settings/general', {
-        line_notify_token:   token,
-        line_notify_enabled: String(enabled),
+        line_notify_token:          token,
+        line_notify_enabled:        String(enabled),
+        line_channel_access_token:  accessToken,
+        line_channel_secret:        channelSecret,
       });
-      showToast('บันทึกการตั้งค่า LINE Notify สำเร็จ', true);
+      showToast('บันทึกการตั้งค่า LINE สำเร็จ', true);
     } catch (e: unknown) {
       showToast((e as Error).message, false);
     } finally { setSaving(false); }
@@ -335,8 +343,8 @@ function LineSection({ showToast }: { showToast: (msg: string, ok: boolean) => v
           <Link2 className="w-4 h-4 text-green-400" />
         </div>
         <div>
-          <h2 className="text-sm font-semibold text-gray-200">LINE Notify</h2>
-          <p className="text-xs text-gray-500">แจ้งเตือนผ่าน LINE เมื่อมีเหตุการณ์สำคัญ</p>
+          <h2 className="text-sm font-semibold text-gray-200">LINE</h2>
+          <p className="text-xs text-gray-500">Notify (แจ้งเตือนทั่วไป) และ Bot (อนุมัติผ่าน LINE)</p>
         </div>
         <div className="ml-auto">
           <button
@@ -348,32 +356,88 @@ function LineSection({ showToast }: { showToast: (msg: string, ok: boolean) => v
         </div>
       </div>
 
-      <div>
-        <label className="block text-xs font-medium text-gray-400 mb-1.5">
-          LINE Notify Token
-          <a href="https://notify-bot.line.me/my/" target="_blank" rel="noopener noreferrer"
-             className="ml-2 text-blue-400 hover:underline">รับ Token ที่นี่ →</a>
-        </label>
-        <div className="relative">
-          <input type={showToken ? 'text' : 'password'} value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder="token จาก notify-bot.line.me"
-            className={`${inp} pr-10`} />
-          <button onClick={() => setShowToken(!showToken)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
-            {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+      {/* LINE Notify */}
+      <div className="space-y-3">
+        <p className="text-xs font-semibold text-gray-300 flex items-center gap-2">
+          <span className="px-1.5 py-0.5 rounded bg-green-900/50 text-green-400 text-[10px]">Notify</span>
+          แจ้งเตือนทั่วไป (ซ่อม, ของหาย ฯลฯ)
+        </p>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1.5">
+            LINE Notify Token
+            <a href="https://notify-bot.line.me/my/" target="_blank" rel="noopener noreferrer"
+               className="ml-2 text-blue-400 hover:underline">รับ Token ที่นี่ →</a>
+          </label>
+          <div className="relative">
+            <input type={showToken ? 'text' : 'password'} value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder="token จาก notify-bot.line.me"
+              className={`${inp} pr-10`} />
+            <button onClick={() => setShowToken(!showToken)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
+              {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+        <div>
+          <button onClick={handleTest} disabled={testing || !token}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-green-300
+                       bg-green-900/30 border border-green-700/50 hover:bg-green-900/50
+                       rounded-lg transition-colors disabled:opacity-50">
+            {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            ทดสอบส่ง
           </button>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 pt-1">
-        <button onClick={handleTest} disabled={testing || !token}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-green-300
-                     bg-green-900/30 border border-green-700/50 hover:bg-green-900/50
-                     rounded-lg transition-colors disabled:opacity-50">
-          {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          ทดสอบส่ง
-        </button>
+      {/* LINE Messaging API (Bot) */}
+      <div className="pt-4 border-t border-navy-600 space-y-3">
+        <p className="text-xs font-semibold text-gray-300 flex items-center gap-2">
+          <span className="px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-400 text-[10px]">Messaging API</span>
+          LINE Bot — อนุมัติ/ปฏิเสธผ่าน LINE ได้เลย
+        </p>
+        <div className="bg-blue-950/30 border border-blue-800/40 rounded-xl px-4 py-3 text-xs text-blue-300 space-y-1">
+          <p className="font-medium">วิธีตั้งค่า LINE Bot:</p>
+          <ol className="list-decimal pl-4 space-y-0.5 text-blue-400">
+            <li>สร้าง Messaging API channel ที่ <a href="https://developers.line.biz/" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-200">developers.line.biz</a></li>
+            <li>คัดลอก <strong>Channel Access Token</strong> และ <strong>Channel Secret</strong> มาใส่ด้านล่าง</li>
+            <li>ตั้ง Webhook URL เป็น <code className="bg-blue-900/50 px-1 rounded">https://app.retc.ac.th/api/webhook/line</code></li>
+            <li>เปิด <strong>Use webhooks</strong> ใน Developer Console</li>
+          </ol>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1.5">Channel Access Token</label>
+          <div className="relative">
+            <input type={showAT ? 'text' : 'password'} value={accessToken}
+              onChange={(e) => setAccessToken(e.target.value)}
+              placeholder="Channel Access Token (Long-lived)"
+              className={`${inp} pr-10`} />
+            <button onClick={() => setShowAT(!showAT)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
+              {showAT ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1.5">Channel Secret</label>
+          <div className="relative">
+            <input type={showCS ? 'text' : 'password'} value={channelSecret}
+              onChange={(e) => setChannelSecret(e.target.value)}
+              placeholder="Channel Secret"
+              className={`${inp} pr-10`} />
+            <button onClick={() => setShowCS(!showCS)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
+              {showCS ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+          <p className="text-xs text-gray-600 mt-1">ใช้สำหรับ verify ว่า webhook request มาจาก LINE จริง</p>
+        </div>
+      </div>
+
+      {/* Save */}
+      <div className="flex justify-end pt-1">
         <button onClick={handleSave} disabled={saving}
           className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white
                      bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors disabled:opacity-60">

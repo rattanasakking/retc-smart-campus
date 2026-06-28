@@ -96,8 +96,16 @@ async function notifyRoomBooking(booking, status) {
 // ─── LINE Messaging API (Bot) ─────────────────────────────────────────────────
 const MESSAGING_API = 'https://api.line.me/v2/bot/message/push';
 
+async function getChannelAccessToken() {
+  if (process.env.LINE_CHANNEL_ACCESS_TOKEN) return process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  try {
+    const row = await _prisma.systemSettings.findUnique({ where: { key: 'line_channel_access_token' } });
+    return row?.value ?? '';
+  } catch { return ''; }
+}
+
 async function pushMessage(lineUserId, messages) {
-  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  const token = await getChannelAccessToken();
   if (!token || !lineUserId) return null;
   try {
     const res = await fetch(MESSAGING_API, {
@@ -271,6 +279,13 @@ async function sendLeaveStatusNotify(lineUserId, request, status, comment) {
 
 // ─── Room Booking Flex messages ───────────────────────────────────────────────
 
+function buildRoomImageUrl(imagePath) {
+  if (!imagePath) return null;
+  if (imagePath.startsWith('http')) return imagePath;
+  const base = (process.env.FRONTEND_URL ?? 'https://app.retc.ac.th').replace(/\/$/, '');
+  return `${base}${imagePath}`;
+}
+
 /** ส่ง Flex ให้ admin เมื่อมีคำขอจองห้องใหม่ (พร้อมปุ่มอนุมัติ/ไม่อนุมัติ) */
 async function sendRoomBookingRequestFlex(adminLineId, booking) {
   if (!await isModuleNotifyEnabled('ROOM_BOOKING')) return null;
@@ -278,12 +293,23 @@ async function sendRoomBookingRequestFlex(adminLineId, booking) {
   const dateText = formatThaiDate(startTime);
   const timeText = `${new Date(startTime).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})} – ${new Date(endTime).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})} น.`;
 
+  const roomImageUrl = buildRoomImageUrl(room?.image);
+
   const flex = {
     type: 'flex',
     altText: `${user?.name ?? 'บุคลากร'} ขอจองห้อง ${room?.name ?? ''}`,
     contents: {
       type: 'bubble',
       size: 'kilo',
+      ...(roomImageUrl ? {
+        hero: {
+          type: 'image',
+          url: roomImageUrl,
+          size: 'full',
+          aspectRatio: '20:9',
+          aspectMode: 'cover',
+        },
+      } : {}),
       header: {
         type: 'box', layout: 'vertical',
         backgroundColor: '#1565C0', paddingAll: '16px',

@@ -7,9 +7,7 @@ const { sendRoomBookingApprovedEmail, sendRoomBookingRejectedEmail } = require('
 const router = express.Router();
 const prisma  = new PrismaClient();
 
-function verifyLineSignature(rawBody, signature) {
-  const secret = process.env.LINE_CHANNEL_SECRET;
-  if (!secret) return false;
+function verifyLineSignature(rawBody, signature, secret) {
   const hash = crypto
     .createHmac('SHA256', secret)
     .update(rawBody)
@@ -17,14 +15,27 @@ function verifyLineSignature(rawBody, signature) {
   return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(signature));
 }
 
+async function getChannelSecret() {
+  if (process.env.LINE_CHANNEL_SECRET) return process.env.LINE_CHANNEL_SECRET;
+  try {
+    const row = await prisma.systemSettings.findUnique({ where: { key: 'line_channel_secret' } });
+    return row?.value ?? '';
+  } catch { return ''; }
+}
+
 // LINE Webhook — POST /api/webhook/line
 router.post('/line', async (req, res) => {
   const signature = req.headers['x-line-signature'];
   const rawBody   = req.rawBody;
 
-  if (!signature || !rawBody || !verifyLineSignature(rawBody, signature)) {
-    console.warn('[Webhook] invalid LINE signature');
-    return res.status(401).json({ error: 'Invalid signature' });
+  const secret = await getChannelSecret();
+  if (secret) {
+    if (!signature || !rawBody || !verifyLineSignature(rawBody, signature, secret)) {
+      console.warn('[Webhook] invalid LINE signature');
+      return res.status(401).json({ error: 'Invalid signature' });
+    }
+  } else {
+    console.warn('[Webhook] LINE_CHANNEL_SECRET not set — skipping signature verification');
   }
 
   res.status(200).json({ success: true });
