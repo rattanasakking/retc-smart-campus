@@ -1,11 +1,13 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Plus, Pencil, Trash2, Search, X, AlertTriangle, Check, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, X, AlertTriangle, Check, Loader2, UserCog } from 'lucide-react';
 import { api } from '@/lib/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Tab = 'divisions' | 'workunits' | 'departments' | 'positions';
+
+interface HeadUser { id: number; name: string; position: string | null; employeeId: string }
 
 export interface Division {
   id: number; name: string; code: string; isActive: boolean;
@@ -14,15 +16,21 @@ export interface Division {
 export interface WorkUnit {
   id: number; name: string; code: string; divisionId: number; isActive: boolean;
   division: { id: number; name: string; code: string };
+  head: HeadUser | null; deputyHead: HeadUser | null;
   _count: { users: number };
 }
 export interface Department {
   id: number; name: string; code: string; isActive: boolean;
+  head: HeadUser | null; deputyHead: HeadUser | null;
   _count: { users: number };
 }
+interface UserPickItem { id: number; name: string; position: string | null; employeeId: string }
 
 type ModalMode = 'add' | 'edit';
-interface FormState { name: string; code: string; divisionId: string; isActive: boolean; }
+interface FormState {
+  name: string; code: string; divisionId: string; isActive: boolean;
+  headId: string; deputyHeadId: string;
+}
 
 const TAB_CONFIG: { key: Tab; label: string }[] = [
   { key: 'divisions',   label: 'ฝ่าย' },
@@ -30,7 +38,7 @@ const TAB_CONFIG: { key: Tab; label: string }[] = [
   { key: 'departments', label: 'แผนกวิชา' },
   { key: 'positions',   label: 'ตำแหน่ง' },
 ];
-const DEFAULT_FORM: FormState = { name: '', code: '', divisionId: '', isActive: true };
+const DEFAULT_FORM: FormState = { name: '', code: '', divisionId: '', isActive: true, headId: '', deputyHeadId: '' };
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -42,6 +50,7 @@ export default function OrgStructureManager({ isAdmin = false }: Props) {
   const [workUnits, setWorkUnits] = useState<WorkUnit[]>([]);
   const [departments, setDepts]   = useState<Department[]>([]);
   const [positions, setPositions] = useState<string[]>([]);
+  const [userList, setUserList]   = useState<UserPickItem[]>([]);
   const [posNewName, setPosNew]   = useState('');
   const [posAdding, setPosAdding] = useState(false);
   const [posEditIdx, setPosEditIdx] = useState<number | null>(null);
@@ -74,16 +83,18 @@ export default function OrgStructureManager({ isAdmin = false }: Props) {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [dr, wr, dpr, pr] = await Promise.all([
+      const [dr, wr, dpr, pr, ur] = await Promise.all([
         api.get<{ data: Division[] }>('/settings/divisions'),
         api.get<{ data: WorkUnit[] }>('/settings/workunits'),
         api.get<{ data: Department[] }>('/settings/departments'),
         api.get<{ data: string[] }>('/settings/positions'),
+        api.get<{ data: UserPickItem[] }>('/settings/users?limit=200&isActive=true'),
       ]);
       setDivisions(dr.data);
       setWorkUnits(wr.data);
       setDepts(dpr.data);
       setPositions(pr.data ?? []);
+      setUserList(ur.data ?? []);
     } catch (e: unknown) {
       showToast((e as Error).message ?? 'โหลดข้อมูลไม่สำเร็จ', true);
     } finally { setLoading(false); }
@@ -108,10 +119,17 @@ export default function OrgStructureManager({ isAdmin = false }: Props) {
     setFormErr('');
   };
   const openEdit = (row: Division | WorkUnit | Department) => {
-    const wu = row as WorkUnit;
+    const wu  = row as WorkUnit;
+    const wud = row as Department;
     setModal({
       open: true, mode: 'edit', tab, id: row.id,
-      form: { name: row.name, code: row.code, divisionId: wu.divisionId ? String(wu.divisionId) : '', isActive: row.isActive },
+      form: {
+        name: row.name, code: row.code,
+        divisionId:   wu.divisionId ? String(wu.divisionId) : '',
+        isActive:     row.isActive,
+        headId:       (wu.head ?? wud.head)?.id       ? String((wu.head ?? wud.head)!.id)       : '',
+        deputyHeadId: (wu.deputyHead ?? wud.deputyHead)?.id ? String((wu.deputyHead ?? wud.deputyHead)!.id) : '',
+      },
     });
     setFormErr('');
   };
@@ -119,10 +137,18 @@ export default function OrgStructureManager({ isAdmin = false }: Props) {
 
   const handleSave = async () => {
     const { mode, id, form, tab: t } = modal;
-    const body: Record<string, unknown> = { name: form.name.trim(), code: form.code.trim(), isActive: form.isActive };
+    const body: Record<string, unknown> = {
+      name: form.name.trim(), code: form.code.trim(), isActive: form.isActive,
+    };
     if (t === 'workunits') body.divisionId = form.divisionId ? parseInt(form.divisionId) : undefined;
     if (!body.name || !body.code) { setFormErr('กรุณากรอกชื่อและรหัส'); return; }
     if (t === 'workunits' && !body.divisionId) { setFormErr('กรุณาเลือกฝ่าย'); return; }
+
+    if (t === 'workunits' || t === 'departments') {
+      body.headId       = form.headId       ? parseInt(form.headId)       : null;
+      body.deputyHeadId = form.deputyHeadId ? parseInt(form.deputyHeadId) : null;
+    }
+
     setSaving(true); setFormErr('');
     try {
       const label = TAB_CONFIG.find((c) => c.key === t)?.label ?? '';
@@ -179,6 +205,8 @@ export default function OrgStructureManager({ isAdmin = false }: Props) {
       setPositions(r.data ?? []); showToast('ลบตำแหน่งสำเร็จ');
     } catch (e) { showToast((e as Error).message, true); }
   };
+
+  const showHeadCols = tab === 'workunits' || tab === 'departments';
 
   return (
     <>
@@ -330,6 +358,8 @@ export default function OrgStructureManager({ isAdmin = false }: Props) {
                   <th className="px-4 py-3 text-left text-xs font-semibold w-28" style={{ color: '#94a3b8' }}>รหัส</th>
                   {tab === 'workunits'  && <th className="px-4 py-3 text-left text-xs font-semibold w-44" style={{ color: '#94a3b8' }}>ฝ่าย</th>}
                   {tab === 'divisions' && <th className="px-4 py-3 text-center text-xs font-semibold w-28" style={{ color: '#94a3b8' }}>จำนวนงาน</th>}
+                  {showHeadCols && <th className="px-4 py-3 text-left text-xs font-semibold w-40" style={{ color: '#94a3b8' }}>หัวหน้า</th>}
+                  {showHeadCols && <th className="px-4 py-3 text-left text-xs font-semibold w-40" style={{ color: '#94a3b8' }}>ผู้ช่วยหัวหน้า</th>}
                   <th className="px-4 py-3 text-center text-xs font-semibold w-24" style={{ color: '#94a3b8' }}>ผู้ใช้</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold w-28" style={{ color: '#94a3b8' }}>สถานะ</th>
                   {isAdmin && <th className="px-4 py-3 text-center text-xs font-semibold w-20" style={{ color: '#94a3b8' }}>จัดการ</th>}
@@ -339,23 +369,25 @@ export default function OrgStructureManager({ isAdmin = false }: Props) {
                 {tab === 'divisions' && filtered.divisions.map((r, i) => (
                   <OrgRow key={r.id} index={i + 1} name={r.name} code={r.code} isActive={r.isActive}
                     extra={<td className="px-4 py-3 text-center text-sm" style={{ color: '#4a6080' }}>{r._count.workUnits}</td>}
-                    userCount={r._count.users} isAdmin={isAdmin}
+                    userCount={r._count.users} isAdmin={isAdmin} showHeadCols={false}
                     onEdit={() => openEdit(r)} onDelete={() => setConfirmDel({ id: r.id, name: r.name, tab })} />
                 ))}
                 {tab === 'workunits' && filtered.workunits.map((r, i) => (
                   <OrgRow key={r.id} index={i + 1} name={r.name} code={r.code} isActive={r.isActive}
                     extra={<td className="px-4 py-3"><span className="text-xs px-2 py-0.5 rounded-full"
                       style={{ backgroundColor: '#f5f8ff', color: '#4a6080', border: '1px solid #dce6f9' }}>{r.division.name}</span></td>}
+                    head={r.head} deputyHead={r.deputyHead} showHeadCols
                     userCount={r._count.users} isAdmin={isAdmin}
                     onEdit={() => openEdit(r)} onDelete={() => setConfirmDel({ id: r.id, name: r.name, tab })} />
                 ))}
                 {tab === 'departments' && filtered.departments.map((r, i) => (
                   <OrgRow key={r.id} index={i + 1} name={r.name} code={r.code} isActive={r.isActive}
+                    head={r.head} deputyHead={r.deputyHead} showHeadCols
                     userCount={r._count.users} isAdmin={isAdmin}
                     onEdit={() => openEdit(r)} onDelete={() => setConfirmDel({ id: r.id, name: r.name, tab })} />
                 ))}
                 {filtered[tab === 'divisions' ? 'divisions' : tab === 'workunits' ? 'workunits' : 'departments'].length === 0 && (
-                  <tr><td colSpan={8} className="py-12 text-center text-sm" style={{ color: '#94a3b8' }}>ไม่พบข้อมูล{tabLabel}</td></tr>
+                  <tr><td colSpan={9} className="py-12 text-center text-sm" style={{ color: '#94a3b8' }}>ไม่พบข้อมูล{tabLabel}</td></tr>
                 )}
               </tbody>
             </table>
@@ -378,7 +410,7 @@ export default function OrgStructureManager({ isAdmin = false }: Props) {
                 <X className="w-4 h-4" style={{ color: '#4a6080' }} />
               </button>
             </div>
-            <div className="px-6 py-5 space-y-4">
+            <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
               {formErr && (
                 <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-600 px-3 py-2.5 rounded-lg text-sm">
                   <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" /> {formErr}
@@ -414,6 +446,51 @@ export default function OrgStructureManager({ isAdmin = false }: Props) {
                   </select>
                 </div>
               )}
+
+              {/* หัวหน้า / ผู้ช่วยหัวหน้า — เฉพาะ workunits และ departments */}
+              {(modal.tab === 'workunits' || modal.tab === 'departments') && (
+                <>
+                  <div className="pt-1" style={{ borderTop: '1px solid #f0f4ff' }}>
+                    <div className="flex items-center gap-1.5 mb-3">
+                      <UserCog className="w-3.5 h-3.5" style={{ color: '#4a6080' }} />
+                      <span className="text-xs font-semibold" style={{ color: '#1a2744' }}>ผู้รับผิดชอบ</span>
+                    </div>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium mb-1.5" style={{ color: '#4a6080' }}>
+                          {modal.tab === 'workunits' ? 'หัวหน้างาน' : 'หัวหน้าแผนกวิชา'}
+                        </label>
+                        <select value={modal.form.headId}
+                          onChange={(e) => setModal((m) => ({ ...m, form: { ...m.form, headId: e.target.value } }))}
+                          className="input-field text-sm">
+                          <option value="">— ไม่ระบุ —</option>
+                          {userList.map((u) => (
+                            <option key={u.id} value={String(u.id)}>
+                              {u.name}{u.position ? ` (${u.position})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium mb-1.5" style={{ color: '#4a6080' }}>
+                          {modal.tab === 'workunits' ? 'ผู้ช่วยหัวหน้างาน' : 'ผู้ช่วยหัวหน้าแผนกวิชา'}
+                        </label>
+                        <select value={modal.form.deputyHeadId}
+                          onChange={(e) => setModal((m) => ({ ...m, form: { ...m.form, deputyHeadId: e.target.value } }))}
+                          className="input-field text-sm">
+                          <option value="">— ไม่ระบุ —</option>
+                          {userList.map((u) => (
+                            <option key={u.id} value={String(u.id)}>
+                              {u.name}{u.position ? ` (${u.position})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
               <div className="flex items-center justify-between p-3 rounded-lg"
                 style={{ backgroundColor: '#f5f8ff', border: '1px solid #dce6f9' }}>
                 <span className="text-sm" style={{ color: '#1a2744' }}>สถานะการใช้งาน</span>
@@ -467,11 +544,23 @@ export default function OrgStructureManager({ isAdmin = false }: Props) {
 
 interface OrgRowProps {
   index: number; name: string; code: string; isActive: boolean;
-  extra?: React.ReactNode; userCount: number; isAdmin: boolean;
+  extra?: React.ReactNode;
+  head?: HeadUser | null; deputyHead?: HeadUser | null; showHeadCols: boolean;
+  userCount: number; isAdmin: boolean;
   onEdit: () => void; onDelete: () => void;
 }
 
-function OrgRow({ index, name, code, isActive, extra, userCount, isAdmin, onEdit, onDelete }: OrgRowProps) {
+function HeadCell({ user }: { user: HeadUser | null | undefined }) {
+  if (!user) return <td className="px-4 py-3 text-xs" style={{ color: '#94a3b8' }}>—</td>;
+  return (
+    <td className="px-4 py-3">
+      <div className="text-xs font-medium" style={{ color: '#1a2744' }}>{user.name}</div>
+      {user.position && <div className="text-[11px]" style={{ color: '#94a3b8' }}>{user.position}</div>}
+    </td>
+  );
+}
+
+function OrgRow({ index, name, code, isActive, extra, head, deputyHead, showHeadCols, userCount, isAdmin, onEdit, onDelete }: OrgRowProps) {
   return (
     <tr style={{ borderBottom: '1px solid #f5f8ff' }} className="hover:bg-[#fafbff] transition-colors group">
       <td className="px-5 py-3.5 text-xs" style={{ color: '#94a3b8' }}>{index}</td>
@@ -480,6 +569,8 @@ function OrgRow({ index, name, code, isActive, extra, userCount, isAdmin, onEdit
         <span className="font-mono text-xs px-2 py-0.5 rounded" style={{ backgroundColor: '#e8f0fe', color: '#1d6ae5' }}>{code}</span>
       </td>
       {extra}
+      {showHeadCols && <HeadCell user={head} />}
+      {showHeadCols && <HeadCell user={deputyHead} />}
       <td className="px-4 py-3.5 text-center text-xs" style={{ color: '#4a6080' }}>{userCount} คน</td>
       <td className="px-4 py-3.5">
         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"

@@ -108,6 +108,8 @@ router.delete('/divisions/:id', superAdmin, async (req, res, next) => {
 // งาน (Work Units)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+const HEAD_SELECT = { id: true, name: true, position: true, employeeId: true };
+
 // GET /api/settings/workunits?divisionId=
 router.get('/workunits', auth, async (req, res, next) => {
   try {
@@ -118,8 +120,10 @@ router.get('/workunits', auth, async (req, res, next) => {
       where,
       orderBy: [{ divisionId: 'asc' }, { id: 'asc' }],
       include: {
-        division: { select: { id: true, name: true, code: true } },
-        _count:   { select: { users: true } },
+        division:   { select: { id: true, name: true, code: true } },
+        head:       { select: HEAD_SELECT },
+        deputyHead: { select: HEAD_SELECT },
+        _count:     { select: { users: true } },
       },
     });
     res.json(success(rows));
@@ -158,7 +162,7 @@ router.post('/workunits', superAdmin, async (req, res, next) => {
 router.put('/workunits/:id', superAdmin, async (req, res, next) => {
   try {
     const id = intId(req.params.id);
-    const { name, code, divisionId, isActive } = req.body;
+    const { name, code, divisionId, isActive, headId, deputyHeadId } = req.body;
 
     // Cascade: update user.department string for all users in this workunit
     if (name !== undefined) {
@@ -174,14 +178,18 @@ router.put('/workunits/:id', superAdmin, async (req, res, next) => {
     const row = await prisma.workUnit.update({
       where: { id },
       data: {
-        ...(name       !== undefined && { name: name.trim() }),
-        ...(code       !== undefined && { code: code.trim().toUpperCase() }),
-        ...(divisionId !== undefined && { divisionId: intId(divisionId) }),
-        ...(isActive   !== undefined && { isActive }),
+        ...(name         !== undefined && { name: name.trim() }),
+        ...(code         !== undefined && { code: code.trim().toUpperCase() }),
+        ...(divisionId   !== undefined && { divisionId: intId(divisionId) }),
+        ...(isActive     !== undefined && { isActive }),
+        ...(headId       !== undefined && { headId:       headId       ? intId(headId)       : null }),
+        ...(deputyHeadId !== undefined && { deputyHeadId: deputyHeadId ? intId(deputyHeadId) : null }),
       },
       include: {
-        division: { select: { id: true, name: true, code: true } },
-        _count:   { select: { users: true } },
+        division:   { select: { id: true, name: true, code: true } },
+        head:       { select: HEAD_SELECT },
+        deputyHead: { select: HEAD_SELECT },
+        _count:     { select: { users: true } },
       },
     });
     res.json(success(row, 'แก้ไขงานสำเร็จ'));
@@ -217,7 +225,11 @@ router.get('/departments', auth, async (req, res, next) => {
   try {
     const rows = await prisma.department.findMany({
       orderBy: { id: 'asc' },
-      include: { _count: { select: { users: true } } },
+      include: {
+        head:       { select: HEAD_SELECT },
+        deputyHead: { select: HEAD_SELECT },
+        _count:     { select: { users: true } },
+      },
     });
     res.json(success(rows));
   } catch (e) { next(e); }
@@ -245,7 +257,7 @@ router.post('/departments', superAdmin, async (req, res, next) => {
 router.put('/departments/:id', superAdmin, async (req, res, next) => {
   try {
     const id = intId(req.params.id);
-    const { name, code, isActive } = req.body;
+    const { name, code, isActive, headId, deputyHeadId } = req.body;
 
     // Cascade: update user.department string for all users in this department
     if (name !== undefined) {
@@ -266,11 +278,17 @@ router.put('/departments/:id', superAdmin, async (req, res, next) => {
     const row = await prisma.department.update({
       where: { id },
       data: {
-        ...(name     !== undefined && { name: name.trim() }),
-        ...(code     !== undefined && { code: code.trim().toUpperCase() }),
-        ...(isActive !== undefined && { isActive }),
+        ...(name         !== undefined && { name: name.trim() }),
+        ...(code         !== undefined && { code: code.trim().toUpperCase() }),
+        ...(isActive     !== undefined && { isActive }),
+        ...(headId       !== undefined && { headId:       headId       ? intId(headId)       : null }),
+        ...(deputyHeadId !== undefined && { deputyHeadId: deputyHeadId ? intId(deputyHeadId) : null }),
       },
-      include: { _count: { select: { users: true } } },
+      include: {
+        head:       { select: HEAD_SELECT },
+        deputyHead: { select: HEAD_SELECT },
+        _count:     { select: { users: true } },
+      },
     });
     res.json(success(row, 'แก้ไขแผนกวิชาสำเร็จ'));
   } catch (e) {

@@ -202,6 +202,12 @@ model User {
   lostFoundClaims       LostFoundItem[]       @relation("LostFoundClaimer")
   modulePermissions     ModulePermission[]
 
+  // ─── หัวหน้างาน / หัวหน้าแผนก ──────────────────────────────────────────────
+  headOfWorkUnits   WorkUnit[]   @relation("WorkUnitHead")
+  deputyOfWorkUnits WorkUnit[]   @relation("WorkUnitDeputy")
+  headOfDepts       Department[] @relation("DeptHead")
+  deputyOfDepts     Department[] @relation("DeptDeputy")
+
   // ─── บุคลากร / การลา ────────────────────────────────────────────────────────
   leaveRequests    LeaveRequest[]  @relation("LeaveRequests")
   substituteLeaves LeaveRequest[]  @relation("SubstituteLeaves")
@@ -512,12 +518,16 @@ model Division {
 }
 
 model WorkUnit {
-  id         Int      @id @default(autoincrement())
-  name       String
-  code       String   @unique
-  divisionId Int
-  division   Division @relation(fields: [divisionId], references: [id])
-  isActive   Boolean  @default(true)
+  id           Int      @id @default(autoincrement())
+  name         String
+  code         String   @unique
+  divisionId   Int
+  division     Division @relation(fields: [divisionId], references: [id])
+  isActive     Boolean  @default(true)
+  headId       Int?
+  head         User?    @relation("WorkUnitHead",   fields: [headId],       references: [id])
+  deputyHeadId Int?
+  deputyHead   User?    @relation("WorkUnitDeputy", fields: [deputyHeadId], references: [id])
 
   users User[]
 
@@ -525,10 +535,14 @@ model WorkUnit {
 }
 
 model Department {
-  id       Int    @id @default(autoincrement())
-  name     String @unique
-  code     String @unique
-  isActive Boolean @default(true)
+  id           Int     @id @default(autoincrement())
+  name         String  @unique
+  code         String  @unique
+  isActive     Boolean @default(true)
+  headId       Int?
+  head         User?   @relation("DeptHead",   fields: [headId],       references: [id])
+  deputyHeadId Int?
+  deputyHead   User?   @relation("DeptDeputy", fields: [deputyHeadId], references: [id])
 
   users User[]
 
