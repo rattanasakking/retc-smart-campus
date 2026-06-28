@@ -96,15 +96,17 @@ export default function Topbar({ onHamburger }: Props) {
         <div className="relative ml-1">
           <button onClick={() => setOpen(!open)}
             className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-[#f5f8ff]">
-            {/* Avatar */}
+            {/* Avatar — คลิกไปหน้าโปรไฟล์ */}
+            <Link href="/profile" onClick={e => e.stopPropagation()}>
             {user?.avatar ? (
-              <img src={user.avatar} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+              <img src={user.avatar} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0 hover:ring-2 hover:ring-blue-400" />
             ) : (
-              <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+              <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 hover:ring-2 hover:ring-blue-400"
                    style={{ backgroundColor: '#2979ff' }}>
                 {initials}
               </div>
             )}
+            </Link>
             <div className="text-left hidden md:block">
               <p className="text-sm font-medium leading-tight" style={{ color: '#1a2744' }}>
                 {user?.name ?? 'ผู้ใช้งาน'}
