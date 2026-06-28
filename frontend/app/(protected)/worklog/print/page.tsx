@@ -14,9 +14,9 @@ interface LogItem {
 }
 interface UserInfo {
   name: string; position: string | null; employeeId: string | null; nationalId: string | null;
-  division: { name: string } | null;
-  workUnit: { name: string } | null;
-  department: { name: string } | null;
+  division:  { name: string } | null;
+  workUnit:  { name: string } | null;
+  deptGroup: { name: string } | null;
 }
 interface PdfData { user: UserInfo; logs: LogItem[]; month: number; year: number }
 
@@ -163,9 +163,9 @@ export default function WorklogPdfPage() {
             <InfoRow label="เลขบัตรประชาชน" value={data.user.nationalId ?? '—'} />
             <InfoRow label="ตำแหน่ง" value={posLabel(data.user.position)} />
             <InfoRow label="รหัสพนักงาน" value={data.user.employeeId ?? '—'} />
-            {data.user.division && <InfoRow label="ฝ่าย" value={data.user.division.name} />}
-            {data.user.workUnit && <InfoRow label="งาน" value={data.user.workUnit.name} />}
-            {data.user.department && <InfoRow label="แผนก" value={data.user.department.name} />}
+            {data.user.division  && <InfoRow label="ฝ่าย"   value={data.user.division.name}  />}
+            {data.user.workUnit  && <InfoRow label="งาน"    value={data.user.workUnit.name}  />}
+            {data.user.deptGroup && <InfoRow label="แผนก"  value={data.user.deptGroup.name} />}
           </div>
 
           {/* Summary */}
