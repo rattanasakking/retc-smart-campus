@@ -6,6 +6,7 @@ import { Camera, Lock, Save, X, CheckCircle, Bell, Link2, Unlink, LogOut } from 
 
 interface UserProfile {
   id: number; name: string; email: string; employeeId: string;
+  nationalId?: string | null;
   role: string; department?: string; phone?: string; nickname?: string;
   avatar?: string; position?: string;
   notifyByLine?: boolean; notifyByEmail?: boolean;
@@ -232,12 +233,12 @@ function ProfileContent() {
         {/* Read-only info */}
         <div className="grid grid-cols-2 gap-3 p-3 rounded-xl" style={{ backgroundColor: '#f5f8ff' }}>
           <div>
-            <p className="text-xs text-[#94a3b8] mb-0.5">รหัสพนักงาน</p>
-            <p className="text-sm font-medium text-[#1a2744]">{profile?.employeeId}</p>
+            <p className="text-xs text-[#94a3b8] mb-0.5">เลขบัตรประจำตัวประชาชน</p>
+            <p className="text-sm font-medium text-[#1a2744]">{profile?.nationalId || '—'}</p>
           </div>
           <div>
             <p className="text-xs text-[#94a3b8] mb-0.5">ตำแหน่ง / บทบาท</p>
-            <p className="text-sm font-medium text-[#1a2744]">{ROLE_LABEL[profile?.role ?? ''] ?? profile?.role}</p>
+            <p className="text-sm font-medium text-[#1a2744]">{profile?.position || ROLE_LABEL[profile?.role ?? ''] || profile?.role}</p>
           </div>
           <div className="col-span-2">
             <p className="text-xs text-[#94a3b8] mb-0.5">อีเมล</p>

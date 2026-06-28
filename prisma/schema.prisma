@@ -16,17 +16,7 @@ enum Role {
   staff
 }
 
-enum Position {
-  director
-  deputy_director
-  division_chief
-  work_unit_chief
-  department_chief
-  teacher
-  specialist
-  officer
-  worker
-}
+// Position enum ถูกแทนด้วย String? บน User model เพื่อให้ admin จัดการตำแหน่งได้เอง
 
 enum ShiftType {
   morning
@@ -147,7 +137,7 @@ model User {
   email        String    @unique
   password     String
   role         Role      @default(staff)
-  position     Position?
+  position     String?
   isSuperAdmin Boolean   @default(false)
 
   // โครงสร้างองค์กร (FK optional — backward compat กับ department String? เดิม)

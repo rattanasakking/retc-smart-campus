@@ -1,11 +1,11 @@
 'use client';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
   LayoutDashboard, CalendarCheck, ClipboardList, Monitor,
   Wrench, DoorOpen, PackageSearch, BarChart3, Car, CalendarDays, Megaphone,
-  Lock, ChevronRight, Settings, Users, CalendarX,
+  Lock, ChevronRight, Settings, Users, CalendarX, LogOut,
 } from 'lucide-react';
 import { TOKEN_KEY, USER_KEY } from '@/lib/api';
 
@@ -46,6 +46,7 @@ interface SidebarProps { onClose?: () => void }
 
 export default function Sidebar({ onClose }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [user, setUser]                   = useState<StoredUser | null>(null);
   const [pendingRepairs, setPendingRepairs] = useState(0);
   const [allowedModules, setAllowedModules] = useState<string[] | null>(null);
@@ -198,10 +199,10 @@ export default function Sidebar({ onClose }: SidebarProps) {
         </ul>
       </nav>
 
-      {/* User info */}
+      {/* User info + logout */}
       {user && (
-        <div className="px-3 py-3" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-          <div className="flex items-center gap-2">
+        <div className="px-3 py-3 space-y-2" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+          <Link href="/profile" onClick={onClose} className="flex items-center gap-2 rounded-lg px-1 py-1 hover:bg-white/10 transition-colors">
             {user.avatar ? (
               <img src={user.avatar} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
             ) : (
@@ -217,7 +218,15 @@ export default function Sidebar({ onClose }: SidebarProps) {
               </span>
             </div>
             <ChevronRight className="w-3 h-3 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }} />
-          </div>
+          </Link>
+          <button
+            onClick={() => { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY); router.push('/login'); }}
+            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors"
+            style={{ color: 'rgba(255,100,100,0.9)', backgroundColor: 'rgba(255,255,255,0.05)' }}
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            ออกจากระบบ
+          </button>
         </div>
       )}
     </aside>

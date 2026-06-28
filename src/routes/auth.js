@@ -157,7 +157,7 @@ router.get('/my-modules', auth, async (req, res) => {
 // GET /api/auth/me
 router.get('/me', auth, async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: LIST_SELECT });
+    const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: DETAIL_SELECT });
     if (!user) return res.status(404).json(error('ไม่พบผู้ใช้'));
     res.json(success(user));
   } catch (err) {

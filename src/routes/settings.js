@@ -962,4 +962,64 @@ router.put('/module-access/:module', superAdmin, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// ตำแหน่ง (Positions) — เก็บใน SystemSettings key='positions' เป็น JSON array
+// ═══════════════════════════════════════════════════════════════════════════════
+const POSITIONS_KEY = 'positions';
+
+async function getPositions() {
+  const row = await prisma.systemSettings.findUnique({ where: { key: POSITIONS_KEY } });
+  try { return JSON.parse(row?.value || '[]'); } catch { return []; }
+}
+
+// GET /api/settings/positions
+router.get('/positions', auth, async (req, res, next) => {
+  try { res.json(success(await getPositions())); } catch (e) { next(e); }
+});
+
+// POST /api/settings/positions  — เพิ่มตำแหน่ง
+router.post('/positions', superAdmin, async (req, res, next) => {
+  try {
+    const { name } = req.body;
+    if (!name?.trim()) return res.status(400).json(error('กรุณาระบุชื่อตำแหน่ง'));
+    const list = await getPositions();
+    if (list.includes(name.trim())) return res.status(409).json(error('มีตำแหน่งนี้แล้ว'));
+    list.push(name.trim());
+    await prisma.systemSettings.upsert({
+      where: { key: POSITIONS_KEY }, update: { value: JSON.stringify(list) },
+      create: { key: POSITIONS_KEY, value: JSON.stringify(list), group: 'general' },
+    });
+    res.json(success(list, 'เพิ่มตำแหน่งสำเร็จ'));
+  } catch (e) { next(e); }
+});
+
+// PUT /api/settings/positions/:index  — แก้ไขตำแหน่ง
+router.put('/positions/:index', superAdmin, async (req, res, next) => {
+  try {
+    const idx = parseInt(req.params.index, 10);
+    const { name } = req.body;
+    if (!name?.trim()) return res.status(400).json(error('กรุณาระบุชื่อตำแหน่ง'));
+    const list = await getPositions();
+    if (idx < 0 || idx >= list.length) return res.status(404).json(error('ไม่พบตำแหน่ง'));
+    const old = list[idx];
+    list[idx] = name.trim();
+    await prisma.systemSettings.update({ where: { key: POSITIONS_KEY }, data: { value: JSON.stringify(list) } });
+    // อัปเดต user ที่ใช้ตำแหน่งเดิม
+    await prisma.user.updateMany({ where: { position: old }, data: { position: name.trim() } });
+    res.json(success(list, 'แก้ไขตำแหน่งสำเร็จ'));
+  } catch (e) { next(e); }
+});
+
+// DELETE /api/settings/positions/:index  — ลบตำแหน่ง
+router.delete('/positions/:index', superAdmin, async (req, res, next) => {
+  try {
+    const idx = parseInt(req.params.index, 10);
+    const list = await getPositions();
+    if (idx < 0 || idx >= list.length) return res.status(404).json(error('ไม่พบตำแหน่ง'));
+    list.splice(idx, 1);
+    await prisma.systemSettings.update({ where: { key: POSITIONS_KEY }, data: { value: JSON.stringify(list) } });
+    res.json(success(list, 'ลบตำแหน่งสำเร็จ'));
+  } catch (e) { next(e); }
+});
+
 module.exports = router;
