@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Save, Building2, Link2, GraduationCap, Eye, EyeOff,
-  Upload, Check, AlertTriangle, Loader2, Plus, X, Star, MessageSquare,
+  Upload, Check, AlertTriangle, Loader2, Plus, X, Star, MessageSquare, Mail, Send,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
@@ -223,12 +223,13 @@ export default function GeneralPage() {
     setSaving1(true);
     try {
       await api.put('/settings/general', {
-        line_channel_id:      settings.line_channel_id      ?? '',
-        line_channel_secret:  settings.line_channel_secret  ?? '',
-        line_notify_token:    settings.line_notify_token    ?? '',
-        line_messaging_token: settings.line_messaging_token ?? '',
-        google_client_id:     settings.google_client_id     ?? '',
-        google_client_secret: settings.google_client_secret ?? '',
+        line_channel_id:       settings.line_channel_id       ?? '',
+        line_channel_secret:   settings.line_channel_secret   ?? '',
+        line_notify_token:     settings.line_notify_token     ?? '',
+        line_messaging_token:  settings.line_messaging_token  ?? '',
+        line_messaging_secret: settings.line_messaging_secret ?? '',
+        google_client_id:      settings.google_client_id      ?? '',
+        google_client_secret:  settings.google_client_secret  ?? '',
       });
       showToast('บันทึกการตั้งค่าการเชื่อมต่อสำเร็จ');
     } catch (e: unknown) {
@@ -333,7 +334,8 @@ export default function GeneralPage() {
   const TABS = [
     { id: 0, label: 'ข้อมูลวิทยาลัย', Icon: Building2    },
     { id: 1, label: 'LINE & Google',   Icon: Link2        },
-    { id: 2, label: 'ปีการศึกษา',     Icon: GraduationCap },
+    { id: 2, label: 'Email',           Icon: Mail         },
+    { id: 3, label: 'ปีการศึกษา',     Icon: GraduationCap },
   ];
 
   return (
@@ -531,12 +533,25 @@ export default function GeneralPage() {
               </CardSection>
 
               {/* LINE Messaging API */}
-              <CardSection title={<ServiceHeader color="#06c755" label="LINE Messaging API" />}>
+              <CardSection title={<ServiceHeader color="#06c755" label="LINE Messaging API (Bot)" />}>
+                <div className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: '#f0f4ff', color: '#4a6080' }}>
+                  ใช้สำหรับส่ง Flex message พร้อมปุ่มอนุมัติ/ไม่อนุมัติการจองห้องประชุมผ่าน LINE
+                </div>
                 <SecretField label="Channel Access Token"
                   value={settings.line_messaging_token ?? ''}
                   show={!!show.line_messaging_token}
                   onChange={(v) => set('line_messaging_token', v)}
                   onToggle={() => tog('line_messaging_token')} />
+                <SecretField label="Channel Secret (Messaging API)"
+                  value={settings.line_messaging_secret ?? ''}
+                  show={!!show.line_messaging_secret}
+                  onChange={(v) => set('line_messaging_secret', v)}
+                  onToggle={() => tog('line_messaging_secret')} />
+                <Field label="Webhook URL (ตั้งค่าใน LINE Developers Console)">
+                  <div className="input-field cursor-text text-xs select-all" style={{ backgroundColor: '#f5f8ff', color: '#4a6080' }}>
+                    {typeof window !== 'undefined' ? `${window.location.origin}/api/webhook/line` : 'https://app.retc.ac.th/api/webhook/line'}
+                  </div>
+                </Field>
               </CardSection>
 
               {/* Google OAuth */}
@@ -571,9 +586,154 @@ export default function GeneralPage() {
           )}
 
           {/* ═══════════════════════════════════════════════════
-              Tab 2 — ปีการศึกษา
+              Tab 2 — Email
           ═══════════════════════════════════════════════════ */}
           {tab === 2 && (
+            <div className="space-y-4">
+              {/* Provider */}
+              <CardSection title={<div className="flex items-center gap-2"><Mail className="w-4 h-4" style={{ color: '#1d6ae5' }} /> Email Provider</div>}>
+                <div className="flex gap-2">
+                  {[
+                    { v: 'resend', label: 'Resend', sub: 'API key เดียว · ฟรี 3,000/เดือน' },
+                    { v: 'smtp',   label: 'SMTP',   sub: 'Gmail, Outlook หรือ mail server' },
+                    { v: '',       label: 'ปิด',    sub: 'ไม่ส่ง Email' },
+                  ].map(({ v, label, sub }) => (
+                    <button key={v} onClick={() => set('email_provider', v)}
+                      className="flex-1 text-left px-3 py-2.5 rounded-xl border text-sm transition-colors"
+                      style={settings.email_provider === v
+                        ? { borderColor: '#1d6ae5', backgroundColor: '#e8f0fe', color: '#1d6ae5' }
+                        : { borderColor: '#dce6f9', backgroundColor: '#fafbff', color: '#4a6080' }}>
+                      <p className="font-semibold">{label}</p>
+                      <p className="text-xs opacity-70 mt-0.5">{sub}</p>
+                    </button>
+                  ))}
+                </div>
+              </CardSection>
+
+              {settings.email_provider === 'resend' && (
+                <CardSection title="Resend">
+                  <SecretField label="API Key"
+                    value={settings.resend_api_key ?? ''}
+                    show={!!show.resend_api_key}
+                    onChange={(v) => set('resend_api_key', v)}
+                    onToggle={() => tog('resend_api_key')} />
+                  <Field label="ชื่อผู้ส่ง (From)">
+                    <input className="input-field" value={settings.email_from ?? ''}
+                      onChange={(e) => set('email_from', e.target.value)}
+                      placeholder="Smart Campus <noreply@yourdomain.com>" />
+                  </Field>
+                  <div className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: '#f0f4ff', color: '#4a6080' }}>
+                    สมัครฟรีที่ <a href="https://resend.com" target="_blank" rel="noopener noreferrer" style={{ color: '#1d6ae5' }}>resend.com</a> · รับ API Key · ฟรี 3,000 อีเมล/เดือน
+                  </div>
+                </CardSection>
+              )}
+
+              {settings.email_provider === 'smtp' && (
+                <CardSection title="SMTP">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="col-span-2">
+                      <Field label="SMTP Host">
+                        <input className="input-field" value={settings.smtp_host ?? ''}
+                          onChange={(e) => set('smtp_host', e.target.value)} placeholder="smtp.gmail.com" />
+                      </Field>
+                    </div>
+                    <Field label="Port">
+                      <input className="input-field" type="number" value={settings.smtp_port ?? '587'}
+                        onChange={(e) => set('smtp_port', e.target.value)} placeholder="587" />
+                    </Field>
+                  </div>
+                  <Field label="Username">
+                    <input className="input-field" type="email" value={settings.smtp_user ?? ''}
+                      onChange={(e) => set('smtp_user', e.target.value)} placeholder="your@gmail.com" />
+                  </Field>
+                  <SecretField label="Password (Gmail: ใช้ App Password)"
+                    value={settings.smtp_pass ?? ''}
+                    show={!!show.smtp_pass}
+                    onChange={(v) => set('smtp_pass', v)}
+                    onToggle={() => tog('smtp_pass')} />
+                  <Field label="ชื่อผู้ส่ง (From)">
+                    <input className="input-field" value={settings.email_from ?? ''}
+                      onChange={(e) => set('email_from', e.target.value)}
+                      placeholder={settings.smtp_user || 'Smart Campus <noreply@retc.ac.th>'} />
+                  </Field>
+                </CardSection>
+              )}
+
+              {settings.email_provider && (
+                <CardSection title="ทดสอบส่ง Email">
+                  <div className="flex gap-2">
+                    <Field label="อีเมลทดสอบ">
+                      <input className="input-field" type="email" value={settings._testEmailTo ?? ''}
+                        onChange={(e) => set('_testEmailTo', e.target.value)} placeholder="your@email.com" />
+                    </Field>
+                    <div className="flex items-end">
+                      <button
+                        disabled={!settings._testEmailTo || testSending}
+                        onClick={async () => {
+                          setTestSending(true); setTestResult(null);
+                          try {
+                            await api.post('/settings/test-email', {
+                              to: settings._testEmailTo,
+                              provider:       settings.email_provider,
+                              resend_api_key: settings.resend_api_key,
+                              email_from:     settings.email_from,
+                              smtp_host:      settings.smtp_host,
+                              smtp_port:      settings.smtp_port,
+                              smtp_user:      settings.smtp_user,
+                              smtp_pass:      settings.smtp_pass,
+                            });
+                            setTestResult({ ok: true, msg: 'ส่ง Email ทดสอบสำเร็จ ✅' });
+                          } catch (e: unknown) {
+                            setTestResult({ ok: false, msg: (e as Error).message });
+                          } finally { setTestSending(false); }
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                        style={{ backgroundColor: '#e8f0fe', color: '#1d6ae5' }}>
+                        {testSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                        ส่งทดสอบ
+                      </button>
+                    </div>
+                  </div>
+                  {testResult && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm"
+                      style={testResult.ok ? { backgroundColor: '#e6f9f0', color: '#0d9068' } : { backgroundColor: '#fef2f2', color: '#dc2626' }}>
+                      {testResult.ok ? <Check className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+                      {testResult.msg}
+                    </div>
+                  )}
+                </CardSection>
+              )}
+
+              <div className="flex justify-end">
+                <button
+                  onClick={async () => {
+                    setSaving1(true);
+                    try {
+                      await api.put('/settings/general', {
+                        email_provider: settings.email_provider ?? '',
+                        email_from:     settings.email_from     ?? '',
+                        resend_api_key: settings.resend_api_key ?? '',
+                        smtp_host:      settings.smtp_host      ?? '',
+                        smtp_port:      settings.smtp_port      ?? '587',
+                        smtp_user:      settings.smtp_user      ?? '',
+                        smtp_pass:      settings.smtp_pass      ?? '',
+                      });
+                      showToast('บันทึกการตั้งค่า Email สำเร็จ');
+                    } catch (e: unknown) { showToast((e as Error).message, true); }
+                    finally { setSaving1(false); }
+                  }}
+                  disabled={saving1} className="btn-primary flex items-center gap-2">
+                  {saving1 ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  บันทึก
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ═══════════════════════════════════════════════════
+              Tab 3 — ปีการศึกษา
+          ═══════════════════════════════════════════════════ */}
+          {tab === 3 && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-xs" style={{ color: '#4a6080' }}>

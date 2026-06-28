@@ -99,7 +99,8 @@ const MESSAGING_API = 'https://api.line.me/v2/bot/message/push';
 async function getChannelAccessToken() {
   if (process.env.LINE_CHANNEL_ACCESS_TOKEN) return process.env.LINE_CHANNEL_ACCESS_TOKEN;
   try {
-    const row = await _prisma.systemSettings.findUnique({ where: { key: 'line_channel_access_token' } });
+    // ใช้ key เดียวกับที่ general/page.tsx บันทึก
+    const row = await _prisma.systemSettings.findUnique({ where: { key: 'line_messaging_token' } });
     return row?.value ?? '';
   } catch { return ''; }
 }

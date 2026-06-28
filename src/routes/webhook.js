@@ -18,7 +18,11 @@ function verifyLineSignature(rawBody, signature, secret) {
 async function getChannelSecret() {
   if (process.env.LINE_CHANNEL_SECRET) return process.env.LINE_CHANNEL_SECRET;
   try {
-    const row = await prisma.systemSettings.findUnique({ where: { key: 'line_channel_secret' } });
+    // ลองอ่าน Messaging API secret ก่อน ถ้าไม่มีใช้ line_channel_secret แทน
+    const row = await prisma.systemSettings.findFirst({
+      where: { key: { in: ['line_messaging_secret', 'line_channel_secret'] } },
+      orderBy: { key: 'asc' }, // line_messaging_secret มาก่อน alphabetically
+    });
     return row?.value ?? '';
   } catch { return ''; }
 }
