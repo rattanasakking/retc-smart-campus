@@ -53,6 +53,7 @@ export default function WorklogPdfPage() {
   const [year, setYear]   = useState(String(now.getFullYear() + 543));
   const [data, setData]   = useState<PdfData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState('');
   const [schoolName, setSchoolName] = useState('');
   const [logoUrl, setLogoUrl]       = useState('');
   const printRef = useRef<HTMLDivElement>(null);
@@ -64,11 +65,11 @@ export default function WorklogPdfPage() {
   }, []);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    setLoading(true); setApiError('');
     try {
       const r = await api.get<{ data: PdfData }>(`/worklog/my-pdf?month=${month}&year=${year}`);
       setData(r.data);
-    } catch { setData(null); }
+    } catch (e) { setData(null); setApiError((e as Error).message || 'โหลดข้อมูลไม่สำเร็จ'); }
     finally { setLoading(false); }
   }, [month, year]);
 
@@ -128,8 +129,13 @@ export default function WorklogPdfPage() {
             <Loader2 className="w-4 h-4 animate-spin" /> กำลังโหลด...
           </div>
         )}
-        {data && data.logs.length === 0 && !loading && (
-          <p className="text-sm" style={{ color: '#94a3b8' }}>ไม่มีรายการในช่วงเวลานี้</p>
+        {apiError && !loading && (
+          <div className="text-sm px-4 py-3 rounded-xl" style={{ backgroundColor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>
+            เกิดข้อผิดพลาด: {apiError}
+          </div>
+        )}
+        {!loading && !apiError && data && data.logs.length === 0 && (
+          <p className="text-sm" style={{ color: '#94a3b8' }}>ไม่มีรายการในเดือน {MONTHS_TH[parseInt(month)-1]} {year} — ลองเปลี่ยนเดือน/ปี</p>
         )}
       </div>
 
