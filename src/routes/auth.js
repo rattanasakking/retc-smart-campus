@@ -123,6 +123,10 @@ router.post('/login', async (req, res) => {
     });
 
     const { password: _pw, ...userOut } = user;
+    const modulePerms = await prisma.modulePermission.findMany({
+      where: { userId: user.id }, select: { module: true },
+    });
+    userOut.modulePermissions = modulePerms.map((p) => p.module);
     res.json(success({ token, user: userOut }, 'เข้าสู่ระบบสำเร็จ'));
   } catch (err) {
     console.error('[POST /login]', err);
@@ -157,9 +161,12 @@ router.get('/my-modules', auth, async (req, res) => {
 // GET /api/auth/me
 router.get('/me', auth, async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: DETAIL_SELECT });
+    const [user, modulePerms] = await Promise.all([
+      prisma.user.findUnique({ where: { id: req.user.id }, select: DETAIL_SELECT }),
+      prisma.modulePermission.findMany({ where: { userId: req.user.id }, select: { module: true } }),
+    ]);
     if (!user) return res.status(404).json(error('ไม่พบผู้ใช้'));
-    res.json(success(user));
+    res.json(success({ ...user, modulePermissions: modulePerms.map((p) => p.module) }));
   } catch (err) {
     console.error('[GET /me]', err);
     res.status(500).json(error('เกิดข้อผิดพลาดในระบบ', 500));

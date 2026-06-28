@@ -179,8 +179,23 @@ export default function RoomPage() {
   };
 
   useEffect(() => {
+    // Read userId immediately from localStorage for quick render
     const raw = localStorage.getItem(USER_KEY);
-    if (raw) { try { const u = JSON.parse(raw); setAdmin(!!u.isSuperAdmin || u.role==='admin' || u.role==='executive' || (u.modulePermissions ?? []).includes('ROOM_BOOKING')); setUserId(u.id); } catch { /* */ } }
+    if (raw) { try { const u = JSON.parse(raw); setUserId(u.id); } catch { /* */ } }
+    // Fetch fresh user data to get up-to-date modulePermissions
+    api.get<{ id: number; isSuperAdmin: boolean; role: string; modulePermissions?: string[] }>('/auth/me')
+      .then((u) => {
+        const admin = !!u.isSuperAdmin || u.role === 'admin' || u.role === 'executive'
+          || (u.modulePermissions ?? []).includes('ROOM_BOOKING');
+        setAdmin(admin);
+        setUserId(u.id);
+        // Update localStorage so next render is correct
+        if (raw) { try { localStorage.setItem(USER_KEY, JSON.stringify({ ...JSON.parse(raw), modulePermissions: u.modulePermissions ?? [] })); } catch { /* */ } }
+      })
+      .catch(() => {
+        // Fallback: read from localStorage
+        if (raw) { try { const u = JSON.parse(raw); setAdmin(!!u.isSuperAdmin || u.role === 'admin' || u.role === 'executive'); } catch { /* */ } }
+      });
   }, []);
 
   // Load rooms
