@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ChevronLeft, Check, AlertTriangle, Loader2, Users, Clock, Info } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, AlertTriangle, Loader2, Users, Clock, Info, Calendar } from 'lucide-react';
 import { api } from '@/lib/api';
 
 interface Room {
@@ -19,6 +19,138 @@ const fmtTime = (d: string) => {
   const dt = new Date(d);
   return `${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
 };
+
+const THAI_MONTHS_FULL = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+const THAI_MONTHS_SHORT = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+const WEEK_HEADERS = ['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];
+
+function ThaiDatePicker({ value, onChange, min }: { value: string; onChange: (v: string) => void; min?: string }) {
+  const today = new Date();
+  const parsed = value ? value.split('-').map(Number) : null;
+  const [open, setOpen]           = useState(false);
+  const [mode, setMode]           = useState<'days'|'months'>('days');
+  const [viewYear, setViewYear]   = useState(parsed ? parsed[0] : today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(parsed ? parsed[1] - 1 : today.getMonth());
+
+  const minDate = min ? (() => { const d = new Date(min); d.setHours(0,0,0,0); return d; })() : null;
+
+  const firstDow   = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMon  = new Date(viewYear, viewMonth + 1, 0).getDate();
+
+  const isoOf = (y: number, m: number, d: number) =>
+    `${y}-${String(m + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+
+  const isDisabled = (y: number, m: number, d: number) => {
+    if (!minDate) return false;
+    const dt = new Date(y, m, d);
+    dt.setHours(0,0,0,0);
+    return dt < minDate;
+  };
+
+  const displayVal = value ? (() => {
+    const dt = new Date(value + 'T00:00:00');
+    return `${dt.getDate()} ${THAI_MONTHS_FULL[dt.getMonth()]} ${dt.getFullYear() + 543}`;
+  })() : '';
+
+  const prevMonth = () => { if (viewMonth === 0) { setViewYear(y => y-1); setViewMonth(11); } else setViewMonth(m => m-1); };
+  const nextMonth = () => { if (viewMonth === 11) { setViewYear(y => y+1); setViewMonth(0); } else setViewMonth(m => m+1); };
+
+  return (
+    <div className="relative">
+      <button type="button" onClick={() => { setOpen(o => !o); setMode('days'); }}
+        className="input-field w-full text-left flex items-center gap-2">
+        <Calendar className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#94a3b8' }} />
+        <span style={{ color: value ? '#1a2744' : '#94a3b8' }}>{displayVal || 'เลือกวันที่'}</span>
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute z-50 top-full mt-1 left-0 rounded-2xl shadow-xl overflow-hidden"
+            style={{ backgroundColor: '#fff', border: '1px solid #dce6f9', width: 280 }}>
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-3 py-2.5" style={{ borderBottom: '1px solid #f0f4ff' }}>
+              <button type="button" onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-[#f5f8ff]">
+                <ChevronLeft className="w-4 h-4" style={{ color: '#4a6080' }} />
+              </button>
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={() => setMode(m => m === 'months' ? 'days' : 'months')}
+                  className="text-sm font-semibold px-2 py-1 rounded-lg hover:bg-[#f5f8ff]" style={{ color: '#1a2744' }}>
+                  {THAI_MONTHS_FULL[viewMonth]} {viewYear + 543}
+                </button>
+              </div>
+              <button type="button" onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-[#f5f8ff]">
+                <ChevronRight className="w-4 h-4" style={{ color: '#4a6080' }} />
+              </button>
+            </div>
+
+            {/* Month/Year picker */}
+            {mode === 'months' && (
+              <div className="p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <button type="button" onClick={() => setViewYear(y => y-1)} className="p-1.5 rounded hover:bg-[#f5f8ff]">
+                    <ChevronLeft className="w-3.5 h-3.5" style={{ color: '#4a6080' }} />
+                  </button>
+                  <span className="text-sm font-bold" style={{ color: '#1a2744' }}>{viewYear + 543}</span>
+                  <button type="button" onClick={() => setViewYear(y => y+1)} className="p-1.5 rounded hover:bg-[#f5f8ff]">
+                    <ChevronRight className="w-3.5 h-3.5" style={{ color: '#4a6080' }} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-3 gap-1">
+                  {THAI_MONTHS_SHORT.map((m, i) => (
+                    <button key={i} type="button" onClick={() => { setViewMonth(i); setMode('days'); }}
+                      className="py-2 rounded-xl text-xs font-medium transition-colors"
+                      style={viewMonth === i
+                        ? { backgroundColor: '#1d6ae5', color: '#fff' }
+                        : { color: '#4a6080', backgroundColor: '#f5f8ff' }}>
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Day grid */}
+            {mode === 'days' && (
+              <div className="p-3">
+                <div className="grid grid-cols-7 mb-1">
+                  {WEEK_HEADERS.map(d => (
+                    <div key={d} className="text-center text-[11px] font-medium py-0.5"
+                      style={{ color: d === 'อา.' ? '#dc2626' : d === 'ส.' ? '#1d6ae5' : '#94a3b8' }}>{d}</div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 gap-0.5">
+                  {Array.from({ length: firstDow }).map((_, i) => <div key={`e${i}`} />)}
+                  {Array.from({ length: daysInMon }, (_, i) => i + 1).map(d => {
+                    const iso      = isoOf(viewYear, viewMonth, d);
+                    const isSel    = iso === value;
+                    const isTdy    = d === today.getDate() && viewMonth === today.getMonth() && viewYear === today.getFullYear();
+                    const disabled = isDisabled(viewYear, viewMonth, d);
+                    const dow      = new Date(viewYear, viewMonth, d).getDay();
+                    return (
+                      <button key={d} type="button" disabled={disabled}
+                        onClick={() => { onChange(iso); setOpen(false); }}
+                        className="w-full aspect-square rounded-full text-xs font-medium transition-colors flex items-center justify-center"
+                        style={
+                          isSel    ? { backgroundColor: '#1d6ae5', color: '#fff' } :
+                          isTdy    ? { backgroundColor: '#e8f0fe', color: '#1d6ae5', fontWeight: 700 } :
+                          disabled ? { color: '#cbd5e1', cursor: 'not-allowed' } :
+                                     { color: dow === 0 ? '#dc2626' : dow === 6 ? '#1d6ae5' : '#1a2744' }
+                        }>
+                        {d}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2,'0'));
 const MINS  = ['00','15','30','45'];
@@ -222,7 +354,7 @@ export default function RoomNewPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-3">
               <div>
                 <label className="block text-xs font-medium mb-1.5" style={{ color: '#4a6080' }}>วันที่ *</label>
-                <input type="date" className="input-field" required value={date} onChange={(e) => setDate(e.target.value)} min={new Date().toISOString().slice(0,10)} />
+                <ThaiDatePicker value={date} onChange={setDate} min={new Date().toISOString().slice(0,10)} />
               </div>
               <TimePicker value={startTime} onChange={setStartTime} label="เวลาเริ่ม *" />
               <TimePicker value={endTime} onChange={setEndTime} label="เวลาสิ้นสุด *" />
