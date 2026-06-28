@@ -487,13 +487,12 @@ router.get('/oauth-debug', async (req, res) => {
 // OAuth — LINE + Google  (ดึง client_id/secret จาก DB เสมอ)
 // ═════════════════════════════════════════════════════════════════════════════
 
-// ─── LINE Login ───────────────────────────────────────────────────────────────
+// ─── LINE Login (state encodes type:'login') ──────────────────────────────────
 router.get('/line', async (req, res) => {
   try {
     const { line } = await getOAuthConfig();
     if (!line.clientId) return res.redirect(`${FRONTEND_URL}/login?error=line_not_configured`);
-    const state = crypto.randomBytes(16).toString('hex');
-    req.session.oauthState = state;
+    const state = Buffer.from(JSON.stringify({ type: 'login', nonce: crypto.randomBytes(8).toString('hex') })).toString('base64url');
     const params = new URLSearchParams({
       response_type: 'code',
       client_id:     line.clientId,
@@ -508,9 +507,14 @@ router.get('/line', async (req, res) => {
   }
 });
 
+// ─── LINE unified callback (login + link ใช้ URL เดียวกัน แยกด้วย state.type) ─
 router.get('/line/callback', async (req, res) => {
-  const { code, error: oauthErr } = req.query;
-  if (oauthErr || !code) return res.redirect(`${FRONTEND_URL}/login?error=line_cancelled`);
+  const { code, state, error: oauthErr } = req.query;
+  let stateData = { type: 'login' };
+  try { stateData = JSON.parse(Buffer.from(String(state || ''), 'base64url').toString()); } catch {}
+  const errDest = stateData.type === 'link' ? `${FRONTEND_URL}/profile` : `${FRONTEND_URL}/login`;
+
+  if (oauthErr || !code) return res.redirect(`${errDest}?error=line_cancelled`);
   try {
     const { line } = await getOAuthConfig();
     const tokenRes = await fetch('https://api.line.me/oauth2/v2.1/token', {
@@ -525,18 +529,33 @@ router.get('/line/callback', async (req, res) => {
       }),
     });
     const tokenData = await tokenRes.json();
-    if (!tokenData.access_token) return res.redirect(`${FRONTEND_URL}/login?error=token_error`);
+    if (!tokenData.access_token) {
+      console.error('[LINE callback] token exchange failed:', JSON.stringify(tokenData));
+      return res.redirect(`${errDest}?error=token_error&detail=${encodeURIComponent(tokenData.error_description || tokenData.error || 'unknown')}`);
+    }
     const profileRes = await fetch('https://api.line.me/v2/profile', {
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
     const lineProfile = await profileRes.json();
+    const lineUserId = lineProfile.userId;
+
+    if (stateData.type === 'link') {
+      const userId = stateData.id;
+      if (!lineUserId) return res.redirect(`${FRONTEND_URL}/profile?error=profile_error`);
+      const existing = await prisma.user.findFirst({ where: { lineUserId } });
+      if (existing && existing.id !== userId) return res.redirect(`${FRONTEND_URL}/profile?error=already_linked_to_other`);
+      await prisma.user.update({ where: { id: userId }, data: { lineUserId } });
+      return res.redirect(`${FRONTEND_URL}/profile?linked=line`);
+    }
+
+    // login flow
     const email = emailFromIdToken(tokenData.id_token);
-    const { user, status } = await resolveOAuthUser('lineUserId', lineProfile.userId, email);
+    const { user, status } = await resolveOAuthUser('lineUserId', lineUserId, email);
     if (status !== 'active') return res.redirect(`${FRONTEND_URL}/login?error=${encodeURIComponent(status)}`);
     res.redirect(`${FRONTEND_URL}/login?token=${encodeURIComponent(signOAuthToken(user))}`);
   } catch (e) {
-    console.error('[LINE login callback]', e);
-    res.redirect(`${FRONTEND_URL}/login?error=server_error`);
+    console.error('[LINE callback]', e);
+    res.redirect(`${errDest}?error=server_error`);
   }
 });
 
@@ -601,55 +620,17 @@ router.get('/line/link', async (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const { line } = await getOAuthConfig();
     if (!line.clientId) return res.redirect(`${FRONTEND_URL}/profile?error=line_not_configured`);
-    const state = Buffer.from(JSON.stringify({ id: decoded.id, ts: Date.now() })).toString('base64url');
+    const state = Buffer.from(JSON.stringify({ type: 'link', id: decoded.id, ts: Date.now() })).toString('base64url');
     const params = new URLSearchParams({
       response_type: 'code',
       client_id:     line.clientId,
-      redirect_uri:  `${FRONTEND_URL}/api/auth/line/link/callback`,
+      redirect_uri:  `${FRONTEND_URL}/api/auth/line/callback`,
       state,
       scope:         'profile openid',
     });
     res.redirect(`https://access.line.me/oauth2/v2.1/authorize?${params}`);
   } catch {
     res.redirect(`${FRONTEND_URL}/profile?error=invalid_token`);
-  }
-});
-
-router.get('/line/link/callback', async (req, res) => {
-  const { code, state, error: oauthErr } = req.query;
-  if (oauthErr || !code || !state) return res.redirect(`${FRONTEND_URL}/profile?error=line_cancelled`);
-  try {
-    const { id: userId } = JSON.parse(Buffer.from(String(state), 'base64url').toString());
-    const { line } = await getOAuthConfig();
-    const tokenRes = await fetch('https://api.line.me/oauth2/v2.1/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type:    'authorization_code',
-        code:          String(code),
-        redirect_uri:  `${FRONTEND_URL}/api/auth/line/link/callback`,
-        client_id:     line.clientId,
-        client_secret: line.clientSecret,
-      }),
-    });
-    const tokenData = await tokenRes.json();
-    if (!tokenData.access_token) {
-      console.error('[LINE link] token exchange failed:', JSON.stringify(tokenData));
-      return res.redirect(`${FRONTEND_URL}/profile?error=token_error&detail=${encodeURIComponent(tokenData.error_description || tokenData.error || 'unknown')}`);
-    }
-    const profileRes = await fetch('https://api.line.me/v2/profile', {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` },
-    });
-    const lineProfile = await profileRes.json();
-    const lineUserId = lineProfile.userId;
-    if (!lineUserId) return res.redirect(`${FRONTEND_URL}/profile?error=profile_error`);
-    const existing = await prisma.user.findFirst({ where: { lineUserId } });
-    if (existing && existing.id !== userId) return res.redirect(`${FRONTEND_URL}/profile?error=already_linked_to_other`);
-    await prisma.user.update({ where: { id: userId }, data: { lineUserId } });
-    res.redirect(`${FRONTEND_URL}/profile?linked=line`);
-  } catch (e) {
-    console.error('[LINE link callback]', e);
-    res.redirect(`${FRONTEND_URL}/profile?error=link_error`);
   }
 });
 
