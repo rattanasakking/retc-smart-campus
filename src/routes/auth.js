@@ -633,7 +633,10 @@ router.get('/line/link/callback', async (req, res) => {
       }),
     });
     const tokenData = await tokenRes.json();
-    if (!tokenData.access_token) return res.redirect(`${FRONTEND_URL}/profile?error=token_error`);
+    if (!tokenData.access_token) {
+      console.error('[LINE link] token exchange failed:', JSON.stringify(tokenData));
+      return res.redirect(`${FRONTEND_URL}/profile?error=token_error&detail=${encodeURIComponent(tokenData.error_description || tokenData.error || 'unknown')}`);
+    }
     const profileRes = await fetch('https://api.line.me/v2/profile', {
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
