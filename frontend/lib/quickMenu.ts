@@ -1,7 +1,7 @@
 import {
   Monitor, Wrench, CalendarCheck2, ArrowLeftRight,
   DoorOpen, CalendarCheck, PackageSearch, HeadphonesIcon,
-  Users, CalendarX,
+  Users, CalendarX, ClipboardList,
 } from 'lucide-react';
 
 export interface QuickMenuItem {
@@ -25,6 +25,7 @@ export const ALL_QUICK_ITEMS: QuickMenuItem[] = [
   { key: 'helpdesk',     href: '/helpdesk',             label: 'Helpdesk',         Icon: HeadphonesIcon,   color: '#4a6080', bg: '#f5f8ff', module: 'HELPDESK'    },
   { key: 'personnel',    href: '/personnel',            label: 'บุคลากร',          Icon: Users,            color: '#0369a1', bg: '#e0f2fe', module: 'PERSONNEL'   },
   { key: 'leave',        href: '/leave',                label: 'ระบบการลา',       Icon: CalendarX,        color: '#7e22ce', bg: '#f5f3ff', module: 'LEAVE'        },
+  { key: 'worklog',      href: '/worklog',              label: 'บันทึกปฏิบัติงาน', Icon: ClipboardList,   color: '#0d9068', bg: '#e6f9f0', module: 'WORK_LOG'    },
 ];
 
 const STORAGE_KEY = 'retc_quick_menu';
