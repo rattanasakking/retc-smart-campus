@@ -1022,4 +1022,68 @@ router.delete('/positions/:index', superAdmin, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// หมวดหมู่การปฏิบัติงาน — เก็บใน SystemSettings key='work_categories'
+// ═══════════════════════════════════════════════════════════════════════════════
+const WCATS_KEY = 'work_categories';
+const WCATS_DEFAULT = ['การสอน', 'การประชุม', 'การพัฒนา', 'งานธุรการ', 'อื่นๆ'];
+
+async function getWorkCategories() {
+  const row = await prisma.systemSettings.findUnique({ where: { key: WCATS_KEY } });
+  if (!row) return [...WCATS_DEFAULT];
+  try { return JSON.parse(row.value || '[]'); } catch { return [...WCATS_DEFAULT]; }
+}
+
+router.get('/work-categories', auth, async (req, res, next) => {
+  try { res.json(success(await getWorkCategories())); } catch (e) { next(e); }
+});
+
+router.post('/work-categories', superAdmin, async (req, res, next) => {
+  try {
+    const { name } = req.body;
+    if (!name?.trim()) return res.status(400).json(error('กรุณาระบุชื่อหมวดหมู่'));
+    const list = await getWorkCategories();
+    if (list.includes(name.trim())) return res.status(409).json(error('มีหมวดหมู่นี้แล้ว'));
+    list.push(name.trim());
+    await prisma.systemSettings.upsert({
+      where: { key: WCATS_KEY }, update: { value: JSON.stringify(list) },
+      create: { key: WCATS_KEY, value: JSON.stringify(list), group: 'general' },
+    });
+    res.json(success(list, 'เพิ่มหมวดหมู่สำเร็จ'));
+  } catch (e) { next(e); }
+});
+
+router.put('/work-categories/:index', superAdmin, async (req, res, next) => {
+  try {
+    const idx = parseInt(req.params.index, 10);
+    const { name } = req.body;
+    if (!name?.trim()) return res.status(400).json(error('กรุณาระบุชื่อหมวดหมู่'));
+    const list = await getWorkCategories();
+    if (idx < 0 || idx >= list.length) return res.status(404).json(error('ไม่พบหมวดหมู่'));
+    const old = list[idx];
+    list[idx] = name.trim();
+    await prisma.systemSettings.upsert({
+      where: { key: WCATS_KEY }, update: { value: JSON.stringify(list) },
+      create: { key: WCATS_KEY, value: JSON.stringify(list), group: 'general' },
+    });
+    // อัปเดต WorkType ที่ใช้หมวดหมู่เดิม
+    await prisma.workType.updateMany({ where: { category: old }, data: { category: name.trim() } });
+    res.json(success(list, 'แก้ไขหมวดหมู่สำเร็จ'));
+  } catch (e) { next(e); }
+});
+
+router.delete('/work-categories/:index', superAdmin, async (req, res, next) => {
+  try {
+    const idx = parseInt(req.params.index, 10);
+    const list = await getWorkCategories();
+    if (idx < 0 || idx >= list.length) return res.status(404).json(error('ไม่พบหมวดหมู่'));
+    const cat = list[idx];
+    const used = await prisma.workType.count({ where: { category: cat } });
+    if (used > 0) return res.status(400).json(error(`มีประเภทงานใช้หมวดหมู่นี้ ${used} รายการ`));
+    list.splice(idx, 1);
+    await prisma.systemSettings.update({ where: { key: WCATS_KEY }, data: { value: JSON.stringify(list) } });
+    res.json(success(list, 'ลบหมวดหมู่สำเร็จ'));
+  } catch (e) { next(e); }
+});
+
 module.exports = router;

@@ -44,13 +44,21 @@ function fmtDate(d: string) {
 // ─── WorkType Settings ────────────────────────────────────────────────────────
 
 function WorkTypeSettings({ isAdmin }: { isAdmin: boolean }) {
-  const [types, setTypes]       = useState<WorkType[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [form, setForm]         = useState({ name: '', category: '', color: '#1d6ae5' });
-  const [editId, setEditId]     = useState<number | null>(null);
-  const [saving, setSaving]     = useState(false);
-  const [toast, setToast]       = useState('');
-  const [toastErr, setToastErr] = useState('');
+  const [types, setTypes]         = useState<WorkType[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [form, setForm]           = useState({ name: '', category: '', color: '#1d6ae5' });
+  const [editId, setEditId]       = useState<number | null>(null);
+  const [saving, setSaving]       = useState(false);
+  const [toast, setToast]         = useState('');
+  const [toastErr, setToastErr]   = useState('');
+  // หมวดหมู่ CRUD
+  const [catTab, setCatTab]       = useState<'types' | 'cats'>('types');
+  const [catNew, setCatNew]       = useState('');
+  const [catAdding, setCatAdding] = useState(false);
+  const [catEditIdx, setCatEditIdx] = useState<number | null>(null);
+  const [catEditName, setCatEditName] = useState('');
+  const [catEditSaving, setCatEditSaving] = useState(false);
 
   const showToast = (msg: string, isErr = false) => {
     if (isErr) { setToastErr(msg); setToast(''); } else { setToast(msg); setToastErr(''); }
@@ -58,10 +66,13 @@ function WorkTypeSettings({ isAdmin }: { isAdmin: boolean }) {
   };
 
   const load = useCallback(() => {
-    api.get<{ data: WorkType[] }>('/worklog/types?all=true')
-      .then((r) => setTypes(r.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    Promise.all([
+      api.get<{ data: WorkType[] }>('/worklog/types?all=true'),
+      api.get<{ data: string[] }>('/settings/work-categories'),
+    ]).then(([t, c]) => {
+      setTypes(t.data);
+      setCategories(c.data ?? []);
+    }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -98,7 +109,31 @@ function WorkTypeSettings({ isAdmin }: { isAdmin: boolean }) {
     setForm({ name: t.name, category: t.category, color: t.color });
   };
 
-  const CATEGORIES = ['การสอน', 'การประชุม', 'การพัฒนา', 'งานธุรการ', 'อื่นๆ'];
+  const handleCatAdd = async () => {
+    if (!catNew.trim()) return;
+    setCatAdding(true);
+    try {
+      const r = await api.post<{ data: string[] }>('/settings/work-categories', { name: catNew.trim() });
+      setCategories(r.data ?? []); setCatNew(''); showToast('เพิ่มหมวดหมู่สำเร็จ');
+    } catch (e) { showToast((e as Error).message, true); }
+    finally { setCatAdding(false); }
+  };
+  const handleCatEdit = async (idx: number) => {
+    if (!catEditName.trim()) return;
+    setCatEditSaving(true);
+    try {
+      const r = await api.put<{ data: string[] }>(`/settings/work-categories/${idx}`, { name: catEditName.trim() });
+      setCategories(r.data ?? []); setCatEditIdx(null); showToast('แก้ไขสำเร็จ');
+    } catch (e) { showToast((e as Error).message, true); }
+    finally { setCatEditSaving(false); }
+  };
+  const handleCatDelete = async (idx: number) => {
+    if (!confirm(`ลบหมวดหมู่ "${categories[idx]}" ?`)) return;
+    try {
+      const r = await api.delete<{ data: string[] }>(`/settings/work-categories/${idx}`);
+      setCategories(r.data ?? []); showToast('ลบหมวดหมู่สำเร็จ');
+    } catch (e) { showToast((e as Error).message, true); }
+  };
 
   return (
     <div className="space-y-4">
@@ -111,40 +146,105 @@ function WorkTypeSettings({ isAdmin }: { isAdmin: boolean }) {
 
       {isAdmin && (
         <div className="card">
-          <p className="text-sm font-semibold mb-4" style={{ color: '#1a2744' }}>
-            {editId ? 'แก้ไขประเภทงาน' : 'เพิ่มประเภทงานใหม่'}
-          </p>
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            <div>
-              <label className="text-xs font-medium mb-1 block" style={{ color: '#4a6080' }}>ชื่อประเภท *</label>
-              <input className="input-field" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="เช่น สอนตามตาราง" />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block" style={{ color: '#4a6080' }}>หมวดหมู่ *</label>
-              <select className="input-field" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>
-                <option value="">-- เลือกหมวดหมู่ --</option>
-                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
+          {/* Sub-tabs */}
+          <div className="flex gap-1 mb-4" style={{ borderBottom: '1px solid #dce6f9', paddingBottom: 0 }}>
+            {([['types','ประเภทงาน'],['cats','หมวดหมู่']] as const).map(([k,l]) => (
+              <button key={k} onClick={() => setCatTab(k)}
+                className="px-4 py-2 text-sm font-medium transition-colors"
+                style={catTab === k
+                  ? { color: '#1d6ae5', borderBottom: '2px solid #1d6ae5', marginBottom: -1 }
+                  : { color: '#4a6080' }}>
+                {l}
+              </button>
+            ))}
           </div>
-          <div className="flex items-center gap-3 mb-3">
-            <div>
-              <label className="text-xs font-medium mb-1 block" style={{ color: '#4a6080' }}>สีชิป</label>
-              <div className="flex items-center gap-2">
-                <input type="color" value={form.color} onChange={(e) => setForm((f) => ({ ...f, color: e.target.value }))} className="w-10 h-10 rounded-lg cursor-pointer border-0" />
-                <span className="px-2.5 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: form.color + '22', color: form.color }}>
-                  {form.name || 'ตัวอย่าง'}
-                </span>
+
+          {catTab === 'types' && (
+            <>
+              <p className="text-sm font-semibold mb-4" style={{ color: '#1a2744' }}>
+                {editId ? 'แก้ไขประเภทงาน' : 'เพิ่มประเภทงานใหม่'}
+              </p>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label className="text-xs font-medium mb-1 block" style={{ color: '#4a6080' }}>ชื่อประเภท *</label>
+                  <input className="input-field" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="เช่น สอนตามตาราง" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium mb-1 block" style={{ color: '#4a6080' }}>หมวดหมู่ *</label>
+                  <select className="input-field" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>
+                    <option value="">-- เลือกหมวดหมู่ --</option>
+                    {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 mb-3">
+                <div>
+                  <label className="text-xs font-medium mb-1 block" style={{ color: '#4a6080' }}>สีชิป</label>
+                  <div className="flex items-center gap-2">
+                    <input type="color" value={form.color} onChange={(e) => setForm((f) => ({ ...f, color: e.target.value }))} className="w-10 h-10 rounded-lg cursor-pointer border-0" />
+                    <span className="px-2.5 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: form.color + '22', color: form.color }}>
+                      {form.name || 'ตัวอย่าง'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                {editId && <button onClick={() => { setEditId(null); setForm({ name: '', category: '', color: '#1d6ae5' }); }} className="btn-secondary text-sm">ยกเลิก</button>}
+                <button onClick={handleSave} disabled={saving} className="btn-primary text-sm flex items-center gap-1.5">
+                  {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {editId ? 'บันทึกการแก้ไข' : 'เพิ่มประเภท'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {catTab === 'cats' && (
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <input className="input-field flex-1 text-sm" placeholder="ชื่อหมวดหมู่ใหม่"
+                  value={catNew} onChange={e => setCatNew(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleCatAdd()} />
+                <button onClick={handleCatAdd} disabled={catAdding || !catNew.trim()} className="btn-primary flex items-center gap-1.5 text-sm px-4">
+                  {catAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} เพิ่ม
+                </button>
+              </div>
+              <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #dce6f9' }}>
+                {categories.length === 0 ? (
+                  <p className="py-6 text-center text-sm" style={{ color: '#94a3b8' }}>ยังไม่มีหมวดหมู่</p>
+                ) : (
+                  <ul className="divide-y divide-[#f0f4ff]">
+                    {categories.map((cat, idx) => (
+                      <li key={idx} className="flex items-center gap-2 px-4 py-2.5">
+                        {catEditIdx === idx ? (
+                          <>
+                            <input className="input-field flex-1 text-sm py-1.5" value={catEditName}
+                              onChange={e => setCatEditName(e.target.value)}
+                              onKeyDown={e => e.key === 'Enter' && handleCatEdit(idx)} autoFocus />
+                            <button onClick={() => handleCatEdit(idx)} disabled={catEditSaving} className="p-1.5 rounded-lg text-green-600 hover:bg-green-50">
+                              {catEditSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                            </button>
+                            <button onClick={() => setCatEditIdx(null)} className="p-1.5 rounded-lg hover:bg-gray-50" style={{ color: '#94a3b8' }}>
+                              <X className="w-4 h-4" />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="flex-1 text-sm" style={{ color: '#1a2744' }}>{cat}</span>
+                            <button onClick={() => { setCatEditIdx(idx); setCatEditName(cat); }} className="p-1.5 rounded-lg hover:bg-[#f5f8ff]" style={{ color: '#4a6080' }}>
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => handleCatDelete(idx)} className="p-1.5 rounded-lg text-red-400 hover:bg-red-50">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
-          </div>
-          <div className="flex gap-2">
-            {editId && <button onClick={() => { setEditId(null); setForm({ name: '', category: '', color: '#1d6ae5' }); }} className="btn-secondary text-sm">ยกเลิก</button>}
-            <button onClick={handleSave} disabled={saving} className="btn-primary text-sm flex items-center gap-1.5">
-              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {editId ? 'บันทึกการแก้ไข' : 'เพิ่มประเภท'}
-            </button>
-          </div>
+          )}
         </div>
       )}
 
@@ -332,6 +432,9 @@ export default function WorkLogPage() {
               <select className="input-field text-sm py-2 w-auto" value={year} onChange={(e) => setYear(e.target.value)}>
                 {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
               </select>
+              <button onClick={() => router.push('/worklog/pdf')} className="btn-secondary flex items-center gap-1.5 text-sm py-2">
+                <Eye className="w-3.5 h-3.5" /> รายงาน PDF
+              </button>
               <button onClick={() => router.push('/worklog/new')} className="btn-primary flex items-center gap-1.5 text-sm py-2">
                 <Plus className="w-3.5 h-3.5" /> บันทึกใหม่
               </button>

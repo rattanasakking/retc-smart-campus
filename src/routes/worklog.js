@@ -199,6 +199,49 @@ router.get('/pending-approvals', auth, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ─── My PDF ──────────────────────────────────────────────────────────────────
+
+// GET /api/worklog/my-pdf?month=&year=  — logs ของตัวเองสำหรับสร้าง PDF
+router.get('/my-pdf', auth, async (req, res, next) => {
+  try {
+    const { month, year } = req.query;
+    const y = year  ? parseInt(year,  10) - 543 : new Date().getFullYear();
+    const m = month ? parseInt(month, 10) - 1   : new Date().getMonth();
+    const where = {
+      userId: req.user.id,
+      logDate: { gte: new Date(y, m, 1), lte: new Date(y, m + 1, 0) },
+    };
+    const [logs, user] = await Promise.all([
+      prisma.workLog.findMany({
+        where,
+        include: {
+          workType: { select: { name: true, color: true, category: true } },
+          approvals: {
+            include: { approver: { select: { name: true, position: true } } },
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+        orderBy: { logDate: 'asc' },
+      }),
+      prisma.user.findUnique({
+        where: { id: req.user.id },
+        select: {
+          name: true, position: true, employeeId: true, nationalId: true,
+          division:   { select: { name: true } },
+          workUnit:   { select: { name: true } },
+          department: { select: { name: true } },
+        },
+      }),
+    ]);
+    res.json(success({
+      user,
+      logs: logs.map((l) => ({ ...l, attachments: l.attachments ? JSON.parse(l.attachments) : [] })),
+      month: parseInt(month || String(new Date().getMonth() + 1), 10),
+      year:  y + 543,
+    }));
+  } catch (e) { next(e); }
+});
+
 // ─── Report ───────────────────────────────────────────────────────────────────
 
 // GET /api/worklog/report?period=month&month=&year=&workTypeId=&status=&divisionId=&workUnitId=
