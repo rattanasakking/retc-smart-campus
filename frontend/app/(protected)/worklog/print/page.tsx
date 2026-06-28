@@ -171,10 +171,16 @@ export default function WorklogPdfPage() {
 
 
           {/* Table */}
-          <table className="w-full text-sm mb-8" style={{ borderCollapse: 'collapse' }}>
+          <table className="w-full text-sm mb-8" style={{ borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: '4%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '22%' }} />
+              <col style={{ width: '62%' }} />
+            </colgroup>
             <thead>
               <tr style={{ backgroundColor: '#1a2744' }}>
-                {['#', 'วันที่', 'หมวดหมู่', 'ประเภทงาน', 'หัวข้อ/รายละเอียด'].map(h => (
+                {['#', 'วันที่', 'ประเภทงาน', 'หัวข้อ/รายละเอียด'].map(h => (
                   <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-white"
                     style={{ border: '1px solid #c8d8f0' }}>{h}</th>
                 ))}
@@ -185,18 +191,20 @@ export default function WorklogPdfPage() {
                 <tr key={l.id} style={{ backgroundColor: i % 2 === 0 ? '#ffffff' : '#f8faff' }}>
                   <td className="px-3 py-2 text-center text-xs" style={{ border: '1px solid #dce6f9', color: '#94a3b8' }}>{i + 1}</td>
                   <td className="px-3 py-2 text-xs whitespace-nowrap" style={{ border: '1px solid #dce6f9', color: '#4a6080' }}>{fmtDate(l.logDate)}</td>
-                  <td className="px-3 py-2 text-xs" style={{ border: '1px solid #dce6f9', color: '#4a6080' }}>{l.workType?.category ?? '—'}</td>
                   <td className="px-3 py-2 text-xs" style={{ border: '1px solid #dce6f9' }}>
                     {l.workType && (
-                      <span className="px-2 py-0.5 rounded-full text-xs font-medium"
-                        style={{ backgroundColor: l.workType.color + '22', color: l.workType.color }}>
-                        {l.workType.name}
-                      </span>
+                      <>
+                        <span className="block text-[11px] mb-0.5" style={{ color: '#94a3b8' }}>{l.workType.category}</span>
+                        <span className="px-2 py-0.5 rounded-full text-xs font-medium"
+                          style={{ backgroundColor: l.workType.color + '22', color: l.workType.color }}>
+                          {l.workType.name}
+                        </span>
+                      </>
                     )}
                   </td>
                   <td className="px-3 py-2 text-xs" style={{ border: '1px solid #dce6f9', color: '#1a2744' }}>
                     <span className="font-medium">{l.title}</span>
-                    {l.detail && <span className="block text-[11px] mt-0.5" style={{ color: '#94a3b8' }}>{l.detail.slice(0, 80)}{l.detail.length > 80 ? '...' : ''}</span>}
+                    {l.detail && <span className="block text-[11px] mt-0.5" style={{ color: '#94a3b8' }}>{l.detail}</span>}
                   </td>
                 </tr>
               ))}
