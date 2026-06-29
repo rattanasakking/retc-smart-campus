@@ -29,26 +29,46 @@ async function getChannelSecret() {
 // LINE Webhook Diagnostic — GET /api/webhook/line/debug
 router.get('/line/debug', async (req, res) => {
   try {
-    const [secretRow, tokenRow] = await Promise.all([
+    const [secretRow, tokenRow, lastEventRow] = await Promise.all([
       prisma.systemSettings.findUnique({ where: { key: 'line_messaging_secret' } }),
       prisma.systemSettings.findUnique({ where: { key: 'line_messaging_token'  } }),
+      prisma.systemSettings.findUnique({ where: { key: '_webhook_last_event'   } }),
     ]);
-    const admins = await prisma.user.findMany({
+
+    // role-based admins
+    const roleAdmins = await prisma.user.findMany({
       where: { isActive: true, role: { in: ['admin', 'executive'] } },
       select: { id: true, name: true, role: true, lineUserId: true },
     });
+
+    // module admins for ROOM_BOOKING
+    const modulePerms = await prisma.modulePermission.findMany({
+      where: { module: 'ROOM_BOOKING' },
+      include: { user: { select: { id: true, name: true, role: true, lineUserId: true, isActive: true } } },
+    });
+    const moduleAdmins = modulePerms
+      .filter(p => p.user?.isActive)
+      .map(p => ({ id: p.user.id, name: p.user.name, role: p.user.role, hasLineUserId: !!(p.user.lineUserId), lineUserId: p.user.lineUserId, via: 'MODULE_PERMISSION' }));
+
+    const allAdmins = [
+      ...roleAdmins.map(a => ({ id: a.id, name: a.name, role: a.role, hasLineUserId: !!(a.lineUserId), lineUserId: a.lineUserId, via: 'ROLE' })),
+      ...moduleAdmins.filter(m => !roleAdmins.find(r => r.id === m.id)),
+    ];
+
     const pendingBookings = await prisma.roomBooking.findMany({
       where: { status: 'pending' },
       select: { id: true, title: true, startTime: true },
       orderBy: { createdAt: 'desc' },
       take: 5,
     });
+
     res.json({
       messaging_secret_set: !!(secretRow?.value),
       messaging_token_set:  !!(tokenRow?.value),
       env_secret_set: !!(process.env.LINE_CHANNEL_SECRET),
       env_token_set:  !!(process.env.LINE_CHANNEL_ACCESS_TOKEN),
-      admins: admins.map(a => ({ id: a.id, name: a.name, role: a.role, hasLineUserId: !!(a.lineUserId), lineUserId: a.lineUserId })),
+      last_webhook_event: lastEventRow?.value ? JSON.parse(lastEventRow.value) : null,
+      admins: allAdmins,
       pending_bookings: pendingBookings,
     });
   } catch (err) {
@@ -76,6 +96,25 @@ router.post('/line', async (req, res) => {
 
   const events = req.body?.events ?? [];
   console.log(`[Webhook] received ${events.length} event(s):`, events.map(e => e.type));
+
+  // บันทึก event ล่าสุดลง DB เพื่อใช้ debug
+  if (events.length > 0) {
+    const logData = JSON.stringify({
+      receivedAt: new Date().toISOString(),
+      signatureOk: !secret || verifyLineSignature(rawBody ?? '', signature ?? '', secret),
+      events: events.map(e => ({
+        type: e.type,
+        userId: e.source?.userId,
+        postbackData: e.postback?.data,
+      })),
+    });
+    prisma.systemSettings.upsert({
+      where: { key: '_webhook_last_event' },
+      update: { value: logData },
+      create: { key: '_webhook_last_event', value: logData },
+    }).catch(() => {});
+  }
+
   for (const event of events) {
     try {
       if (event.type === 'postback') {
