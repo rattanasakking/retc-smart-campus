@@ -269,6 +269,14 @@ router.get('/report', auth, async (req, res, next) => {
     const results = [];
     let totalBookings = 0, totalHours = 0;
 
+    // status breakdown สำหรับกราฟ
+    const allBookings = await prisma.roomBooking.findMany({
+      where: { startTime: { gte: start }, endTime: { lte: end } },
+      select: { status: true },
+    });
+    const statusBreakdown = { approved: 0, pending: 0, rejected: 0, cancelled: 0, completed: 0 };
+    for (const b of allBookings) { if (b.status in statusBreakdown) statusBreakdown[b.status]++; }
+
     for (const room of rooms) {
       const bks = await prisma.roomBooking.findMany({
         where: { roomId: room.id, startTime: { gte: start }, endTime: { lte: end }, status: { in: ['approved', 'completed'] } },
@@ -292,6 +300,7 @@ router.get('/report', auth, async (req, res, next) => {
       period: { year: y + 543, month: m + 1 },
       rooms:  results.map((r) => ({ ...r, utilization: availableHoursPerRoom > 0 ? Math.round((r.hours / availableHoursPerRoom) * 100) : 0 })),
       total:  { bookings: totalBookings, hours: Math.round(totalHours * 10) / 10 },
+      statusBreakdown,
     }));
   } catch (e) { next(e); }
 });
@@ -408,6 +417,23 @@ router.put('/bookings/:id/reject', auth, async (req, res, next) => {
     const updated = await prisma.roomBooking.findUnique({ where: { id: intId(req.params.id) }, include: BOOKING_INC });
     notifyBookerStatus(updated, 'rejected', note?.trim() || null).catch(() => {});
     res.json(success(null, 'ปฏิเสธสำเร็จ'));
+  } catch (e) { next(e); }
+});
+
+// ลบการจอง (admin เท่านั้น, เฉพาะ rejected/cancelled)
+router.delete('/bookings/:id', auth, async (req, res, next) => {
+  try {
+    const isAdminUser = await canAdmin(req.user);
+    if (!isAdminUser) return res.status(403).json(error('ไม่มีสิทธิ์'));
+    const id = intId(req.params.id);
+    const booking = await prisma.roomBooking.findUnique({ where: { id } });
+    if (!booking) return res.status(404).json(error('ไม่พบการจอง'));
+    if (!['rejected', 'cancelled'].includes(booking.status)) {
+      return res.status(400).json(error('ลบได้เฉพาะการจองที่ปฏิเสธหรือยกเลิกแล้วเท่านั้น'));
+    }
+    await prisma.roomBookingApproval.deleteMany({ where: { bookingId: id } });
+    await prisma.roomBooking.delete({ where: { id } });
+    res.json(success(null, 'ลบการจองสำเร็จ'));
   } catch (e) { next(e); }
 });
 

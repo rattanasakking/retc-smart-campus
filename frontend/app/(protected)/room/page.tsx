@@ -3,9 +3,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plus, ChevronLeft, ChevronRight, Loader2, Check, AlertTriangle,
-  Calendar, List, Clock, Users, X, Settings,
+  Calendar, List, Clock, Users, X, Settings, Trash2,
 } from 'lucide-react';
 import { api, USER_KEY } from '@/lib/api';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend,
+} from 'recharts';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,6 +31,7 @@ interface ReportData {
   period: { year: number; month: number };
   rooms: { id: number; name: string; capacity: number; bookings: number; hours: number; utilization: number }[];
   total: { bookings: number; hours: number };
+  statusBreakdown?: { approved: number; pending: number; rejected: number; cancelled: number; completed: number };
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -73,6 +78,7 @@ function BookingPopup({ booking, isAdmin, userId, onClose, onRefresh }: {
   const [rejNote, setRejNote] = useState('');
   const [rejecting, setRejecting] = useState(false);
   const [showRej, setShowRej] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const sm = STATUS[booking.status] ?? STATUS.pending;
   const canCancel = (booking.user.id === userId) && ['pending','approved'].includes(booking.status) && new Date(booking.startTime) > new Date();
@@ -91,6 +97,12 @@ function BookingPopup({ booking, isAdmin, userId, onClose, onRefresh }: {
     setRejecting(true);
     try { await api.put(`/room/bookings/${booking.id}/reject`, { note: rejNote }); onRefresh(); onClose(); }
     catch { setRejecting(false); }
+  };
+  const handleDelete = async () => {
+    if (!confirm('ลบการจองนี้ออกจากระบบ? ไม่สามารถย้อนกลับได้')) return;
+    setDeleting(true);
+    try { await api.delete(`/room/bookings/${booking.id}`); onRefresh(); onClose(); }
+    catch { setDeleting(false); }
   };
 
   return (
@@ -143,6 +155,13 @@ function BookingPopup({ booking, isAdmin, userId, onClose, onRefresh }: {
           {canCancel && (
             <button onClick={handleCancel} disabled={cancelling} className="btn-secondary text-sm flex items-center gap-1.5">
               {cancelling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />} ยกเลิกการจอง
+            </button>
+          )}
+          {isAdmin && ['rejected', 'cancelled'].includes(booking.status) && (
+            <button onClick={handleDelete} disabled={deleting}
+              className="text-sm px-3 py-1.5 rounded-xl flex items-center gap-1.5 ml-auto"
+              style={{ backgroundColor: '#fff0f0', color: '#dc2626', border: '1px solid #fecaca' }}>
+              {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />} ลบ
             </button>
           )}
         </div>
@@ -626,7 +645,16 @@ export default function RoomPage() {
             <button onClick={loadReport} className="btn-primary text-sm py-1.5">ค้นหา</button>
           </div>
 
-          {reportData && (
+          {reportData && (() => {
+            const sb = reportData.statusBreakdown;
+            const pieData = sb ? [
+              { name: 'อนุมัติ',   value: (sb.approved ?? 0) + (sb.completed ?? 0), color: '#10b981' },
+              { name: 'รออนุมัติ', value: sb.pending   ?? 0, color: '#f59e0b' },
+              { name: 'ปฏิเสธ',   value: sb.rejected  ?? 0, color: '#ef4444' },
+              { name: 'ยกเลิก',   value: sb.cancelled ?? 0, color: '#94a3b8' },
+            ].filter(d => d.value > 0) : [];
+            const barData = [...reportData.rooms].sort((a,b) => b.hours - a.hours).map(r => ({ name: r.name.replace('ห้อง','').replace('ห้องประชุม','').trim(), hours: r.hours, bookings: r.bookings }));
+            return (
             <>
               {/* KPI */}
               <div className="grid grid-cols-3 gap-3">
@@ -642,17 +670,65 @@ export default function RoomPage() {
                 ))}
               </div>
 
-              {/* Room usage list */}
-              <div className="bg-white rounded-xl p-4" style={{ border: '1px solid #dce6f9' }}>
-                <p className="text-sm font-semibold mb-3" style={{ color: '#1a2744' }}>การใช้งานห้องประชุม (ชั่วโมง)</p>
-                <div className="space-y-1.5">
-                  {[...reportData.rooms].sort((a, b) => b.hours - a.hours).map((r, i) => (
-                    <div key={r.id} className="flex items-center gap-3 px-3 py-2 rounded-lg" style={{ backgroundColor: '#f5f8ff' }}>
-                      <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
-                      <span className="text-xs flex-1 truncate" style={{ color: '#1a2744' }}>{r.name}</span>
-                      <span className="text-xs font-semibold flex-shrink-0" style={{ color: '#4a6080' }}>{r.hours} ชม.</span>
+              {/* Charts row */}
+              <div className="grid grid-cols-1 gap-3">
+                {/* Bar chart - ชั่วโมงการใช้งาน */}
+                <div className="bg-white rounded-xl p-4" style={{ border: '1px solid #dce6f9' }}>
+                  <p className="text-sm font-semibold mb-3" style={{ color: '#1a2744' }}>ชั่วโมงการใช้งานแต่ละห้อง</p>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={barData} margin={{ top: 4, right: 8, left: -16, bottom: 40 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f4ff" />
+                      <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} angle={-35} textAnchor="end" interval={0} />
+                      <YAxis tick={{ fontSize: 11, fill: '#64748b' }} unit=" ชม." />
+                      <Tooltip
+                        contentStyle={{ borderRadius: 10, border: '1px solid #dce6f9', fontSize: 12 }}
+                        formatter={(v: number) => [`${v} ชม.`, 'ชั่วโมง']}
+                      />
+                      <Bar dataKey="hours" radius={[6,6,0,0]}>
+                        {barData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Pie chart + utilization bars */}
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Pie - สถานะการจอง */}
+                  {pieData.length > 0 && (
+                    <div className="bg-white rounded-xl p-4" style={{ border: '1px solid #dce6f9' }}>
+                      <p className="text-sm font-semibold mb-2" style={{ color: '#1a2744' }}>สถานะการจอง</p>
+                      <ResponsiveContainer width="100%" height={180}>
+                        <PieChart>
+                          <Pie data={pieData} cx="50%" cy="45%" innerRadius={45} outerRadius={68} paddingAngle={3} dataKey="value">
+                            {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                          </Pie>
+                          <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid #dce6f9', fontSize: 12 }} formatter={(v: number, _n, p) => [v, p.payload.name]} />
+                          <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+                        </PieChart>
+                      </ResponsiveContainer>
                     </div>
-                  ))}
+                  )}
+
+                  {/* Utilization bars */}
+                  <div className="bg-white rounded-xl p-4" style={{ border: '1px solid #dce6f9' }}>
+                    <p className="text-sm font-semibold mb-3" style={{ color: '#1a2744' }}>% การใช้งาน</p>
+                    <div className="space-y-2.5">
+                      {[...reportData.rooms].sort((a,b) => b.utilization - a.utilization).map((r, i) => (
+                        <div key={r.id}>
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="truncate max-w-[120px]" style={{ color: '#1a2744' }}>{r.name.replace('ห้อง','').replace('ห้องประชุม','').trim()}</span>
+                            <span className="font-semibold" style={{ color: r.utilization >= 80 ? '#0d9068' : r.utilization >= 50 ? '#b45309' : '#1d6ae5' }}>{r.utilization}%</span>
+                          </div>
+                          <div className="w-full rounded-full h-2" style={{ backgroundColor: '#f0f4ff' }}>
+                            <div className="h-2 rounded-full transition-all" style={{
+                              width: `${r.utilization}%`,
+                              backgroundColor: CHART_COLORS[i % CHART_COLORS.length],
+                            }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -688,7 +764,7 @@ export default function RoomPage() {
                 </table>
               </div>
             </>
-          )}
+          );})()}
         </div>
       )}
 
