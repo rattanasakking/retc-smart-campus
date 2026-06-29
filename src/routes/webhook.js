@@ -84,24 +84,16 @@ router.post('/line', async (req, res) => {
   // ต้อง return 200 เสมอ ไม่งั้น LINE จะหยุดส่ง event
   res.status(200).json({ success: true });
 
-  const secret = await getChannelSecret();
-  if (secret) {
-    if (!signature || !rawBody || !verifyLineSignature(rawBody, signature, secret)) {
-      console.warn('[Webhook] invalid LINE signature — skipping event processing');
-      return; // return 200 แล้ว แต่ไม่ process
-    }
-  } else {
-    console.warn('[Webhook] line_messaging_secret not set — skipping signature verification');
-  }
-
   const events = req.body?.events ?? [];
-  console.log(`[Webhook] received ${events.length} event(s):`, events.map(e => e.type));
+  const secret = await getChannelSecret();
+  const sigOk  = !secret || verifyLineSignature(rawBody ?? '', signature ?? '', secret);
 
-  // บันทึก event ล่าสุดลง DB เพื่อใช้ debug
+  // บันทึก event ทุกครั้งก่อน check signature เพื่อ debug
   if (events.length > 0) {
     const logData = JSON.stringify({
       receivedAt: new Date().toISOString(),
-      signatureOk: !secret || verifyLineSignature(rawBody ?? '', signature ?? '', secret),
+      signatureOk: sigOk,
+      secretConfigured: !!secret,
       events: events.map(e => ({
         type: e.type,
         userId: e.source?.userId,
@@ -113,6 +105,12 @@ router.post('/line', async (req, res) => {
       update: { value: logData },
       create: { key: '_webhook_last_event', value: logData },
     }).catch(() => {});
+    console.log(`[Webhook] received ${events.length} event(s), sigOk=${sigOk}`);
+  }
+
+  if (!sigOk) {
+    console.warn('[Webhook] invalid LINE signature — skipping event processing');
+    return;
   }
 
   for (const event of events) {
