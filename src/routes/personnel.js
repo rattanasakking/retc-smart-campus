@@ -43,17 +43,23 @@ function saveAvatarBase64(base64) {
   return `/uploads/avatars/${name}`;
 }
 
-function requireSuperAdmin(req, res, next) {
-  if (!req.user.isSuperAdmin && req.user.role !== 'admin') {
-    return res.status(403).json(error('เฉพาะผู้ดูแลระบบเท่านั้น'));
-  }
-  next();
+async function hasPersonnelPermission(userId) {
+  const perm = await prisma.modulePermission.findFirst({
+    where: { userId, module: 'PERSONNEL' },
+  });
+  return !!perm;
 }
 
-function requireApprover(req, res, next) {
-  const ok = ['admin', 'executive'].includes(req.user.role) || req.user.isSuperAdmin;
-  if (!ok) return res.status(403).json(error('ไม่มีสิทธิ์อนุมัติ'));
-  next();
+async function requireSuperAdmin(req, res, next) {
+  if (req.user.isSuperAdmin || req.user.role === 'admin') return next();
+  if (await hasPersonnelPermission(req.user.id)) return next();
+  return res.status(403).json(error('เฉพาะผู้ดูแลระบบหรือผู้มีสิทธิ์โมดูลบุคลากรเท่านั้น'));
+}
+
+async function requireApprover(req, res, next) {
+  if (['admin', 'executive'].includes(req.user.role) || req.user.isSuperAdmin) return next();
+  if (await hasPersonnelPermission(req.user.id)) return next();
+  return res.status(403).json(error('ไม่มีสิทธิ์อนุมัติ'));
 }
 
 /** นับวันทำงาน (ไม่รวมเสาร์-อาทิตย์) */
@@ -164,7 +170,8 @@ router.delete('/types/:id', auth, requireSuperAdmin, async (req, res) => {
 
 router.get('/leave-types', auth, async (req, res) => {
   try {
-    const showAll = req.query.all === 'true' && (req.user.isSuperAdmin || req.user.role === 'admin');
+    const hasPermission = req.user.isSuperAdmin || req.user.role === 'admin' || await hasPersonnelPermission(req.user.id);
+    const showAll = req.query.all === 'true' && hasPermission;
     const types = await prisma.leaveType.findMany({
       where: showAll ? {} : { isActive: true },
       orderBy: { id: 'asc' },
@@ -298,7 +305,7 @@ router.get('/leaves', auth, async (req, res) => {
     const page  = Math.max(1, parseInt(req.query.page  || '1',  10));
     const limit = Math.min(50, parseInt(req.query.limit || '20', 10));
     const skip  = (page - 1) * limit;
-    const isApprover = req.user.isSuperAdmin || req.user.role === 'admin' || req.user.role === 'executive';
+    const isApprover = req.user.isSuperAdmin || ['admin', 'executive'].includes(req.user.role) || await hasPersonnelPermission(req.user.id);
     const targetUserId = req.query.userId && isApprover ? parseInt(req.query.userId) : req.user.id;
     const where = {
       userId: targetUserId,
@@ -370,8 +377,10 @@ router.get('/leaves/:id', auth, async (req, res) => {
     const id = parseInt(req.params.id);
     const request = await prisma.leaveRequest.findUnique({ where: { id }, include: LEAVE_INCLUDE });
     if (!request) return res.status(404).json(error('ไม่พบคำขอลา'));
-    if (request.userId !== req.user.id && !['admin', 'executive'].includes(req.user.role) && !req.user.isSuperAdmin)
-      return res.status(403).json(error('ไม่มีสิทธิ์เข้าถึง'));
+    const canView = request.userId === req.user.id || req.user.isSuperAdmin
+      || ['admin', 'executive'].includes(req.user.role)
+      || await hasPersonnelPermission(req.user.id);
+    if (!canView) return res.status(403).json(error('ไม่มีสิทธิ์เข้าถึง'));
     res.json(success(request));
   } catch (e) { res.status(500).json(error('เกิดข้อผิดพลาด')); }
 });
