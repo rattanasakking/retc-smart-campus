@@ -422,10 +422,163 @@ async function sendRoomBookingStatusFlex(lineUserId, booking, status, note) {
   return pushMessage(lineUserId, [flex]);
 }
 
+// ─── WorkLog Flex messages ─────────────────────────────────────────────────────
+
+function buildWorkLogImageUrl(imagePath) {
+  if (!imagePath) return null;
+  if (imagePath.startsWith('http')) return imagePath;
+  const base = (process.env.FRONTEND_URL ?? 'https://app.retc.ac.th').replace(/\/$/, '');
+  return `${base}${imagePath}`;
+}
+
+const WL_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+function wlDateStr(logDate) {
+  const d = new Date(logDate);
+  return `${d.getDate()} ${WL_MONTHS[d.getMonth()]} ${d.getFullYear() + 543}`;
+}
+
+/** ส่ง Flex พร้อมปุ่ม อนุมัติ/ปฏิเสธ/ส่งคืน ให้หัวหน้างาน เมื่อ user ส่งบันทึกปฏิบัติงาน */
+async function sendWorkLogFlex(supervisorLineId, log) {
+  if (!await isModuleNotifyEnabled('WORKLOG')) return null;
+  const base = (process.env.FRONTEND_URL ?? 'https://app.retc.ac.th').replace(/\/$/, '');
+  const { id, title, detail, logDate, workType, user } = log;
+
+  let attachments = [];
+  try { attachments = typeof log.attachments === 'string' ? JSON.parse(log.attachments) : (log.attachments ?? []); } catch { /* */ }
+  const firstImage = attachments.length > 0 ? buildWorkLogImageUrl(attachments[0]) : null;
+
+  const flex = {
+    type: 'flex',
+    altText: `${user?.name ?? 'บุคลากร'} ส่งบันทึกปฏิบัติงาน: ${title}`,
+    contents: {
+      type: 'bubble', size: 'kilo',
+      ...(firstImage ? { hero: { type: 'image', url: firstImage, size: 'full', aspectRatio: '20:9', aspectMode: 'cover' } } : {}),
+      header: {
+        type: 'box', layout: 'vertical',
+        backgroundColor: '#E65100', paddingAll: '16px',
+        contents: [
+          { type: 'text', text: '📋 บันทึกปฏิบัติงาน', color: '#ffffff', size: 'md', weight: 'bold' },
+          { type: 'text', text: 'รอการอนุมัติจากหัวหน้างาน', color: '#FFCCBC', size: 'sm' },
+        ],
+      },
+      body: {
+        type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '16px',
+        contents: [
+          { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+            { type: 'text', text: 'ผู้บันทึก', color: '#888888', size: 'sm', flex: 2 },
+            { type: 'text', text: user?.name ?? '-', color: '#111111', size: 'sm', flex: 4, wrap: true, weight: 'bold' },
+          ]},
+          { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+            { type: 'text', text: 'วันที่', color: '#888888', size: 'sm', flex: 2 },
+            { type: 'text', text: wlDateStr(logDate), color: '#111111', size: 'sm', flex: 4 },
+          ]},
+          { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+            { type: 'text', text: 'ประเภทงาน', color: '#888888', size: 'sm', flex: 2 },
+            { type: 'text', text: workType?.name ?? '-', color: '#E65100', size: 'sm', flex: 4, weight: 'bold' },
+          ]},
+          { type: 'separator' },
+          { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+            { type: 'text', text: 'หัวข้อ', color: '#888888', size: 'sm', flex: 2 },
+            { type: 'text', text: title, color: '#111111', size: 'sm', flex: 4, wrap: true },
+          ]},
+          ...(detail ? [{ type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+            { type: 'text', text: 'รายละเอียด', color: '#888888', size: 'sm', flex: 2 },
+            { type: 'text', text: detail.length > 80 ? detail.slice(0, 80) + '…' : detail, color: '#333333', size: 'sm', flex: 4, wrap: true },
+          ]}] : []),
+          ...(attachments.length > 0 ? [{ type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+            { type: 'text', text: 'รูปภาพ', color: '#888888', size: 'sm', flex: 2 },
+            { type: 'text', text: `${attachments.length} รูป`, color: '#1565C0', size: 'sm', flex: 4 },
+          ]}] : []),
+        ],
+      },
+      footer: {
+        type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '12px',
+        contents: [
+          { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+            { type: 'button', style: 'primary', color: '#2E7D32', height: 'sm', flex: 1,
+              action: { type: 'postback', label: '✅ อนุมัติ', data: `action=worklog_approve&logId=${id}` } },
+            { type: 'button', style: 'primary', color: '#C62828', height: 'sm', flex: 1,
+              action: { type: 'postback', label: '❌ ปฏิเสธ', data: `action=worklog_reject&logId=${id}` } },
+          ]},
+          { type: 'button', style: 'secondary', height: 'sm',
+            action: { type: 'postback', label: '🔄 ส่งคืนเพื่อแก้ไข', data: `action=worklog_return&logId=${id}` } },
+          { type: 'button', style: 'link', height: 'sm',
+            action: { type: 'uri', label: '🔗 ดูรายละเอียด', uri: `${base}/worklog/${id}` } },
+        ],
+      },
+    },
+  };
+  return pushMessage(supervisorLineId, [flex]);
+}
+
+/** แจ้งผู้บันทึกเมื่อหัวหน้าเปลี่ยนสถานะ */
+async function sendWorkLogStatusFlex(userLineId, log, status, comment, approverName) {
+  if (!await isModuleNotifyEnabled('WORKLOG')) return null;
+  const base = (process.env.FRONTEND_URL ?? 'https://app.retc.ac.th').replace(/\/$/, '');
+  const { id, title, logDate, workType } = log;
+
+  const configs = {
+    approved: { color: '#1B5E20', labelColor: '#A5D6A7', text: '✅ บันทึกปฏิบัติงานได้รับอนุมัติ', sub: 'อนุมัติแล้ว' },
+    rejected: { color: '#B71C1C', labelColor: '#FFCDD2', text: '❌ บันทึกปฏิบัติงานถูกปฏิเสธ', sub: 'ปฏิเสธแล้ว' },
+    returned: { color: '#E65100', labelColor: '#FFE0B2', text: '🔄 บันทึกปฏิบัติงานถูกส่งคืน', sub: 'ส่งคืนเพื่อแก้ไข' },
+  };
+  const cfg = configs[status] ?? configs.returned;
+
+  const flex = {
+    type: 'flex',
+    altText: cfg.text,
+    contents: {
+      type: 'bubble', size: 'kilo',
+      header: {
+        type: 'box', layout: 'vertical',
+        backgroundColor: cfg.color, paddingAll: '16px',
+        contents: [
+          { type: 'text', text: cfg.text, color: '#ffffff', size: 'md', weight: 'bold' },
+          { type: 'text', text: cfg.sub, color: cfg.labelColor, size: 'sm' },
+        ],
+      },
+      body: {
+        type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '16px',
+        contents: [
+          { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+            { type: 'text', text: 'หัวข้อ', color: '#888888', size: 'sm', flex: 2 },
+            { type: 'text', text: title, color: '#111111', size: 'sm', flex: 4, wrap: true, weight: 'bold' },
+          ]},
+          { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+            { type: 'text', text: 'วันที่', color: '#888888', size: 'sm', flex: 2 },
+            { type: 'text', text: wlDateStr(logDate), color: '#111111', size: 'sm', flex: 4 },
+          ]},
+          { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+            { type: 'text', text: 'ประเภทงาน', color: '#888888', size: 'sm', flex: 2 },
+            { type: 'text', text: workType?.name ?? '-', color: '#111111', size: 'sm', flex: 4 },
+          ]},
+          ...(approverName ? [{ type: 'separator' }, { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+            { type: 'text', text: 'โดย', color: '#888888', size: 'sm', flex: 2 },
+            { type: 'text', text: approverName, color: '#111111', size: 'sm', flex: 4, wrap: true },
+          ]}] : []),
+          ...(comment ? [{ type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+            { type: 'text', text: 'ความเห็น', color: '#888888', size: 'sm', flex: 2 },
+            { type: 'text', text: comment, color: cfg.color, size: 'sm', flex: 4, wrap: true },
+          ]}] : []),
+        ],
+      },
+      footer: {
+        type: 'box', layout: 'vertical', paddingAll: '12px',
+        contents: [
+          { type: 'button', style: 'link', height: 'sm',
+            action: { type: 'uri', label: '🔗 ดูรายละเอียด', uri: `${base}/worklog/${id}` } },
+        ],
+      },
+    },
+  };
+  return pushMessage(userLineId, [flex]);
+}
+
 module.exports = {
   sendLineNotify, notify, notifyRepairTicket, notifyLostFound, notifyRoomBooking,
   sendLeaveRequestFlex, sendLeaveStatusNotify,
   sendRoomBookingRequestFlex, sendRoomBookingStatusFlex,
+  sendWorkLogFlex, sendWorkLogStatusFlex,
   pushMessage,
   formatThaiDate, formatDateTime,
   isModuleNotifyEnabled,

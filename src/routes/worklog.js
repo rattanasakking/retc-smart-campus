@@ -4,12 +4,26 @@ const fs      = require('fs');
 const { PrismaClient } = require('@prisma/client');
 const auth = require('../middleware/auth');
 const { success, error } = require('../utils/response');
-const { notify } = require('../services/line');
+const { notify, sendWorkLogFlex, sendWorkLogStatusFlex, pushMessage } = require('../services/line');
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** หาหัวหน้างาน (head ของ workUnit) ของ user */
+async function getSupervisor(userId) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { workUnitId: true },
+  });
+  if (!user?.workUnitId) return null;
+  const unit = await prisma.workUnit.findUnique({
+    where: { id: user.workUnitId },
+    include: { head: { select: { id: true, name: true, lineUserId: true, isActive: true } } },
+  });
+  return unit?.head?.isActive ? unit.head : null;
+}
 
 const intId = (s) => parseInt(s, 10);
 
@@ -505,7 +519,11 @@ router.post('/:id/submit', auth, async (req, res, next) => {
     const updated = await prisma.workLog.update({
       where: { id: intId(req.params.id) }, data: { status: 'submitted' },
     });
-    await notifyWorkLog({ ...log, id: intId(req.params.id) }, 'submit');
+    // ส่งแจ้งเตือนไปยังหัวหน้างานผ่าน LINE Flex (พร้อมปุ่มอนุมัติ/ปฏิเสธ/ส่งคืน)
+    const supervisor = await getSupervisor(req.user.id);
+    if (supervisor?.lineUserId) {
+      sendWorkLogFlex(supervisor.lineUserId, { ...log, id: intId(req.params.id) }).catch(() => {});
+    }
     res.json(success(updated, 'ส่งขออนุมัติสำเร็จ'));
   } catch (e) { next(e); }
 });
@@ -515,7 +533,10 @@ router.put('/:id/approve', auth, async (req, res, next) => {
   try {
     if (!canApprove(req.user)) return res.status(403).json(error('ต้องการสิทธิ์อนุมัติ'));
     const { comment } = req.body;
-    const log = await prisma.workLog.findUnique({ where: { id: intId(req.params.id) } });
+    const log = await prisma.workLog.findUnique({
+      where: { id: intId(req.params.id) },
+      include: { user: { select: { lineUserId: true } }, workType: { select: { name: true } } },
+    });
     if (!log) return res.status(404).json(error('ไม่พบบันทึก'));
     if (log.status !== 'submitted') return res.status(400).json(error('อนุมัติได้เฉพาะ รออนุมัติ'));
     await prisma.$transaction([
@@ -524,8 +545,34 @@ router.put('/:id/approve', auth, async (req, res, next) => {
         data: { logId: intId(req.params.id), approverId: req.user.id, status: 'approved', comment: comment || null },
       }),
     ]);
-    await notifyWorkLog(log, 'approve', req.user.name, comment);
+    if (log.user?.lineUserId) {
+      sendWorkLogStatusFlex(log.user.lineUserId, log, 'approved', comment || null, req.user.name).catch(() => {});
+    }
     res.json(success(null, 'อนุมัติสำเร็จ'));
+  } catch (e) { next(e); }
+});
+
+// PUT /api/worklog/:id/reject
+router.put('/:id/reject', auth, async (req, res, next) => {
+  try {
+    if (!canApprove(req.user)) return res.status(403).json(error('ต้องการสิทธิ์อนุมัติ'));
+    const { comment } = req.body;
+    const log = await prisma.workLog.findUnique({
+      where: { id: intId(req.params.id) },
+      include: { user: { select: { lineUserId: true } }, workType: { select: { name: true } } },
+    });
+    if (!log) return res.status(404).json(error('ไม่พบบันทึก'));
+    if (log.status !== 'submitted') return res.status(400).json(error('ปฏิเสธได้เฉพาะ รออนุมัติ'));
+    await prisma.$transaction([
+      prisma.workLog.update({ where: { id: intId(req.params.id) }, data: { status: 'rejected' } }),
+      prisma.workLogApproval.create({
+        data: { logId: intId(req.params.id), approverId: req.user.id, status: 'rejected', comment: comment || null },
+      }),
+    ]);
+    if (log.user?.lineUserId) {
+      sendWorkLogStatusFlex(log.user.lineUserId, log, 'rejected', comment || null, req.user.name).catch(() => {});
+    }
+    res.json(success(null, 'ปฏิเสธสำเร็จ'));
   } catch (e) { next(e); }
 });
 
@@ -535,7 +582,10 @@ router.put('/:id/return', auth, async (req, res, next) => {
     if (!canApprove(req.user)) return res.status(403).json(error('ต้องการสิทธิ์อนุมัติ'));
     const { comment } = req.body;
     if (!comment?.trim()) return res.status(400).json(error('กรุณาระบุเหตุผลการส่งคืน'));
-    const log = await prisma.workLog.findUnique({ where: { id: intId(req.params.id) } });
+    const log = await prisma.workLog.findUnique({
+      where: { id: intId(req.params.id) },
+      include: { user: { select: { lineUserId: true } }, workType: { select: { name: true } } },
+    });
     if (!log) return res.status(404).json(error('ไม่พบบันทึก'));
     if (log.status !== 'submitted') return res.status(400).json(error('ส่งคืนได้เฉพาะ รออนุมัติ'));
     await prisma.$transaction([
@@ -544,7 +594,9 @@ router.put('/:id/return', auth, async (req, res, next) => {
         data: { logId: intId(req.params.id), approverId: req.user.id, status: 'returned', comment: comment.trim() },
       }),
     ]);
-    await notifyWorkLog(log, 'return', req.user.name, comment);
+    if (log.user?.lineUserId) {
+      sendWorkLogStatusFlex(log.user.lineUserId, log, 'returned', comment.trim(), req.user.name).catch(() => {});
+    }
     res.json(success(null, 'ส่งคืนสำเร็จ'));
   } catch (e) { next(e); }
 });

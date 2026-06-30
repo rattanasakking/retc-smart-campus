@@ -1,7 +1,7 @@
 const express  = require('express');
 const crypto   = require('crypto');
 const { PrismaClient } = require('@prisma/client');
-const { sendLeaveStatusNotify, sendLeaveRequestFlex, sendRoomBookingStatusFlex, pushMessage } = require('../services/line');
+const { sendLeaveStatusNotify, sendLeaveRequestFlex, sendRoomBookingStatusFlex, sendWorkLogStatusFlex, pushMessage } = require('../services/line');
 const { sendRoomBookingApprovedEmail, sendRoomBookingRejectedEmail } = require('../services/email');
 
 const router = express.Router();
@@ -190,6 +190,70 @@ async function handlePostback(event) {
     if (bookerEmail) {
       const emailFn = newStatus === 'approved' ? sendRoomBookingApprovedEmail : sendRoomBookingRejectedEmail;
       emailFn({ to: bookerEmail, booking }).catch(() => {});
+    }
+    return;
+  }
+
+  // ─── WorkLog approve / reject / return ─────────────────────────────────────
+  if (action === 'worklog_approve' || action === 'worklog_reject' || action === 'worklog_return') {
+    const logId = parseInt(params.get('logId') ?? '0', 10);
+    if (!logId) return;
+
+    const approver = await prisma.user.findFirst({ where: { lineUserId, isActive: true } });
+    if (!approver) {
+      pushMessage(lineUserId, [{ type: 'text', text: '❌ ไม่พบบัญชีผู้ใช้ในระบบ กรุณาเชื่อมต่อ LINE กับบัญชีของคุณก่อน' }]).catch(() => {});
+      return;
+    }
+
+    const log = await prisma.workLog.findUnique({
+      where: { id: logId },
+      include: {
+        user: { select: { id: true, name: true, lineUserId: true, workUnitId: true } },
+        workType: { select: { name: true } },
+      },
+    });
+    if (!log) {
+      pushMessage(lineUserId, [{ type: 'text', text: '❌ ไม่พบบันทึกปฏิบัติงาน' }]).catch(() => {});
+      return;
+    }
+
+    // ตรวจสิทธิ์: ต้องเป็นหัวหน้างานของผู้บันทึก หรือ admin/superAdmin
+    let canAct = approver.isSuperAdmin || ['admin', 'executive'].includes(approver.role);
+    if (!canAct && log.user?.workUnitId) {
+      const unit = await prisma.workUnit.findUnique({
+        where: { id: log.user.workUnitId },
+        select: { headId: true },
+      });
+      canAct = unit?.headId === approver.id;
+    }
+    if (!canAct) {
+      pushMessage(lineUserId, [{ type: 'text', text: '❌ คุณไม่มีสิทธิ์อนุมัติบันทึกปฏิบัติงานนี้' }]).catch(() => {});
+      return;
+    }
+
+    if (log.status !== 'submitted') {
+      const statusTh = { approved: 'อนุมัติแล้ว', rejected: 'ปฏิเสธแล้ว', returned: 'ส่งคืนแล้ว', draft: 'ยังเป็นร่าง' }[log.status] ?? log.status;
+      pushMessage(lineUserId, [{ type: 'text', text: `ℹ️ บันทึกนี้${statusTh} ไม่สามารถดำเนินการซ้ำได้` }]).catch(() => {});
+      return;
+    }
+
+    const newStatus = action === 'worklog_approve' ? 'approved' : action === 'worklog_reject' ? 'rejected' : 'returned';
+    const defaultComment = action === 'worklog_return' ? 'กรุณาแก้ไขและส่งใหม่' : null;
+
+    await prisma.$transaction([
+      prisma.workLog.update({ where: { id: logId }, data: { status: newStatus } }),
+      prisma.workLogApproval.create({
+        data: { logId, approverId: approver.id, status: newStatus, comment: defaultComment },
+      }),
+    ]);
+
+    // แจ้ง approver ว่าดำเนินการสำเร็จ
+    const actionTh = newStatus === 'approved' ? '✅ อนุมัติสำเร็จ' : newStatus === 'rejected' ? '❌ ปฏิเสธสำเร็จ' : '🔄 ส่งคืนสำเร็จ';
+    pushMessage(lineUserId, [{ type: 'text', text: `${actionTh}\n📝 ${log.title}\n👤 ${log.user?.name ?? '-'}` }]).catch(() => {});
+
+    // แจ้ง user
+    if (log.user?.lineUserId) {
+      sendWorkLogStatusFlex(log.user.lineUserId, log, newStatus, defaultComment, approver.name).catch(() => {});
     }
     return;
   }
