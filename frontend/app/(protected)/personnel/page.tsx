@@ -148,11 +148,25 @@ export default function PersonnelPage() {
   const totalPages = Math.ceil(total / LIMIT);
 
   useEffect(() => {
-    const u = localStorage.getItem(USER_KEY);
-    if (u) {
-      const parsed = JSON.parse(u);
-      setIsAdmin(parsed.isSuperAdmin || parsed.role === 'admin');
+    // อ่านจาก localStorage ก่อนเพื่อ render ทันที
+    const raw = localStorage.getItem(USER_KEY);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        setIsAdmin(parsed.isSuperAdmin || parsed.role === 'admin'
+          || (parsed.modulePermissions ?? []).includes('PERSONNEL'));
+      } catch { /* */ }
     }
+    // fetch ใหม่เพื่อให้ modulePermissions ถูกต้องเสมอ
+    api.get<{ data: { isSuperAdmin: boolean; role: string; modulePermissions?: string[] } }>('/auth/me')
+      .then((res) => {
+        const u = res.data;
+        setIsAdmin(u.isSuperAdmin || u.role === 'admin' || (u.modulePermissions ?? []).includes('PERSONNEL'));
+        if (raw) {
+          try { localStorage.setItem(USER_KEY, JSON.stringify({ ...JSON.parse(raw), modulePermissions: u.modulePermissions ?? [] })); }
+          catch { /* */ }
+        }
+      }).catch(() => { /* ถ้า fetch ไม่ได้ ใช้ค่าจาก localStorage แทน */ });
   }, []);
 
   const load = useCallback(async () => {
