@@ -22,7 +22,7 @@ interface WorkLog {
   status:     string;
   workType:   WorkType | null;
   approvals:  { approver: { name: string } }[];
-  user?:      { id: number; name: string; department?: string };
+  user?:      { id?: number; name: string; department?: string };
 }
 
 interface PendingLog extends WorkLog {
