@@ -509,6 +509,8 @@ router.delete('/:id', auth, async (req, res, next) => {
     if (!isOwner && !isAdmin) return res.status(403).json(error('ไม่มีสิทธิ์'));
     // admin ลบได้ทุก status; เจ้าของลบได้เฉพาะที่ยังไม่อนุมัติ
     if (!isAdmin && log.status === 'approved') return res.status(400).json(error('ไม่สามารถลบบันทึกที่อนุมัติแล้ว'));
+    // ต้องลบ approvals ก่อน (FK constraint)
+    await prisma.workLogApproval.deleteMany({ where: { logId: intId(req.params.id) } });
     await prisma.workLog.delete({ where: { id: intId(req.params.id) } });
     res.json(success(null, 'ลบสำเร็จ'));
   } catch (e) { next(e); }

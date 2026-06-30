@@ -295,7 +295,8 @@ export default function WorkLogForm({ initial, onSave, onCancel, saving, isEdit 
   );
   const [photoLoading, setPhotoLoading] = useState(false);
   const [gpsFromPhoto, setGpsFromPhoto] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const fileRef    = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api.get<{ data: WorkType[] }>('/worklog/types').then((r) => setTypes(r.data)).catch(() => {});
@@ -427,17 +428,30 @@ export default function WorkLogForm({ initial, onSave, onCancel, saving, isEdit 
             </span>
           </div>
           {photos.length < 5 && !photoLoading && (
-            <button type="button" onClick={() => fileRef.current?.click()}
-              className="flex items-center gap-1 text-xs font-medium"
-              style={{ color: '#1d6ae5' }}>
-              <Plus className="w-3.5 h-3.5" /> เพิ่มรูป
-            </button>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => fileRef.current?.click()}
+                className="flex items-center gap-1 text-xs font-medium"
+                style={{ color: '#1d6ae5' }}>
+                <Camera className="w-3.5 h-3.5" /> ถ่ายรูป
+              </button>
+              <span style={{ color: '#dce6f9' }}>|</span>
+              <button type="button" onClick={() => galleryRef.current?.click()}
+                className="flex items-center gap-1 text-xs font-medium"
+                style={{ color: '#1d6ae5' }}>
+                <ImageIcon className="w-3.5 h-3.5" /> อัลบั้ม
+              </button>
+            </div>
           )}
         </div>
 
+        {/* input สำหรับถ่ายรูป (capture=environment) */}
         <input ref={fileRef} type="file" accept="image/*" capture="environment"
           multiple className="hidden"
-          onChange={(e) => handleFiles(e.target.files)} />
+          onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
+        {/* input สำหรับเลือกจาก gallery (ไม่มี capture) */}
+        <input ref={galleryRef} type="file" accept="image/*"
+          multiple className="hidden"
+          onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
 
         {/* Photo grid */}
         {photos.length > 0 && (
@@ -468,13 +482,23 @@ export default function WorkLogForm({ initial, onSave, onCancel, saving, isEdit 
 
         {/* Empty state */}
         {photos.length === 0 && !photoLoading && (
-          <button type="button" onClick={() => fileRef.current?.click()}
-            className="w-full flex flex-col items-center gap-2 py-6 rounded-xl border-2 border-dashed transition-colors"
-            style={{ borderColor: '#dce6f9', color: '#94a3b8' }}>
-            <ImageIcon className="w-8 h-8" />
-            <span className="text-xs">แตะเพื่อถ่ายรูปหรืออัพโหลด</span>
-            <span className="text-[11px]">📍 GPS จะถูกบันทึกลงในรูปภาพอัตโนมัติ</span>
-          </button>
+          <div className="w-full flex flex-col items-center gap-3 py-6 rounded-xl border-2 border-dashed"
+            style={{ borderColor: '#dce6f9' }}>
+            <ImageIcon className="w-8 h-8" style={{ color: '#94a3b8' }} />
+            <p className="text-[11px]" style={{ color: '#94a3b8' }}>📍 GPS จะถูกบันทึกลงในรูปภาพอัตโนมัติ</p>
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={() => fileRef.current?.click()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
+                style={{ backgroundColor: '#e8f0fe', color: '#1d6ae5' }}>
+                <Camera className="w-3.5 h-3.5" /> ถ่ายรูป
+              </button>
+              <button type="button" onClick={() => galleryRef.current?.click()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
+                style={{ backgroundColor: '#f5f8ff', color: '#4a6080', border: '1px solid #dce6f9' }}>
+                <ImageIcon className="w-3.5 h-3.5" /> เลือกจากอัลบั้ม
+              </button>
+            </div>
+          </div>
         )}
 
         {/* GPS status badge */}
