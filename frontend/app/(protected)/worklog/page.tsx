@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ClipboardList, Plus, Check, AlertTriangle, Loader2,
-  Pencil, Trash2, Send, Eye, Settings, X,
+  Pencil, Trash2, Send, Eye, Settings, X, Search,
 } from 'lucide-react';
 import { api, USER_KEY } from '@/lib/api';
 import {
@@ -22,6 +22,7 @@ interface WorkLog {
   status:     string;
   workType:   WorkType | null;
   approvals:  { approver: { name: string } }[];
+  user?:      { id: number; name: string; department?: string };
 }
 
 interface PendingLog extends WorkLog {
@@ -323,6 +324,7 @@ export default function WorkLogPage() {
   const [isApprover, setApprover]   = useState(false);
   const [isAdmin, setAdmin]         = useState(false);
   const [chartData, setChartData]   = useState<{ month: number; total: number; approved: number }[]>([]);
+  const [nameSearch, setNameSearch] = useState('');
   const [deleting, setDeleting]     = useState<number | null>(null);
   const [submitting, setSubmitting] = useState<number | null>(null);
   const [toast, setToast]           = useState('');
@@ -349,6 +351,7 @@ export default function WorkLogPage() {
     try {
       const params = new URLSearchParams({ month, year });
       if (statusFilter) params.set('status', statusFilter);
+      if (isAdmin && nameSearch.trim()) params.set('search', nameSearch.trim());
       const res = await api.get<{ data: { logs: WorkLog[]; summary: Record<string, number> } }>(
         `/worklog?${params}`
       );
@@ -356,7 +359,7 @@ export default function WorkLogPage() {
       setSummary(res.data.summary);
     } catch { /* ignore */ }
     finally { setLoading(false); }
-  }, [month, year, statusFilter]);
+  }, [month, year, statusFilter, isAdmin, nameSearch]);
 
   const loadPending = useCallback(async () => {
     if (!isApprover) return;
@@ -379,8 +382,9 @@ export default function WorkLogPage() {
   useEffect(() => { loadPending(); }, [loadPending]);
   useEffect(() => { loadChart(); }, [loadChart]);
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('ยืนยันลบบันทึกนี้?')) return;
+  const handleDelete = async (id: number, ownerName?: string) => {
+    const who = ownerName ? ` ของ ${ownerName}` : '';
+    if (!confirm(`ยืนยันลบบันทึกนี้${who}?`)) return;
     setDeleting(id);
     try {
       await api.delete(`/worklog/${id}`);
@@ -520,6 +524,21 @@ export default function WorkLogPage() {
             </div>
           )}
 
+          {/* Admin: search by name */}
+          {isAdmin && (
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#94a3b8' }} />
+              <input
+                type="text"
+                value={nameSearch}
+                onChange={(e) => setNameSearch(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && loadLogs()}
+                placeholder="ค้นหาด้วยชื่อผู้บันทึก..."
+                className="input-field pl-9 w-full sm:w-72 text-sm"
+              />
+            </div>
+          )}
+
           {/* Status filter tabs */}
           <div className="flex gap-1 overflow-x-auto pb-1">
             {STATUS_TABS.map((s) => {
@@ -589,21 +608,32 @@ export default function WorkLogPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ borderBottom: '1px solid #f0f4ff', backgroundColor: '#f8faff' }}>
-                    {['วันที่', 'หัวข้อ / ประเภท', 'สถานะ', 'จัดการ'].map((h) => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: '#94a3b8' }}>{h}</th>
-                    ))}
+                    <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: '#94a3b8' }}>วันที่</th>
+                    {isAdmin && <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: '#94a3b8' }}>ผู้บันทึก</th>}
+                    <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: '#94a3b8' }}>หัวข้อ / ประเภท</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: '#94a3b8' }}>สถานะ</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: '#94a3b8' }}>จัดการ</th>
                   </tr>
                 </thead>
                 <tbody>
                   {logs.length === 0 ? (
-                    <tr><td colSpan={4} className="px-4 py-12 text-center text-sm" style={{ color: '#94a3b8' }}>ไม่มีบันทึกในเดือนนี้</td></tr>
+                    <tr><td colSpan={isAdmin ? 5 : 4} className="px-4 py-12 text-center text-sm" style={{ color: '#94a3b8' }}>
+                      {nameSearch ? `ไม่พบบันทึกของ "${nameSearch}"` : 'ไม่มีบันทึกในเดือนนี้'}
+                    </td></tr>
                   ) : logs.map((l) => {
                     const meta = STATUS_META[l.status] ?? STATUS_META.draft;
+                    const isOwn = !l.user || l.user.id === undefined;
                     return (
                       <tr key={l.id} style={{ borderBottom: '1px solid #f5f8ff' }} className="hover:bg-[#fafbff] transition-colors">
                         <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: '#4a6080' }}>
                           {fmtDate(l.logDate)}
                         </td>
+                        {isAdmin && (
+                          <td className="px-4 py-3">
+                            <p className="text-xs font-medium" style={{ color: '#1a2744' }}>{l.user?.name ?? '-'}</p>
+                            {l.user?.department && <p className="text-[11px]" style={{ color: '#94a3b8' }}>{l.user.department}</p>}
+                          </td>
+                        )}
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2 flex-wrap">
                             {l.workType && (
@@ -624,30 +654,27 @@ export default function WorkLogPage() {
                             <button onClick={() => router.push(`/worklog/${l.id}`)} className="p-1.5 rounded hover:bg-[#e8f0fe] transition-colors" title="ดูรายละเอียด">
                               <Eye className="w-3.5 h-3.5" style={{ color: '#1d6ae5' }} />
                             </button>
-                            {l.status !== 'approved' && (
+                            {/* เจ้าของ: แก้ไข + ส่ง + ลบ (เฉพาะที่ยังไม่อนุมัติ) */}
+                            {!isAdmin && l.status !== 'approved' && (
                               <>
                                 <button onClick={() => router.push(`/worklog/${l.id}/edit`)} className="p-1.5 rounded hover:bg-[#f3e8ff] transition-colors" title="แก้ไข">
                                   <Pencil className="w-3.5 h-3.5" style={{ color: '#7c3aed' }} />
                                 </button>
                                 {['draft', 'returned'].includes(l.status) && (
-                                  <button
-                                    onClick={() => handleSubmit(l.id)}
-                                    disabled={submitting === l.id}
-                                    className="p-1.5 rounded hover:bg-[#e6f9f0] transition-colors"
-                                    title="ส่งอนุมัติ"
-                                  >
+                                  <button onClick={() => handleSubmit(l.id)} disabled={submitting === l.id} className="p-1.5 rounded hover:bg-[#e6f9f0] transition-colors" title="ส่งอนุมัติ">
                                     {submitting === l.id ? <Loader2 className="w-3.5 h-3.5 animate-spin text-green-500" /> : <Send className="w-3.5 h-3.5" style={{ color: '#0d9068' }} />}
                                   </button>
                                 )}
-                                <button
-                                  onClick={() => handleDelete(l.id)}
-                                  disabled={deleting === l.id}
-                                  className="p-1.5 rounded hover:bg-red-50 transition-colors"
-                                  title="ลบ"
-                                >
+                                <button onClick={() => handleDelete(l.id)} disabled={deleting === l.id} className="p-1.5 rounded hover:bg-red-50 transition-colors" title="ลบ">
                                   {deleting === l.id ? <Loader2 className="w-3.5 h-3.5 animate-spin text-red-400" /> : <Trash2 className="w-3.5 h-3.5 text-red-400" />}
                                 </button>
                               </>
+                            )}
+                            {/* admin: ปุ่มลบทุก record */}
+                            {isAdmin && (
+                              <button onClick={() => handleDelete(l.id, l.user?.name)} disabled={deleting === l.id} className="p-1.5 rounded hover:bg-red-50 transition-colors" title="ลบ">
+                                {deleting === l.id ? <Loader2 className="w-3.5 h-3.5 animate-spin text-red-400" /> : <Trash2 className="w-3.5 h-3.5 text-red-400" />}
+                              </button>
                             )}
                           </div>
                         </td>

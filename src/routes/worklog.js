@@ -366,7 +366,7 @@ router.get('/monthly-chart', auth, async (req, res, next) => {
 // GET /api/worklog
 router.get('/', auth, async (req, res, next) => {
   try {
-    const { page = 1, limit = 20, month, year, status, userId: qUserId } = req.query;
+    const { page = 1, limit = 20, month, year, status, userId: qUserId, search } = req.query;
     const skip = (intId(page) - 1) * intId(limit);
 
     // ── Visibility ────────────────────────────────────────────────────────────
@@ -377,6 +377,15 @@ router.get('/', auth, async (req, res, next) => {
     const where = {};
     if (canSeeAll) {
       if (qUserId) where.userId = intId(qUserId);
+      if (search?.trim()) {
+        // ค้นหาจากชื่อผู้ใช้
+        const matchedUsers = await prisma.user.findMany({
+          where: { name: { contains: search.trim() } },
+          select: { id: true },
+        });
+        const ids = matchedUsers.map((u) => u.id);
+        where.userId = ids.length ? { in: ids } : -1; // -1 = no match
+      }
     } else if (isDeptHead) {
       const deptUsers = await prisma.user.findMany({
         where: { departmentId: req.user.departmentId, isActive: true },
@@ -498,7 +507,8 @@ router.delete('/:id', auth, async (req, res, next) => {
     const isOwner = log.userId === req.user.id;
     const isAdmin = req.user.isSuperAdmin || req.user.role === 'admin';
     if (!isOwner && !isAdmin) return res.status(403).json(error('ไม่มีสิทธิ์'));
-    if (log.status === 'approved') return res.status(400).json(error('ไม่สามารถลบบันทึกที่อนุมัติแล้ว'));
+    // admin ลบได้ทุก status; เจ้าของลบได้เฉพาะที่ยังไม่อนุมัติ
+    if (!isAdmin && log.status === 'approved') return res.status(400).json(error('ไม่สามารถลบบันทึกที่อนุมัติแล้ว'));
     await prisma.workLog.delete({ where: { id: intId(req.params.id) } });
     res.json(success(null, 'ลบสำเร็จ'));
   } catch (e) { next(e); }
