@@ -223,7 +223,7 @@ router.get('/my-pdf', auth, async (req, res, next) => {
     const m = month ? parseInt(month, 10) - 1   : new Date().getMonth();
     const where = {
       userId: req.user.id,
-      logDate: { gte: new Date(y, m, 1), lte: new Date(y, m + 1, 0) },
+      logDate: { gte: new Date(y, m, 1), lt: new Date(y, m + 1, 1) },
     };
     const [logs, user] = await Promise.all([
       prisma.workLog.findMany({
@@ -274,9 +274,9 @@ router.get('/report', auth, async (req, res, next) => {
       const e = new Date(s); e.setDate(s.getDate() + 6);
       where.logDate = { gte: s, lte: e };
     } else if (period === 'month') {
-      where.logDate = { gte: new Date(y, m, 1), lte: new Date(y, m + 1, 0) };
+      where.logDate = { gte: new Date(y, m, 1), lt: new Date(y, m + 1, 1) };
     } else if (period === 'year') {
-      where.logDate = { gte: new Date(y, 0, 1), lte: new Date(y, 11, 31) };
+      where.logDate = { gte: new Date(y, 0, 1), lt: new Date(y + 1, 0, 1) };
     }
     if (workTypeId) where.workTypeId = intId(workTypeId);
     if (status)     where.status     = status;
@@ -338,7 +338,7 @@ router.get('/monthly-chart', auth, async (req, res, next) => {
 
     const canSeeAll = req.user.isSuperAdmin || ['admin', 'executive'].includes(req.user.role);
     const where = {
-      logDate: { gte: new Date(ceYear, 0, 1), lte: new Date(ceYear, 11, 31, 23, 59, 59) },
+      logDate: { gte: new Date(ceYear, 0, 1), lt: new Date(ceYear + 1, 0, 1) },
     };
     if (!canSeeAll) where.userId = req.user.id;
 
@@ -401,14 +401,15 @@ router.get('/', auth, async (req, res, next) => {
       const y = year  ? intId(year)  - 543 : new Date().getFullYear();
       const m = month ? intId(month) - 1   : new Date().getMonth();
       where.logDate = month
-        ? { gte: new Date(y, m, 1), lte: new Date(y, m + 1, 0) }
-        : { gte: new Date(y, 0, 1), lte: new Date(y, 11, 31) };
+        ? { gte: new Date(y, m, 1), lt: new Date(y, m + 1, 1) }
+        : { gte: new Date(y, 0, 1), lt: new Date(y + 1, 0, 1) };
     }
 
     // Summary always based on same visibility scope (no status filter)
     const summaryWhere = { ...where };
     delete summaryWhere.status;
 
+    console.log('[worklog GET] where:', JSON.stringify(where), 'user:', req.user.id, 'role:', req.user.role, 'isSuperAdmin:', req.user.isSuperAdmin);
     const [logs, total, summary] = await Promise.all([
       prisma.workLog.findMany({
         where, skip, take: intId(limit), orderBy: { logDate: 'desc' },
@@ -420,6 +421,7 @@ router.get('/', auth, async (req, res, next) => {
       prisma.workLog.count({ where }),
       prisma.workLog.groupBy({ by: ['status'], where: summaryWhere, _count: true }),
     ]);
+    console.log('[worklog GET] found:', total, 'logs, summary:', JSON.stringify(summary));
 
     res.json(success({
       logs: logs.map((l) => ({ ...l, attachments: l.attachments ? JSON.parse(l.attachments) : [] })),

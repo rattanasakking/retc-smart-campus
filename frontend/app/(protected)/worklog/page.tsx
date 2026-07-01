@@ -369,9 +369,12 @@ export default function WorkLogPage() {
       const res = await api.get<{ data: { logs: WorkLog[]; summary: Record<string, number> } }>(
         `/worklog?${params}`
       );
-      setLogs(res.data.logs);
-      setSummary(res.data.summary);
-    } catch { /* ignore */ }
+      setLogs(res.data.logs ?? []);
+      setSummary(res.data.summary ?? {});
+    } catch (e: unknown) {
+      console.error('[loadLogs] error:', e);
+      showToast((e as Error).message || 'โหลดข้อมูลไม่สำเร็จ', true);
+    }
     finally { setLoading(false); }
   }, [month, year, statusFilter, isAdmin, nameSearch]);
 
@@ -509,7 +512,9 @@ export default function WorkLogPage() {
                 จำนวนการปฏิบัติงานรายเดือน ปี {year}
               </p>
               <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={chartData} barSize={22} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
+                <BarChart data={chartData} barSize={22} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}
+                  onClick={(data) => { if (data?.activePayload?.[0]) setMonth(String(data.activePayload[0].payload.month)); }}
+                  style={{ cursor: 'pointer' }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f4ff" />
                   <XAxis
                     dataKey="month"
@@ -632,7 +637,7 @@ export default function WorkLogPage() {
                 <tbody>
                   {logs.length === 0 ? (
                     <tr><td colSpan={isAdmin ? 5 : 4} className="px-4 py-12 text-center text-sm" style={{ color: '#94a3b8' }}>
-                      {nameSearch ? `ไม่พบบันทึกของ "${nameSearch}"` : 'ไม่มีบันทึกในเดือนนี้'}
+                      {nameSearch ? `ไม่พบบันทึกของ "${nameSearch}"` : `ไม่มีบันทึกในเดือน ${MONTHS[parseInt(month) - 1]} ${year}`}
                     </td></tr>
                   ) : logs.map((l) => {
                     const meta = STATUS_META[l.status] ?? STATUS_META.draft;
