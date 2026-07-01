@@ -318,8 +318,22 @@ export default function WorkLogPage() {
   const [pending, setPending]       = useState<PendingLog[]>([]);
   const [loading, setLoading]       = useState(true);
   const [summary, setSummary]       = useState<Record<string, number>>({});
-  const [month, setMonth]           = useState(String(new Date().getMonth() + 1));
-  const [year, setYear]             = useState(String(new Date().getFullYear() + 543));
+  // วันที่ 1-5 ของเดือน: default เดือนก่อนหน้า เพื่อให้เห็นบันทึกของเดือนที่ผ่านมา
+  const [month, setMonth]           = useState(() => {
+    const now = new Date();
+    if (now.getDate() <= 5) {
+      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      return String(prev.getMonth() + 1);
+    }
+    return String(now.getMonth() + 1);
+  });
+  const [year, setYear]             = useState(() => {
+    const now = new Date();
+    const y = now.getDate() <= 5 && now.getMonth() === 0
+      ? now.getFullYear() - 1  // มกราคม → ปีก่อน
+      : now.getFullYear();
+    return String(y + 543);
+  });
   const [statusFilter, setFilter]   = useState('');
   const [isApprover, setApprover]   = useState(false);
   const [isAdmin, setAdmin]         = useState(false);
@@ -475,7 +489,7 @@ export default function WorkLogPage() {
               { key: 'submitted', label: 'รออนุมัติ', color: '#b45309', bg: '#fffbeb' },
               { key: 'approved',  label: 'อนุมัติ',   color: '#0d9068', bg: '#e6f9f0' },
               { key: 'returned',  label: 'ส่งคืน',    color: '#1d6ae5', bg: '#e8f0fe' },
-            ].map(({ key, label, color, bg }) => {
+            ].map(({ key, label, color }) => {
               const count = key
                 ? (summary[key] ?? 0)
                 : Object.values(summary).reduce((s, v) => s + v, 0);
@@ -622,7 +636,6 @@ export default function WorkLogPage() {
                     </td></tr>
                   ) : logs.map((l) => {
                     const meta = STATUS_META[l.status] ?? STATUS_META.draft;
-                    const isOwn = !l.user || l.user.id === undefined;
                     return (
                       <tr key={l.id} style={{ borderBottom: '1px solid #f5f8ff' }} className="hover:bg-[#fafbff] transition-colors">
                         <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: '#4a6080' }}>
