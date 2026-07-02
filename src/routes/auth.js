@@ -10,6 +10,8 @@ const auth             = require('../middleware/auth');
 const { requireAdmin } = require('../middleware/roles');
 const { success, error, paginate } = require('../utils/response');
 
+const { pushMessage } = require('../services/line');
+
 const router       = express.Router();
 const prisma       = new PrismaClient();
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -506,6 +508,7 @@ router.get('/line', async (req, res) => {
       redirect_uri:  `${FRONTEND_URL}/api/auth/line/callback`,
       state,
       scope:         'profile openid email',
+      bot_prompt:    'aggressive',
     });
     res.redirect(`https://access.line.me/oauth2/v2.1/authorize?${params}`);
   } catch (e) {
@@ -551,7 +554,12 @@ router.get('/line/callback', async (req, res) => {
       if (!lineUserId) return res.redirect(`${FRONTEND_URL}/profile?error=profile_error`);
       const existing = await prisma.user.findFirst({ where: { lineUserId } });
       if (existing && existing.id !== userId) return res.redirect(`${FRONTEND_URL}/profile?error=already_linked_to_other`);
-      await prisma.user.update({ where: { id: userId }, data: { lineUserId } });
+      const linkedUser = await prisma.user.update({ where: { id: userId }, data: { lineUserId } });
+      // ส่ง welcome message เพื่อยืนยันว่า bot ส่งข้อความหาได้
+      pushMessage(lineUserId, [{
+        type: 'text',
+        text: `✅ เชื่อมต่อ LINE สำเร็จ!\n\nสวัสดีคุณ ${linkedUser.name ?? ''} 👋\nคุณจะได้รับการแจ้งเตือนจากระบบ RETC Smart Campus ผ่านทาง LINE นี้\n\n🔔 การแจ้งเตือนที่คุณจะได้รับ:\n• อนุมัติ / ปฏิเสธการจองห้องประชุม\n• อนุมัติ / ปฏิเสธบันทึกปฏิบัติงาน\n• สถานะการลา`,
+      }]).catch(e => console.error('[LINE link] welcome message error:', e.message));
       return res.redirect(`${FRONTEND_URL}/profile?linked=line`);
     }
 
@@ -634,6 +642,7 @@ router.get('/line/link', async (req, res) => {
       redirect_uri:  `${FRONTEND_URL}/api/auth/line/callback`,
       state,
       scope:         'profile openid',
+      bot_prompt:    'aggressive',
     });
     res.redirect(`https://access.line.me/oauth2/v2.1/authorize?${params}`);
   } catch {
