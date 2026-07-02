@@ -517,6 +517,10 @@ async function sendWorkLogStatusFlex(userLineId, log, status, comment, approverN
   const base = (process.env.FRONTEND_URL ?? 'https://app.retc.ac.th').replace(/\/$/, '');
   const { id, title, logDate, workType } = log;
 
+  let attachments = [];
+  try { attachments = typeof log.attachments === 'string' ? JSON.parse(log.attachments) : (log.attachments ?? []); } catch { /* */ }
+  const firstImage = attachments.length > 0 ? buildWorkLogImageUrl(attachments[0]) : null;
+
   const configs = {
     approved: { color: '#1B5E20', labelColor: '#A5D6A7', text: '✅ บันทึกปฏิบัติงานได้รับอนุมัติ', sub: 'อนุมัติแล้ว' },
     rejected: { color: '#B71C1C', labelColor: '#FFCDD2', text: '❌ บันทึกปฏิบัติงานถูกปฏิเสธ', sub: 'ปฏิเสธแล้ว' },
@@ -529,6 +533,7 @@ async function sendWorkLogStatusFlex(userLineId, log, status, comment, approverN
     altText: cfg.text,
     contents: {
       type: 'bubble', size: 'kilo',
+      ...(firstImage ? { hero: { type: 'image', url: firstImage, size: 'full', aspectRatio: '20:9', aspectMode: 'cover' } } : {}),
       header: {
         type: 'box', layout: 'vertical',
         backgroundColor: cfg.color, paddingAll: '16px',

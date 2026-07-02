@@ -318,22 +318,8 @@ export default function WorkLogPage() {
   const [pending, setPending]       = useState<PendingLog[]>([]);
   const [loading, setLoading]       = useState(true);
   const [summary, setSummary]       = useState<Record<string, number>>({});
-  // วันที่ 1-5 ของเดือน: default เดือนก่อนหน้า เพื่อให้เห็นบันทึกของเดือนที่ผ่านมา
-  const [month, setMonth]           = useState(() => {
-    const now = new Date();
-    if (now.getDate() <= 5) {
-      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      return String(prev.getMonth() + 1);
-    }
-    return String(now.getMonth() + 1);
-  });
-  const [year, setYear]             = useState(() => {
-    const now = new Date();
-    const y = now.getDate() <= 5 && now.getMonth() === 0
-      ? now.getFullYear() - 1  // มกราคม → ปีก่อน
-      : now.getFullYear();
-    return String(y + 543);
-  });
+  const [month, setMonth]           = useState(() => String(new Date().getMonth() + 1));
+  const [year, setYear]             = useState(() => String(new Date().getFullYear() + 543));
   const [statusFilter, setFilter]   = useState('');
   const [isApprover, setApprover]   = useState(false);
   const [isAdmin, setAdmin]         = useState(false);
