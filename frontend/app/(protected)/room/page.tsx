@@ -253,7 +253,7 @@ export default function RoomPage() {
     setLoading(true);
     try {
       const [myRes, pendRes] = await Promise.all([
-        api.get<{ data: Booking[]; pagination: { total: number } }>('/room/bookings?limit=30'),
+        api.get<{ data: Booking[]; pagination: { total: number } }>('/room/bookings?mine=true&limit=50'),
         isAdmin ? api.get<{ data: Booking[]; pagination: { total: number } }>('/room/bookings?status=pending&limit=30') : Promise.resolve(null),
       ]);
       setMyBookings(Array.isArray(myRes.data) ? myRes.data : []);

@@ -314,12 +314,16 @@ router.get('/report', auth, async (req, res, next) => {
 
 router.get('/bookings', auth, async (req, res, next) => {
   try {
-    const { date, dateFrom, dateTo, roomId, userId, status, search, page = 1, limit = 50 } = req.query;
+    const { date, dateFrom, dateTo, roomId, userId, status, search, mine, page = 1, limit = 50 } = req.query;
     const where = {};
     if (status) where.status = status;
     if (roomId) where.roomId = intId(roomId);
-    if (userId) where.userId = intId(userId);
-    if (!await canAdmin(req.user)) where.userId = req.user.id;
+    if (mine === 'true') {
+      where.userId = req.user.id;
+    } else {
+      if (userId) where.userId = intId(userId);
+      if (!await canAdmin(req.user)) where.userId = req.user.id;
+    }
     if (search) where.user = { name: { contains: search } };
     if (date) {
       const d = new Date(date);
