@@ -309,15 +309,24 @@ router.get('/report', auth, async (req, res, next) => {
 
 router.get('/bookings', auth, async (req, res, next) => {
   try {
-    const { date, roomId, userId, status, page = 1, limit = 50 } = req.query;
+    const { date, dateFrom, dateTo, roomId, userId, status, search, page = 1, limit = 50 } = req.query;
     const where = {};
     if (status) where.status = status;
     if (roomId) where.roomId = intId(roomId);
     if (userId) where.userId = intId(userId);
     if (!await canAdmin(req.user)) where.userId = req.user.id;
+    if (search) where.user = { name: { contains: search } };
     if (date) {
       const d = new Date(date);
       where.startTime = { gte: d, lt: new Date(d.getTime() + 86400000) };
+    } else if (dateFrom || dateTo) {
+      where.startTime = {};
+      if (dateFrom) where.startTime.gte = new Date(dateFrom);
+      if (dateTo) {
+        const d = new Date(dateTo);
+        d.setDate(d.getDate() + 1);
+        where.startTime.lt = d;
+      }
     }
     const skip = (intId(page) - 1) * intId(limit);
     const [data, total] = await Promise.all([
@@ -420,7 +429,7 @@ router.put('/bookings/:id/reject', auth, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// ลบการจอง (admin เท่านั้น, เฉพาะ rejected/cancelled)
+// ลบการจอง (admin เท่านั้น)
 router.delete('/bookings/:id', auth, async (req, res, next) => {
   try {
     const isAdminUser = await canAdmin(req.user);
@@ -428,9 +437,6 @@ router.delete('/bookings/:id', auth, async (req, res, next) => {
     const id = intId(req.params.id);
     const booking = await prisma.roomBooking.findUnique({ where: { id } });
     if (!booking) return res.status(404).json(error('ไม่พบการจอง'));
-    if (!['rejected', 'cancelled'].includes(booking.status)) {
-      return res.status(400).json(error('ลบได้เฉพาะการจองที่ปฏิเสธหรือยกเลิกแล้วเท่านั้น'));
-    }
     await prisma.roomBookingApproval.deleteMany({ where: { bookingId: id } });
     await prisma.roomBooking.delete({ where: { id } });
     res.json(success(null, 'ลบการจองสำเร็จ'));

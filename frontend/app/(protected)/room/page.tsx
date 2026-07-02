@@ -316,9 +316,14 @@ export default function RoomPage() {
         </div>
         <div className="flex gap-2">
           {isAdmin && (
-            <button onClick={() => router.push('/room/manage')} className="btn-secondary flex items-center gap-1.5 text-sm">
-              <Settings className="w-3.5 h-3.5" /> จัดการห้อง
-            </button>
+            <>
+              <button onClick={() => router.push('/room/manage/bookings')} className="btn-secondary flex items-center gap-1.5 text-sm">
+                <List className="w-3.5 h-3.5" /> จัดการการจอง
+              </button>
+              <button onClick={() => router.push('/room/manage')} className="btn-secondary flex items-center gap-1.5 text-sm">
+                <Settings className="w-3.5 h-3.5" /> จัดการห้อง
+              </button>
+            </>
           )}
           <button onClick={() => router.push('/room/new')} className="btn-primary flex items-center gap-1.5 text-sm">
             <Plus className="w-3.5 h-3.5" /> จองห้อง
