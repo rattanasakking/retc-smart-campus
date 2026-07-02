@@ -107,7 +107,8 @@ async function getChannelAccessToken() {
 
 async function pushMessage(lineUserId, messages) {
   const token = await getChannelAccessToken();
-  if (!token || !lineUserId) return null;
+  if (!token) { console.warn('[LINE Bot] pushMessage: no channel access token configured'); return null; }
+  if (!lineUserId) { console.warn('[LINE Bot] pushMessage: lineUserId is empty'); return null; }
   try {
     const res = await fetch(MESSAGING_API, {
       method: 'POST',
@@ -370,7 +371,9 @@ async function sendRoomBookingRequestFlex(adminLineId, booking) {
 
 /** แจ้งผู้จองเมื่อได้รับการอนุมัติหรือปฏิเสธ */
 async function sendRoomBookingStatusFlex(lineUserId, booking, status, note) {
-  if (!await isModuleNotifyEnabled('ROOM_BOOKING')) return null;
+  const moduleEnabled = await isModuleNotifyEnabled('ROOM_BOOKING');
+  console.log(`[sendRoomBookingStatusFlex] lineUserId=${lineUserId} status=${status} moduleEnabled=${moduleEnabled}`);
+  if (!moduleEnabled) return null;
   const { title, startTime, endTime, room } = booking;
   const approved   = status === 'approved';
   const color      = approved ? '#1B5E20' : '#B71C1C';

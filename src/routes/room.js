@@ -81,10 +81,15 @@ async function notifyAdminsNewBooking(booking) {
 async function notifyBookerStatus(booking, status, note) {
   const bookerLine  = booking.user?.lineUserId;
   const bookerEmail = booking.user?.email;
-  if (bookerLine)  sendRoomBookingStatusFlex(bookerLine, booking, status, note).catch(() => {});
+  console.log(`[notifyBookerStatus] bookingId=${booking.id} status=${status} lineUserId=${bookerLine ?? 'MISSING'} email=${bookerEmail ?? 'MISSING'}`);
+  if (bookerLine) {
+    sendRoomBookingStatusFlex(bookerLine, booking, status, note)
+      .then(r => console.log(`[notifyBookerStatus] LINE sent ok, result:`, JSON.stringify(r)))
+      .catch(e => console.error('[notifyBookerStatus] LINE error:', e.message));
+  }
   if (bookerEmail) {
     const emailFn = status === 'approved' ? sendRoomBookingApprovedEmail : sendRoomBookingRejectedEmail;
-    emailFn({ to: bookerEmail, booking, note }).catch(() => {});
+    emailFn({ to: bookerEmail, booking, note }).catch(e => console.error('[notifyBookerStatus] email error:', e.message));
   }
 }
 
