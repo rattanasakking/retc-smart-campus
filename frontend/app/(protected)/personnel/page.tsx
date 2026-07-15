@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { api, USER_KEY } from '@/lib/api';
 import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
+import ThaiAddressSelect from '@/components/ui/ThaiAddressSelect';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,6 +36,10 @@ interface Personnel {
   emergencyContact?: string;
   emergencyPhone?: string;
   address?: string;
+  addressProvince?: string;
+  addressDistrict?: string;
+  addressSubdistrict?: string;
+  addressPostalCode?: string;
   divisionId?: number;
   division?: Division;
   workUnitId?: number;
@@ -70,6 +75,7 @@ interface FormState {
   divisionId: string; workUnitId: string; departmentId: string;
   phone: string; nickname: string; birthDate: string; startDate: string;
   emergencyContact: string; emergencyPhone: string; address: string;
+  addressProvince: string; addressDistrict: string; addressSubdistrict: string; addressPostalCode: string;
 }
 
 const BLANK: FormState = {
@@ -79,6 +85,7 @@ const BLANK: FormState = {
   divisionId: '', workUnitId: '', departmentId: '',
   phone: '', nickname: '', birthDate: '', startDate: '',
   emergencyContact: '', emergencyPhone: '', address: '',
+  addressProvince: '', addressDistrict: '', addressSubdistrict: '', addressPostalCode: '',
 };
 
 const ROLE_LABEL: Record<string, string> = {
@@ -220,6 +227,8 @@ export default function PersonnelPage() {
       startDate: p.startDate ? p.startDate.slice(0, 10) : '',
       emergencyContact: p.emergencyContact ?? '', emergencyPhone: p.emergencyPhone ?? '',
       address: p.address ?? '',
+      addressProvince: p.addressProvince ?? '', addressDistrict: p.addressDistrict ?? '',
+      addressSubdistrict: p.addressSubdistrict ?? '', addressPostalCode: p.addressPostalCode ?? '',
     });
     setModalTab('info');
     setFormError('');
@@ -568,14 +577,22 @@ export default function PersonnelPage() {
                     </div>
                   )}
                   {/* Emergency */}
-                  {(viewTarget.emergencyContact || viewTarget.address) && (
+                  {(viewTarget.emergencyContact || viewTarget.address || viewTarget.addressProvince) && (
                     <div className="rounded-lg p-3 space-y-1" style={{ backgroundColor: '#fff8f0', border: '1px solid #fed7aa' }}>
-                      <p className="text-xs font-semibold mb-2" style={{ color: '#b45309' }}>ข้อมูลฉุกเฉิน</p>
+                      <p className="text-xs font-semibold mb-2" style={{ color: '#b45309' }}>ข้อมูลฉุกเฉิน / ที่อยู่</p>
                       {viewTarget.emergencyContact && <p className="text-xs" style={{ color: '#1a2744' }}>ผู้ติดต่อ: {viewTarget.emergencyContact} {viewTarget.emergencyPhone ? `(${viewTarget.emergencyPhone})` : ''}</p>}
-                      {viewTarget.address && (
+                      {(viewTarget.address || viewTarget.addressProvince) && (
                         <div className="flex items-start gap-1.5">
                           <MapPin size={11} className="mt-0.5 flex-shrink-0" style={{ color: '#b45309' }} />
-                          <p className="text-xs" style={{ color: '#1a2744' }}>{viewTarget.address}</p>
+                          <p className="text-xs" style={{ color: '#1a2744' }}>
+                            {[
+                              viewTarget.address,
+                              viewTarget.addressSubdistrict && `ต.${viewTarget.addressSubdistrict}`,
+                              viewTarget.addressDistrict && `อ.${viewTarget.addressDistrict}`,
+                              viewTarget.addressProvince && `จ.${viewTarget.addressProvince}`,
+                              viewTarget.addressPostalCode,
+                            ].filter(Boolean).join(' ')}
+                          </p>
                         </div>
                       )}
                     </div>
@@ -816,8 +833,26 @@ export default function PersonnelPage() {
                     </div>
                   )}
                   <div>
-                    <label className="text-xs text-gray-500 mb-1 block">ที่อยู่</label>
-                    <textarea value={form.address} onChange={(e) => setF('address', e.target.value)} rows={2} className={inp} placeholder="ที่อยู่ปัจจุบัน" />
+                    <label className="text-xs text-gray-500 mb-1 block">บ้านเลขที่ / หมู่ / ถนน</label>
+                    <textarea value={form.address} onChange={(e) => setF('address', e.target.value)} rows={2} className={inp} placeholder="เช่น 99/1 หมู่ 2 ถ.สุขุมวิท" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1.5 block">ตำบล / อำเภอ / จังหวัด</label>
+                    <ThaiAddressSelect
+                      value={{
+                        province: form.addressProvince,
+                        district: form.addressDistrict,
+                        subdistrict: form.addressSubdistrict,
+                        postalCode: form.addressPostalCode,
+                      }}
+                      onChange={(v) => setForm((prev) => ({
+                        ...prev,
+                        addressProvince: v.province,
+                        addressDistrict: v.district,
+                        addressSubdistrict: v.subdistrict,
+                        addressPostalCode: v.postalCode,
+                      }))}
+                    />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>

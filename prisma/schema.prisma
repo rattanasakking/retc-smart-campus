@@ -176,7 +176,11 @@ model User {
   educationLevel   String?
   emergencyContact String?
   emergencyPhone   String?
-  address          String?   @db.Text
+  address          String?   @db.Text   // บ้านเลขที่ / หมู่ / ถนน (รายละเอียด)
+  addressProvince     String?            // จังหวัด
+  addressDistrict     String?            // อำเภอ/เขต
+  addressSubdistrict  String?            // ตำบล/แขวง
+  addressPostalCode   String?            // รหัสไปรษณีย์
 
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

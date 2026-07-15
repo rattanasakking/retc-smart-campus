@@ -97,6 +97,7 @@ const PERSONNEL_SELECT = {
   avatar: true,
   personnelTypeId: true, employmentType: true, educationLevel: true,
   emergencyContact: true, emergencyPhone: true, address: true,
+  addressProvince: true, addressDistrict: true, addressSubdistrict: true, addressPostalCode: true,
   lineUserId: true,
   personnelType: { select: { id: true, name: true } },
   division:  { select: { id: true, name: true, code: true } },
@@ -555,6 +556,7 @@ router.post('/', auth, requireSuperAdmin, async (req, res) => {
       divisionId, workUnitId, departmentId,
       phone, nickname, birthDate, startDate,
       emergencyContact, emergencyPhone, address, avatar,
+      addressProvince, addressDistrict, addressSubdistrict, addressPostalCode,
     } = req.body;
 
     if (!name || !email || !password || !role)
@@ -597,6 +599,10 @@ router.post('/', auth, requireSuperAdmin, async (req, res) => {
         emergencyContact: emergencyContact || null,
         emergencyPhone:  emergencyPhone || null,
         address:         address || null,
+        addressProvince:    addressProvince || null,
+        addressDistrict:    addressDistrict || null,
+        addressSubdistrict: addressSubdistrict || null,
+        addressPostalCode:  addressPostalCode || null,
         avatar:          avatarUrl,
       },
       select: PERSONNEL_SELECT,
@@ -619,6 +625,7 @@ router.put('/:id', auth, requireSuperAdmin, async (req, res) => {
       divisionId, workUnitId, departmentId,
       phone, nickname, birthDate, startDate,
       emergencyContact, emergencyPhone, address, avatar,
+      addressProvince, addressDistrict, addressSubdistrict, addressPostalCode,
     } = req.body;
 
     let avatarUrl;
@@ -647,6 +654,10 @@ router.put('/:id', auth, requireSuperAdmin, async (req, res) => {
         ...(emergencyContact !== undefined && { emergencyContact }),
         ...(emergencyPhone   !== undefined && { emergencyPhone }),
         ...(address          !== undefined && { address }),
+        ...(addressProvince    !== undefined && { addressProvince:    addressProvince || null }),
+        ...(addressDistrict    !== undefined && { addressDistrict:    addressDistrict || null }),
+        ...(addressSubdistrict !== undefined && { addressSubdistrict: addressSubdistrict || null }),
+        ...(addressPostalCode  !== undefined && { addressPostalCode:  addressPostalCode || null }),
         ...(avatarUrl        !== undefined && { avatar: avatarUrl }),
       },
       select: PERSONNEL_SELECT,

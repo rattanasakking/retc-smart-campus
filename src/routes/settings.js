@@ -17,10 +17,10 @@ const superAdmin = [
     try {
       const u = await prisma.user.findUnique({
         where:  { id: req.user.id },
-        select: { isSuperAdmin: true, isActive: true },
+        select: { isSuperAdmin: true, isActive: true, role: true },
       });
-      if (!u?.isSuperAdmin || !u?.isActive) {
-        return res.status(403).json(error('ต้องการสิทธิ์ Super Admin'));
+      if (!u?.isActive || (!u?.isSuperAdmin && u?.role !== 'admin')) {
+        return res.status(403).json(error('ต้องการสิทธิ์ผู้ดูแลระบบ'));
       }
       next();
     } catch (e) { next(e); }

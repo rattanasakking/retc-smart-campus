@@ -112,14 +112,17 @@ export default function ThaiDatePicker({
             {/* ── Month/Year picker ── */}
             {mode === 'months' && (
               <div className="p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <button type="button" onClick={() => setViewYear(y => y-1)} className="p-1.5 rounded-lg hover:bg-[#f5f8ff]">
-                    <ChevronLeft className="w-3.5 h-3.5" style={{ color: '#4a6080' }} />
-                  </button>
-                  <span className="text-sm font-bold" style={{ color: '#1a2744' }}>{viewYear + 543}</span>
-                  <button type="button" onClick={() => setViewYear(y => y+1)} className="p-1.5 rounded-lg hover:bg-[#f5f8ff]">
-                    <ChevronRight className="w-3.5 h-3.5" style={{ color: '#4a6080' }} />
-                  </button>
+                <div className="flex items-center justify-center mb-2">
+                  <select
+                    value={viewYear}
+                    onChange={e => setViewYear(Number(e.target.value))}
+                    className="text-sm font-bold rounded-lg px-2 py-1 border border-[#dce6f9] focus:outline-none focus:ring-2 focus:ring-blue-300 cursor-pointer"
+                    style={{ color: '#1a2744', backgroundColor: '#f5f8ff' }}
+                  >
+                    {Array.from({ length: 81 }, (_, i) => today.getFullYear() - 70 + i).map(y => (
+                      <option key={y} value={y}>{y + 543}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="grid grid-cols-3 gap-1">
                   {MONTHS_SHORT.map((m, i) => (
