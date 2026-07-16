@@ -124,6 +124,57 @@ function lineMsg(booking, type) {
   return '';
 }
 
+// ═══ PUBLIC (ไม่ต้อง login) — ตารางการใช้ห้องประชุมสาธารณะ ═══════════════════
+
+// GET /api/room/public/rooms
+router.get('/public/rooms', async (req, res, next) => {
+  try {
+    const rooms = await prisma.room.findMany({
+      where: { status: 'active' },
+      select: { id: true, name: true, capacity: true, image: true },
+      orderBy: { name: 'asc' },
+    });
+    res.json(success(rooms));
+  } catch (e) { next(e); }
+});
+
+// GET /api/room/public/bookings?date=&dateFrom=&dateTo=&roomId=
+router.get('/public/bookings', async (req, res, next) => {
+  try {
+    const { date, dateFrom, dateTo, roomId } = req.query;
+    const where = { status: { in: ['pending', 'approved'] } };
+    if (roomId) where.roomId = intId(roomId);
+    if (date) {
+      const d = new Date(date);
+      where.startTime = { gte: d, lt: new Date(d.getTime() + 86400000) };
+    } else if (dateFrom || dateTo) {
+      where.startTime = {};
+      if (dateFrom) where.startTime.gte = new Date(dateFrom);
+      if (dateTo) { const d = new Date(dateTo); d.setDate(d.getDate() + 1); where.startTime.lt = d; }
+    } else {
+      // ค่าเริ่มต้น: ตั้งแต่วันนี้ไปอีก 30 วัน
+      const now = new Date(); now.setHours(0, 0, 0, 0);
+      where.startTime = { gte: now, lt: new Date(now.getTime() + 30 * 86400000) };
+    }
+    const bookings = await prisma.roomBooking.findMany({
+      where,
+      select: {
+        id: true, title: true, startTime: true, endTime: true, status: true, attendees: true,
+        room: { select: { id: true, name: true } },
+        user: { select: { name: true, department: true } },
+      },
+      orderBy: { startTime: 'asc' },
+      take: 500,
+    });
+    res.json(success(bookings.map((b) => ({
+      id: b.id, title: b.title, startTime: b.startTime, endTime: b.endTime,
+      status: b.status, attendees: b.attendees,
+      roomId: b.room?.id, roomName: b.room?.name ?? '-',
+      bookerName: b.user?.name ?? '-', department: b.user?.department ?? null,
+    }))));
+  } catch (e) { next(e); }
+});
+
 // ─── Room Status ─────────────────────────────────────────────────────────────
 
 // GET /api/room/status  — all rooms with busy flag + upcoming bookings
