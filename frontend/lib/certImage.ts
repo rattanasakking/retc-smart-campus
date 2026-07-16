@@ -35,7 +35,7 @@ export async function certToPngBlob(
 
   // โหลดฟอนต์ก่อนวาดข้อความ
   try {
-    const fonts = new Set<string>();
+    const fonts = new Set<string>(['Sarabun']);
     TEXT_KEYS.forEach((k) => fonts.add(ts[k].font));
     await Promise.all(Array.from(fonts).map((f) => (document as unknown as { fonts: FontFaceSet }).fonts.load(`bold 40px '${f}'`)));
     await (document as unknown as { fonts: FontFaceSet }).fonts.ready;
@@ -50,6 +50,28 @@ export async function certToPngBlob(
     ctx.font = `bold ${cfg.fontSize}px '${cfg.font}', sans-serif`;
     ctx.fillStyle = cfg.color;
     ctx.fillText(val, (cfg.x / 100) * w, (cfg.y / 100) * h);
+  }
+
+  // ลายเซ็น
+  for (const sig of (ts.signatures ?? [])) {
+    if (!sig.show || !sig.url) continue;
+    try {
+      const img = await loadImg(sig.url);
+      const iw = sig.size;
+      const ih = img.naturalWidth ? iw * (img.naturalHeight / img.naturalWidth) : iw * 0.5;
+      const nameH = sig.name ? sig.size * 0.15 * 1.35 : 0;
+      const posH  = sig.position ? sig.size * 0.13 * 1.35 : 0;
+      const blockH = ih + nameH + posH;
+      const cx = (sig.x / 100) * w;
+      const top = (sig.y / 100) * h - blockH / 2;
+      ctx.drawImage(img, cx - iw / 2, top, iw, ih);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = '#1a2744';
+      let ty = top + ih;
+      if (sig.name) { ctx.font = `bold ${sig.size * 0.15}px 'Sarabun', sans-serif`; ctx.fillText(sig.name, cx, ty); ty += nameH; }
+      if (sig.position) { ctx.font = `${sig.size * 0.13}px 'Sarabun', sans-serif`; ctx.fillText(sig.position, cx, ty); }
+    } catch { /* ข้ามลายเซ็นถ้าโหลดไม่ได้ */ }
   }
 
   if (ts.qr.show && values.cert) {

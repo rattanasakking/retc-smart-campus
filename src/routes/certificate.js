@@ -63,7 +63,35 @@ function normalizeTextSettings(raw) {
     y: Number(q.y ?? def.qr.y),
     size: Number(q.size ?? def.qr.size),
   };
+
+  // ลายเซ็น 3 ช่อง (สำหรับผู้ลงนาม 3 คน)
+  const SIG_DEF = [{ x: 25, y: 82 }, { x: 50, y: 82 }, { x: 75, y: 82 }];
+  const sigArr = Array.isArray(ts.signatures) ? ts.signatures : [];
+  out.signatures = [0, 1, 2].map((i) => {
+    const s = (sigArr[i] && typeof sigArr[i] === 'object') ? sigArr[i] : {};
+    return {
+      show: s.show ?? false,
+      url: typeof s.url === 'string' ? s.url : '',
+      x: Number(s.x ?? SIG_DEF[i].x),
+      y: Number(s.y ?? SIG_DEF[i].y),
+      size: Number(s.size ?? 140),
+      name: typeof s.name === 'string' ? s.name : '',
+      position: typeof s.position === 'string' ? s.position : '',
+    };
+  });
   return out;
+}
+
+// บันทึกรูปลายเซ็นที่อัปโหลดใหม่ (base64) แล้วใส่ url ลงใน settings
+function applySignatureImages(tsObj, signatureImages) {
+  const imgs = signatureImages || {};
+  for (let i = 0; i < tsObj.signatures.length; i++) {
+    const b64 = imgs[i] ?? imgs[String(i)];
+    if (typeof b64 === 'string' && b64.startsWith('data:')) {
+      if (tsObj.signatures[i].url) removeUpload(tsObj.signatures[i].url);
+      tsObj.signatures[i].url = saveCertTemplate(b64);
+    }
+  }
 }
 
 // ─── permission helpers ─────────────────────────────────────────────────────
@@ -291,9 +319,10 @@ router.post('/projects', requireCertAdmin, async (req, res, next) => {
     }
     if (!templateUrl) return res.status(400).json(error('กรุณาอัปโหลดรูปแบบเกียรติบัตร (template)'));
 
-    const ts = JSON.stringify(normalizeTextSettings(textSettings));
+    const tsObj = normalizeTextSettings(textSettings);
+    applySignatureImages(tsObj, req.body.signatureImages);
     const project = await prisma.certProject.create({
-      data: { name: name.trim(), templateUrl, textSettings: ts },
+      data: { name: name.trim(), templateUrl, textSettings: JSON.stringify(tsObj) },
     });
 
     if (Array.isArray(accessUserIds) && accessUserIds.length) {
@@ -306,12 +335,13 @@ router.post('/projects', requireCertAdmin, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// PUT /api/certificate/projects/:id  (admin)
-router.put('/projects/:id', requireCertAdmin, async (req, res, next) => {
+// PUT /api/certificate/projects/:id  (แก้ไขได้ = admin หรือผู้มีสิทธิ์เข้าถึงโครงการ)
+router.put('/projects/:id', requireCert, async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
     const existing = await prisma.certProject.findUnique({ where: { id } });
     if (!existing) return res.status(404).json(error('ไม่พบโครงการ'));
+    if (!await canAccessProject(req.user, id)) return res.status(403).json(error('ไม่มีสิทธิ์แก้ไขโครงการนี้'));
 
     const { name, templateBase64, textSettings, accessUserIds } = req.body;
 
@@ -321,16 +351,20 @@ router.put('/projects/:id', requireCertAdmin, async (req, res, next) => {
       removeUpload(existing.templateUrl);
     }
 
+    const tsObj = normalizeTextSettings(textSettings ?? existing.textSettings);
+    applySignatureImages(tsObj, req.body.signatureImages);
+
     await prisma.certProject.update({
       where: { id },
       data: {
         ...(name !== undefined && { name: name.trim() }),
         templateUrl,
-        ...(textSettings !== undefined && { textSettings: JSON.stringify(normalizeTextSettings(textSettings)) }),
+        textSettings: JSON.stringify(tsObj),
       },
     });
 
-    if (Array.isArray(accessUserIds)) {
+    // เฉพาะผู้ดูแลระบบเท่านั้นที่แก้ไขรายชื่อผู้มีสิทธิ์เข้าถึงได้
+    if (Array.isArray(accessUserIds) && await isCertAdmin(req.user)) {
       await prisma.certProjectAccess.deleteMany({ where: { projectId: id } });
       if (accessUserIds.length) {
         await prisma.certProjectAccess.createMany({

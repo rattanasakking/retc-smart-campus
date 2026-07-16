@@ -3,8 +3,10 @@ import { useEffect, useState } from 'react';
 
 export interface CertTextCfg { show: boolean; x: number; y: number; fontSize: number; color: string; font: string; }
 export interface CertQrCfg   { show: boolean; x: number; y: number; size: number; }
+export interface CertSigCfg  { show: boolean; url: string; x: number; y: number; size: number; name: string; position: string; }
 export interface CertTextSettings {
   name: CertTextCfg; pos: CertTextCfg; awd: CertTextCfg; cert: CertTextCfg; qr: CertQrCfg;
+  signatures?: CertSigCfg[];
 }
 export interface CertValues { name: string; pos: string; awd: string; cert: string; }
 
@@ -75,6 +77,20 @@ export default function CertRender({ templateUrl, ts, values, verifyUrl, classNa
         );
       })}
 
+      {(ts.signatures ?? []).map((sig, i) => (
+        (sig.show && sig.url) ? (
+          <div key={i} style={{
+            position: 'absolute', left: `${sig.x}%`, top: `${sig.y}%`,
+            transform: 'translate(-50%, -50%)', textAlign: 'center', zIndex: 3, width: cqw(sig.size),
+          }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={sig.url} alt="" style={{ width: '100%', display: 'block', margin: '0 auto' }} />
+            {sig.name && <div style={{ fontSize: cqw(sig.size * 0.15), fontWeight: 700, color: '#1a2744', fontFamily: "'Sarabun',sans-serif", marginTop: '0.4cqw', whiteSpace: 'nowrap' }}>{sig.name}</div>}
+            {sig.position && <div style={{ fontSize: cqw(sig.size * 0.13), color: '#1a2744', fontFamily: "'Sarabun',sans-serif", whiteSpace: 'nowrap' }}>{sig.position}</div>}
+          </div>
+        ) : null
+      ))}
+
       {ts.qr?.show && values.cert && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -98,6 +114,11 @@ export const DEFAULT_TS: CertTextSettings = {
   awd:  { show: false, x: 50, y: 65, fontSize: 25, color: '#000000', font: 'Prompt' },
   cert: { show: false, x: 85, y: 10, fontSize: 15, color: '#000000', font: 'Prompt' },
   qr:   { show: true,  x: 85, y: 80, size: 100 },
+  signatures: [
+    { show: false, url: '', x: 25, y: 82, size: 140, name: '', position: '' },
+    { show: false, url: '', x: 50, y: 82, size: 140, name: '', position: '' },
+    { show: false, url: '', x: 75, y: 82, size: 140, name: '', position: '' },
+  ],
 };
 
 export const CERT_FONTS = ['Prompt', 'Sarabun', 'Kanit', 'Taviraj', 'Chakra Petch'];

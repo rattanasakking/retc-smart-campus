@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Upload, Save, Loader2, ImageIcon, Users, Search } from 'lucide-react';
+import { ArrowLeft, Upload, Save, Loader2, ImageIcon, Users, Search, PenLine, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { CERT_FONTS, DEFAULT_TS, qrUrl, qrFallbackUrl, type CertTextSettings, type CertValues } from '@/components/certificate/CertRender';
 
@@ -31,8 +31,10 @@ export default function CertProjectEditor() {
   const [ts, setTs]             = useState<CertTextSettings>(structuredClone(DEFAULT_TS));
   const [templateUrl, setTemplateUrl] = useState('');       // existing url (server)
   const [templateData, setTemplateData] = useState('');     // new base64
+  const [sigData, setSigData]   = useState<string[]>(['', '', '']); // base64 ลายเซ็นใหม่ต่อช่อง
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [accessIds, setAccessIds] = useState<number[]>([]);
+  const [isAdmin, setIsAdmin]   = useState(false);
   const [loading, setLoading]   = useState(!isNew);
   const [saving, setSaving]     = useState(false);
   const [err, setErr]           = useState('');
@@ -47,6 +49,7 @@ export default function CertProjectEditor() {
   });
 
   useEffect(() => {
+    api.get<{ data: { isCertAdmin: boolean } }>('/certificate/me').then((r) => setIsAdmin(r.data.isCertAdmin)).catch(() => {});
     api.get<{ data: Candidate[] }>('/certificate/access-candidates').then((r) => setCandidates(r.data ?? [])).catch(() => {});
     if (!isNew) {
       api.get<{ data: { name: string; templateUrl: string; textSettings: CertTextSettings; accessUserIds: number[] } }>(`/certificate/projects/${idParam}`)
@@ -61,6 +64,8 @@ export default function CertProjectEditor() {
     }
   }, [idParam, isNew]);
 
+  const sigs = ts.signatures ?? DEFAULT_TS.signatures!;
+
   const onFile = (file: File) => {
     if (!file.type.startsWith('image/')) { alert('รองรับเฉพาะไฟล์รูปภาพ'); return; }
     if (file.size > 8 * 1024 * 1024) { alert('ไฟล์ต้องไม่เกิน 8 MB'); return; }
@@ -69,15 +74,41 @@ export default function CertProjectEditor() {
     reader.readAsDataURL(file);
   };
 
+  const onSigFile = (i: number, file: File) => {
+    if (!file.type.startsWith('image/')) { alert('รองรับเฉพาะไฟล์รูปภาพ (แนะนำ PNG พื้นหลังโปร่งใส)'); return; }
+    if (file.size > 4 * 1024 * 1024) { alert('ไฟล์ลายเซ็นต้องไม่เกิน 4 MB'); return; }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setSigData((prev) => { const n = [...prev]; n[i] = e.target?.result as string; return n; });
+      setSig(i, { show: true });
+    };
+    reader.readAsDataURL(file);
+  };
+
   const setCfg = (key: keyof CertTextSettings, patch: Record<string, unknown>) =>
-    setTs((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
+    setTs((prev) => ({ ...prev, [key]: { ...(prev[key] as object), ...patch } }));
+
+  const setSig = (i: number, patch: Record<string, unknown>) =>
+    setTs((prev) => {
+      const arr = [...(prev.signatures ?? DEFAULT_TS.signatures!)];
+      arr[i] = { ...arr[i], ...patch };
+      return { ...prev, signatures: arr };
+    });
+
+  const clearSig = (i: number) => {
+    setSigData((prev) => { const n = [...prev]; n[i] = ''; return n; });
+    setSig(i, { url: '', show: false });
+  };
 
   const save = async () => {
     if (!name.trim()) { setErr('กรุณาระบุชื่อรูปแบบ'); return; }
     if (!previewSrc)   { setErr('กรุณาอัปโหลดรูปแบบเกียรติบัตร'); return; }
     setSaving(true); setErr('');
     try {
-      const body: Record<string, unknown> = { name, textSettings: ts, accessUserIds: accessIds };
+      const signatureImages: Record<number, string> = {};
+      sigData.forEach((d, i) => { if (d) signatureImages[i] = d; });
+      const body: Record<string, unknown> = { name, textSettings: ts, signatureImages };
+      if (isAdmin) body.accessUserIds = accessIds;
       if (templateData) body.templateBase64 = templateData;
       if (isNew) await api.post('/certificate/projects', body);
       else       await api.put(`/certificate/projects/${idParam}`, body);
@@ -88,6 +119,17 @@ export default function CertProjectEditor() {
 
   const toggleAccess = (uid: number) =>
     setAccessIds((prev) => prev.includes(uid) ? prev.filter((x) => x !== uid) : [...prev, uid]);
+
+  // ts สำหรับ preview: ใส่ base64 ลายเซ็นใหม่แทน url
+  const previewTs: CertTextSettings = {
+    ...ts,
+    signatures: sigs.map((s, i) => ({ ...s, url: sigData[i] || s.url })),
+  };
+
+  const handleMove = (target: string, x: number, y: number) => {
+    if (target.startsWith('sig')) setSig(Number(target.slice(3)), { x, y });
+    else setCfg(target as keyof CertTextSettings, { x, y });
+  };
 
   if (loading) return <div className="p-6"><div className="skeleton h-[600px] rounded-2xl" /></div>;
 
@@ -174,26 +216,72 @@ export default function CertProjectEditor() {
             </div>
           </div>
 
-          {/* Access control */}
+          {/* Signatures */}
           <div className="bg-white border border-slate-200 rounded-xl p-3.5">
-            <h5 className="font-bold text-sm text-slate-700 mb-1 flex items-center gap-1.5"><Users size={14} /> สิทธิ์เข้าถึงโครงการ (เจ้าหน้าที่)</h5>
-            <p className="text-xs text-slate-400 mb-3">ผู้ดูแลระบบเข้าถึงได้ทุกโครงการอยู่แล้ว — เลือกเฉพาะเจ้าหน้าที่ที่ต้องการให้เข้าถึงโครงการนี้{accessIds.length > 0 && <span className="text-blue-600 font-bold"> (เลือกแล้ว {accessIds.length})</span>}</p>
-            <div className="relative mb-2">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input value={accessSearch} onChange={(e) => setAccessSearch(e.target.value)} placeholder="ค้นหาชื่อ / อีเมล / แผนก..."
-                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-400" />
-            </div>
-            <div className="max-h-48 overflow-y-auto border border-slate-100 rounded-lg divide-y divide-slate-50">
-              {filteredCandidates.length === 0 && <p className="text-xs text-slate-400 text-center py-4">{candidates.length === 0 ? 'ไม่มีรายชื่อ' : 'ไม่พบผู้ใช้ที่ค้นหา'}</p>}
-              {filteredCandidates.map((u) => (
-                <label key={u.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 cursor-pointer text-sm">
-                  <input type="checkbox" checked={accessIds.includes(u.id)} onChange={() => toggleAccess(u.id)} className="w-4 h-4 accent-blue-600" />
-                  <span className="flex-1 min-w-0 truncate text-slate-700">{u.name}</span>
-                  <span className="text-xs text-slate-400 truncate">{u.department ?? ''}</span>
-                </label>
-              ))}
+            <h5 className="font-bold text-sm text-slate-700 mb-1 flex items-center gap-1.5"><PenLine size={14} /> ลายเซ็นผู้ลงนาม (สูงสุด 3 คน)</h5>
+            <p className="text-xs text-slate-400 mb-3">ติ๊ก "แสดง" เพื่อกำหนดว่าจะแสดงกี่ลายเซ็น — ลากตำแหน่งในตัวอย่างได้</p>
+            <div className="space-y-3">
+              {sigs.map((sig, i) => {
+                const src = sigData[i] || sig.url;
+                return (
+                  <div key={i} className="border border-slate-100 rounded-lg p-3 bg-slate-50/50">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-600">ลายเซ็นที่ {i + 1}</span>
+                      <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-600">
+                        <input type="checkbox" checked={sig.show} onChange={(e) => setSig(i, { show: e.target.checked })} className="w-3.5 h-3.5 accent-blue-600" /> แสดง
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <label className="flex-1 flex items-center gap-2 border-2 border-dashed border-slate-300 rounded-lg px-2.5 py-2 cursor-pointer hover:bg-white text-xs text-slate-500 bg-white">
+                        <Upload size={13} className="text-blue-500" />
+                        <span className="truncate">{src ? 'เปลี่ยนรูปลายเซ็น' : 'อัปโหลดรูปลายเซ็น (PNG)'}</span>
+                        <input type="file" accept="image/png,image/jpeg" className="hidden" onChange={(e) => e.target.files?.[0] && onSigFile(i, e.target.files[0])} />
+                      </label>
+                      {src && (
+                        <>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={src} alt="" className="h-9 w-14 object-contain border border-slate-200 rounded bg-white" />
+                          <button type="button" onClick={() => clearSig(i)} className="text-red-400 hover:text-red-600 p-1" title="ลบลายเซ็น"><X size={14} /></button>
+                        </>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 mb-2">
+                      <input value={sig.name} onChange={(e) => setSig(i, { name: e.target.value })} className={inp} placeholder="ชื่อผู้ลงนาม เช่น (นายสมชาย ใจดี)" />
+                      <input value={sig.position} onChange={(e) => setSig(i, { position: e.target.value })} className={inp} placeholder="ตำแหน่ง เช่น ผู้อำนวยการ" />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <NumBox label="X (%)" value={sig.x} step={0.1} onChange={(v) => setSig(i, { x: v })} />
+                      <NumBox label="Y (%)" value={sig.y} step={0.1} onChange={(v) => setSig(i, { y: v })} />
+                      <NumBox label="กว้าง(px)" value={sig.size} step={1} onChange={(v) => setSig(i, { size: v })} />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
+
+          {/* Access control — เฉพาะผู้ดูแลระบบ */}
+          {isAdmin && (
+            <div className="bg-white border border-slate-200 rounded-xl p-3.5">
+              <h5 className="font-bold text-sm text-slate-700 mb-1 flex items-center gap-1.5"><Users size={14} /> สิทธิ์เข้าถึงโครงการ (เจ้าหน้าที่)</h5>
+              <p className="text-xs text-slate-400 mb-3">ผู้ดูแลระบบเข้าถึงได้ทุกโครงการอยู่แล้ว — เลือกเฉพาะเจ้าหน้าที่ที่ต้องการให้เข้าถึงโครงการนี้{accessIds.length > 0 && <span className="text-blue-600 font-bold"> (เลือกแล้ว {accessIds.length})</span>}</p>
+              <div className="relative mb-2">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input value={accessSearch} onChange={(e) => setAccessSearch(e.target.value)} placeholder="ค้นหาชื่อ / อีเมล / แผนก..."
+                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+              </div>
+              <div className="max-h-48 overflow-y-auto border border-slate-100 rounded-lg divide-y divide-slate-50">
+                {filteredCandidates.length === 0 && <p className="text-xs text-slate-400 text-center py-4">{candidates.length === 0 ? 'ไม่มีรายชื่อ' : 'ไม่พบผู้ใช้ที่ค้นหา'}</p>}
+                {filteredCandidates.map((u) => (
+                  <label key={u.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 cursor-pointer text-sm">
+                    <input type="checkbox" checked={accessIds.includes(u.id)} onChange={() => toggleAccess(u.id)} className="w-4 h-4 accent-blue-600" />
+                    <span className="flex-1 min-w-0 truncate text-slate-700">{u.name}</span>
+                    <span className="text-xs text-slate-400 truncate">{u.department ?? ''}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Preview (draggable) ── */}
@@ -201,9 +289,9 @@ export default function CertProjectEditor() {
           <div className="sticky top-4">
             <div className="bg-white border border-slate-200 rounded-2xl p-3">
               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                <ImageIcon size={12} /> ตัวอย่าง — ลากข้อความเพื่อจัดตำแหน่ง
+                <ImageIcon size={12} /> ตัวอย่าง — ลากข้อความ/ลายเซ็นเพื่อจัดตำแหน่ง
               </p>
-              <DragPreview src={previewSrc} ts={ts} onMove={(k, x, y) => setCfg(k, { x, y })} />
+              <DragPreview src={previewSrc} ts={previewTs} onMove={handleMove} />
             </div>
           </div>
         </div>
@@ -224,11 +312,12 @@ function NumBox({ label, value, step, onChange }: { label: string; value: number
 }
 
 // ── Interactive draggable preview ──────────────────────────────────────────
-function DragPreview({ src, ts, onMove }: { src: string; ts: CertTextSettings; onMove: (key: keyof CertTextSettings, x: number, y: number) => void }) {
+function DragPreview({ src, ts, onMove }: { src: string; ts: CertTextSettings; onMove: (target: string, x: number, y: number) => void }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const [base, setBase]   = useState({ w: 1122, h: 793 });
   const [scale, setScale] = useState(0.5);
-  const dragRef = useRef<keyof CertTextSettings | null>(null);
+  const dragRef = useRef<string | null>(null);
+  const sigs = ts.signatures ?? [];
 
   useEffect(() => {
     if (!src) return;
@@ -289,9 +378,9 @@ function DragPreview({ src, ts, onMove }: { src: string; ts: CertTextSettings; o
     );
   }
 
-  const startDrag = (key: keyof CertTextSettings) => (e: React.MouseEvent | React.TouchEvent) => {
+  const startDrag = (target: string) => (e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
-    dragRef.current = key;
+    dragRef.current = target;
   };
 
   return (
@@ -314,6 +403,21 @@ function DragPreview({ src, ts, onMove }: { src: string; ts: CertTextSettings; o
           </div>
         );
       })}
+
+      {sigs.map((sig, i) => (
+        (sig.show && sig.url) ? (
+          <div key={i}
+            onMouseDown={startDrag('sig' + i)} onTouchStart={startDrag('sig' + i)}
+            className="absolute cursor-move text-center rounded hover:outline-dashed hover:outline-2 hover:outline-emerald-400"
+            style={{ left: `${sig.x}%`, top: `${sig.y}%`, transform: 'translate(-50%, -50%)', width: sig.size * scale }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={sig.url} alt="" draggable={false} style={{ width: '100%', display: 'block', margin: '0 auto', pointerEvents: 'none' }} />
+            {sig.name && <div style={{ fontSize: sig.size * 0.15 * scale, fontWeight: 700, color: '#1a2744', fontFamily: "'Sarabun',sans-serif", whiteSpace: 'nowrap' }}>{sig.name}</div>}
+            {sig.position && <div style={{ fontSize: sig.size * 0.13 * scale, color: '#1a2744', fontFamily: "'Sarabun',sans-serif", whiteSpace: 'nowrap' }}>{sig.position}</div>}
+          </div>
+        ) : null
+      ))}
+
       {ts.qr.show && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
