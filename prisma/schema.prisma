@@ -206,6 +206,10 @@ model User {
   lostFoundClaims       LostFoundItem[]       @relation("LostFoundClaimer")
   modulePermissions     ModulePermission[]
 
+  // ─── เกียรติบัตร ────────────────────────────────────────────────────────────
+  certsIssued           Cert[]                @relation("CertIssuer")
+  certProjectAccess     CertProjectAccess[]   @relation("CertAccess")
+
   // ─── หัวหน้างาน / หัวหน้าแผนก ──────────────────────────────────────────────
   headOfWorkUnits   WorkUnit[]         @relation("WorkUnitHead")
   deputyOfWorkUnits WorkUnitDeputy[]   @relation("WorkUnitDeputies")
@@ -625,6 +629,75 @@ model ModulePermission {
 
   @@unique([userId, module])
   @@map("module_permissions")
+}
+
+// ─── โมดูลเกียรติบัตร ────────────────────────────────────────────────────────
+
+model CertProject {
+  id           Int      @id @default(autoincrement())
+  name         String
+  templateUrl  String   @db.Text
+  textSettings String?  @db.Text   // JSON: ตำแหน่ง/ฟอนต์/สี ของชื่อ-ตำแหน่ง-รางวัล-เลขที่-QR
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  series       CertSeries[]
+  certs        Cert[]
+  access       CertProjectAccess[]
+
+  @@map("cert_projects")
+}
+
+model CertSeries {
+  id            Int      @id @default(autoincrement())
+  projectId     Int?
+  project       CertProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  prefix        String
+  year          String?
+  startNum      Int      @default(1)
+  quantity      Int      @default(100)
+  lastNum       Int      @default(0)
+  reqFirstname  String?
+  reqLastname   String?
+  reqDepartment String?
+  createdAt     DateTime @default(now())
+
+  certs         Cert[]
+
+  @@map("cert_series")
+}
+
+model Cert {
+  id         Int      @id @default(autoincrement())
+  projectId  Int
+  project    CertProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  seriesId   Int?
+  series     CertSeries? @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+  certNo     String
+  firstname  String   @default("-")
+  lastname   String   @default("-")
+  idCard     String?
+  position   String?
+  award      String?
+  issueDate  DateTime @db.Date
+  issuedById Int?
+  issuedBy   User?    @relation("CertIssuer", fields: [issuedById], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now())
+
+  @@index([projectId])
+  @@index([certNo])
+  @@map("certs")
+}
+
+model CertProjectAccess {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation("CertAccess", fields: [userId], references: [id], onDelete: Cascade)
+  projectId Int
+  project   CertProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId])
+  @@map("cert_project_access")
 }
 
 // ─── ตั้งค่าระบบ ─────────────────────────────────────────────────────────────

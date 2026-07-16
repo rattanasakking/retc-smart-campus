@@ -136,7 +136,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-const ALL_MODULES = ['DUTY', 'WORK_LOG', 'EQUIPMENT', 'HELPDESK', 'ROOM_BOOKING', 'LOST_FOUND', 'PERSONNEL', 'LEAVE'];
+const ALL_MODULES = ['DUTY', 'WORK_LOG', 'EQUIPMENT', 'HELPDESK', 'ROOM_BOOKING', 'LOST_FOUND', 'PERSONNEL', 'LEAVE', 'CERTIFICATE'];
 
 // GET /api/auth/my-modules  — returns modules this user can access (role + admin)
 router.get('/my-modules', auth, async (req, res) => {
@@ -149,9 +149,11 @@ router.get('/my-modules', auth, async (req, res) => {
       prisma.modulePermission.findMany({ where: { userId: req.user.id }, select: { module: true } }),
     ]);
     const adminSet = new Set(adminPerms.map((p) => p.module));
+    // โมดูลที่ค่าเริ่มต้น (ยังไม่ตั้งค่าสิทธิ์ตาม role) ให้เข้าถึงได้เฉพาะผู้มีสิทธิ์รายบุคคล/แอดมินเท่านั้น
+    const RESTRICTED_DEFAULT = { CERTIFICATE: [] };
     const accessible = ALL_MODULES.filter((mod) => {
       const s = roleSettings.find((r) => r.key === `MODULE_ROLES_${mod}`);
-      const allowed = s ? JSON.parse(s.value) : ['admin', 'executive', 'teacher', 'staff'];
+      const allowed = s ? JSON.parse(s.value) : (RESTRICTED_DEFAULT[mod] ?? ['admin', 'executive', 'teacher', 'staff']);
       return allowed.includes(req.user.role) || adminSet.has(mod);
     });
     res.json(success({ modules: accessible }));

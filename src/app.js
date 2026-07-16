@@ -65,6 +65,7 @@ app.use('/api/lostfound',  require('./routes/lostfound'));
 app.use('/api/settings',   require('./routes/settings'));
 app.use('/api/report',     require('./routes/report'));
 app.use('/api/personnel',  require('./routes/personnel'));
+app.use('/api/certificate', require('./routes/certificate'));
 app.use('/api/webhook',    require('./routes/webhook'));
 
 // ─── Health check (Plesk monitoring / uptime check) ──────────────────────────

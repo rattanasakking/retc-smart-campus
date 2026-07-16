@@ -886,7 +886,7 @@ router.put('/users/:id', superAdmin, async (req, res, next) => {
 // Module Permissions
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const VALID_MODULES = ['DUTY', 'WORK_LOG', 'EQUIPMENT', 'HELPDESK', 'ROOM_BOOKING', 'LOST_FOUND', 'PERSONNEL', 'LEAVE'];
+const VALID_MODULES = ['DUTY', 'WORK_LOG', 'EQUIPMENT', 'HELPDESK', 'ROOM_BOOKING', 'LOST_FOUND', 'PERSONNEL', 'LEAVE', 'CERTIFICATE'];
 const ALL_ROLES     = ['admin', 'executive', 'teacher', 'staff'];
 const MODULE_KEY    = (m) => `MODULE_ROLES_${m}`;
 

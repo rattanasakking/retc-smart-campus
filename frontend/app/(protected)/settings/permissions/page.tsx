@@ -11,7 +11,7 @@ interface PermGrouped { admins: ModuleUser[]; users: ModuleUser[] }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MODULES = ['DUTY','WORK_LOG','EQUIPMENT','HELPDESK','ROOM_BOOKING','LOST_FOUND','PERSONNEL','LEAVE'] as const;
+const MODULES = ['DUTY','WORK_LOG','EQUIPMENT','HELPDESK','ROOM_BOOKING','LOST_FOUND','PERSONNEL','LEAVE','CERTIFICATE'] as const;
 type Mod = typeof MODULES[number];
 
 const MODULE_META: Record<Mod, { label: string; desc: string; color: string; bg: string }> = {
@@ -23,6 +23,7 @@ const MODULE_META: Record<Mod, { label: string; desc: string; color: string; bg:
   LOST_FOUND:   { label: 'ของหาย',             desc: 'ระบบของหายและการติดตามคืนของ',     color: '#16a34a', bg: '#f0fdf4' },
   PERSONNEL:    { label: 'บุคลากร',            desc: 'จัดการข้อมูลบุคลากรและโครงสร้าง', color: '#0369a1', bg: '#e0f2fe' },
   LEAVE:        { label: 'ระบบการลา',          desc: 'ยื่นและอนุมัติใบลาบุคลากร',        color: '#7e22ce', bg: '#f5f3ff' },
+  CERTIFICATE:  { label: 'เกียรติบัตร',        desc: 'ออกและจัดการเกียรติบัตรออนไลน์',   color: '#c2410c', bg: '#fff7ed' },
 };
 
 const ALL_ROLES = ['admin','executive','teacher','staff'] as const;
