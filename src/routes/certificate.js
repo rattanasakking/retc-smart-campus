@@ -95,10 +95,12 @@ function applySignatureImages(tsObj, signatureImages) {
 }
 
 // ─── permission helpers ─────────────────────────────────────────────────────
+// ผู้ดูแลเกียรติบัตร = superadmin / role admin / ได้รับสิทธิ์โมดูล CERTIFICATE (ทุก level)
+// สร้าง/แก้ไข/ลบ โครงการและเลขชุดได้ทั้งหมด — ส่วนสิทธิ์จำกัดเฉพาะบางโครงการใช้ตาราง cert_project_access
 async function isCertAdmin(user) {
   if (user.isSuperAdmin || user.role === 'admin') return true;
   const perm = await prisma.modulePermission.findFirst({
-    where: { userId: user.id, module: 'CERTIFICATE', level: 'ADMIN' },
+    where: { userId: user.id, module: 'CERTIFICATE' },
   });
   return !!perm;
 }
