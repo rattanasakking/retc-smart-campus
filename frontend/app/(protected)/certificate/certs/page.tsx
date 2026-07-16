@@ -323,7 +323,8 @@ function ImportModal({ projects, allSeries, onClose, onDone, inp }: {
     finally { setSaving(false); }
   };
 
-  const templateHref = 'data:text/csv;charset=utf-8,' + encodeURIComponent('ชื่อ,นามสกุล,เลขบัตรประชาชน,ตำแหน่ง,รางวัล,รหัสเกียรติบัตร\nสมชาย,ใจดี,1122334455667,นักเรียน,ชนะเลิศ,\n');
+  // ใส่ UTF-8 BOM นำหน้า เพื่อให้ Excel เปิดภาษาไทยได้ถูกต้อง (ไม่เพี้ยน)
+  const templateHref = 'data:text/csv;charset=utf-8,' + encodeURIComponent('﻿' + 'ชื่อ,นามสกุล,เลขบัตรประชาชน,ตำแหน่ง,รางวัล,รหัสเกียรติบัตร\nสมชาย,ใจดี,1122334455667,นักเรียน,ชนะเลิศ,\n');
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
