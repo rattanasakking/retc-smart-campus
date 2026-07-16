@@ -1,0 +1,83 @@
+import type { CertTextSettings, CertValues } from '@/components/certificate/CertRender';
+
+function loadImg(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('load image failed: ' + src));
+    img.src = src;
+  });
+}
+
+const TEXT_KEYS: (keyof CertValues)[] = ['name', 'pos', 'awd', 'cert'];
+
+// เรนเดอร์เกียรติบัตรเป็นรูปภาพ PNG (ความละเอียดสูง) ด้วย canvas
+export async function certToPngBlob(
+  templateUrl: string, ts: CertTextSettings, values: CertValues, verifyUrl: string,
+): Promise<Blob> {
+  const tpl = await loadImg(templateUrl);
+
+  // base coordinate เดียวกับที่ CertRender ใช้ (fontSize/QR อ้างอิงจากฐานนี้)
+  const ratio = tpl.naturalHeight / tpl.naturalWidth;
+  let w = 1122, h = 793;
+  if (ratio < 1) { w = 1122; h = Math.round(1122 * ratio); }
+  else           { h = 1122; w = Math.round(1122 / ratio); }
+
+  const DPR = 2; // เพิ่มความคมชัด
+  const canvas = document.createElement('canvas');
+  canvas.width = w * DPR;
+  canvas.height = h * DPR;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('canvas ไม่รองรับ');
+  ctx.scale(DPR, DPR);
+
+  ctx.drawImage(tpl, 0, 0, w, h);
+
+  // โหลดฟอนต์ก่อนวาดข้อความ
+  try {
+    const fonts = new Set<string>();
+    TEXT_KEYS.forEach((k) => fonts.add(ts[k].font));
+    await Promise.all(Array.from(fonts).map((f) => (document as unknown as { fonts: FontFaceSet }).fonts.load(`bold 40px '${f}'`)));
+    await (document as unknown as { fonts: FontFaceSet }).fonts.ready;
+  } catch { /* ใช้ฟอนต์สำรอง */ }
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const k of TEXT_KEYS) {
+    const cfg = ts[k];
+    const val = values[k];
+    if (!cfg.show || !val) continue;
+    ctx.font = `bold ${cfg.fontSize}px '${cfg.font}', sans-serif`;
+    ctx.fillStyle = cfg.color;
+    ctx.fillText(val, (cfg.x / 100) * w, (cfg.y / 100) * h);
+  }
+
+  if (ts.qr.show && values.cert) {
+    try {
+      const qr = await loadImg(`/api/certificate/qr?text=${encodeURIComponent(verifyUrl || values.cert)}&size=${Math.round(ts.qr.size * DPR)}`);
+      const s = ts.qr.size;
+      const qx = (ts.qr.x / 100) * w - s / 2;
+      const qy = (ts.qr.y / 100) * h - s / 2;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(qx, qy, s, s);
+      ctx.drawImage(qr, qx, qy, s, s);
+    } catch { /* ข้าม QR ถ้าโหลดไม่ได้ */ }
+  }
+
+  return new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('สร้างรูปภาพไม่สำเร็จ'))), 'image/png', 0.95));
+}
+
+export async function downloadCertImage(
+  filename: string, templateUrl: string, ts: CertTextSettings, values: CertValues, verifyUrl: string,
+): Promise<void> {
+  const blob = await certToPngBlob(templateUrl, ts, values, verifyUrl);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename.replace(/[\\/:*?"<>|]+/g, '_') + '.png';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}

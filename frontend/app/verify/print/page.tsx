@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Printer, X, Loader2 } from 'lucide-react';
+import { Printer, X, Loader2, ImageDown } from 'lucide-react';
 import CertRender, { type CertTextSettings } from '@/components/certificate/CertRender';
+import { downloadCertImage } from '@/lib/certImage';
 
 interface PublicCert {
   id: number; certNo: string; firstname: string; lastname: string;
@@ -13,6 +14,25 @@ export default function CertPrintPage() {
   const [certs, setCerts]   = useState<PublicCert[]>([]);
   const [loading, setLoading] = useState(true);
   const [origin, setOrigin] = useState('');
+  const [dlAll, setDlAll]   = useState(false);
+
+  const downloadAll = async () => {
+    setDlAll(true);
+    try {
+      for (const c of certs) {
+        if (!c.templateUrl) continue;
+        await downloadCertImage(
+          `${c.certNo}_${c.firstname}${c.lastname}`, c.templateUrl, c.textSettings,
+          {
+            name: (c.firstname === '-' && c.lastname === '-') ? '(เว้นว่างรอระบุชื่อ)' : `${c.firstname} ${c.lastname}`,
+            pos: c.position ?? '', awd: c.award ?? '', cert: c.certNo,
+          },
+          `${origin}/verify?keyword=${encodeURIComponent(c.certNo)}`,
+        );
+      }
+    } catch (e) { alert('ดาวน์โหลดรูปภาพไม่สำเร็จ: ' + (e as Error).message); }
+    finally { setDlAll(false); }
+  };
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -43,6 +63,9 @@ export default function CertPrintPage() {
           <span className="ml-3 text-slate-300">จำนวน {certs.length} ใบ</span>
         </div>
         <div className="flex gap-2">
+          <button onClick={downloadAll} disabled={dlAll || certs.length === 0} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-1.5">
+            {dlAll ? <Loader2 size={14} className="animate-spin" /> : <ImageDown size={14} />} ดาวน์โหลดรูปภาพ
+          </button>
           <button onClick={() => window.print()} className="bg-blue-600 hover:bg-blue-500 px-5 py-2 rounded-lg font-bold text-sm">พิมพ์ / บันทึก PDF</button>
           <button onClick={() => window.close()} className="bg-slate-600 hover:bg-slate-500 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-1.5"><X size={14} /> ปิด</button>
         </div>

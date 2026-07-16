@@ -50,11 +50,14 @@ export default function CertRender({ templateUrl, ts, values, verifyUrl, classNa
       className={className}
       style={{
         position: 'relative', width: '100%', aspectRatio: `${base.w} / ${base.h}`,
-        containerType: 'inline-size', backgroundColor: '#fff',
-        backgroundImage: `url('${templateUrl}')`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat',
-        overflow: 'hidden',
+        containerType: 'inline-size', backgroundColor: '#fff', overflow: 'hidden',
       } as React.CSSProperties}
     >
+      {/* ใช้ <img> แทน CSS background เพื่อให้พื้นหลังแสดงตอนพิมพ์ PDF */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={templateUrl} alt="" aria-hidden
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0 }} />
+
       {KEYS.map((k) => {
         const cfg = ts[k];
         const val = values[k];
@@ -62,7 +65,7 @@ export default function CertRender({ templateUrl, ts, values, verifyUrl, classNa
         const ph = k === 'name' && isPlaceholder;
         return (
           <div key={k} style={{
-            position: 'absolute', left: `${cfg.x}%`, top: `${cfg.y}%`,
+            position: 'absolute', left: `${cfg.x}%`, top: `${cfg.y}%`, zIndex: 2,
             transform: 'translate(-50%, -50%)', whiteSpace: 'nowrap', lineHeight: 1.2,
             fontSize: cqw(cfg.fontSize), color: ph ? '#cbd5e1' : cfg.color,
             fontFamily: `'${cfg.font}', sans-serif`, fontWeight: ph ? 400 : 700,

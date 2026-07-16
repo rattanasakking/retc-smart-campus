@@ -144,11 +144,14 @@ router.get('/my-modules', auth, async (req, res) => {
     if (req.user.isSuperAdmin || ['admin', 'executive'].includes(req.user.role)) {
       return res.json(success({ modules: ALL_MODULES }));
     }
-    const [roleSettings, adminPerms] = await Promise.all([
+    const [roleSettings, adminPerms, certAccess] = await Promise.all([
       prisma.systemSettings.findMany({ where: { key: { startsWith: 'MODULE_ROLES_' } } }),
       prisma.modulePermission.findMany({ where: { userId: req.user.id }, select: { module: true } }),
+      prisma.certProjectAccess.count({ where: { userId: req.user.id } }),
     ]);
     const adminSet = new Set(adminPerms.map((p) => p.module));
+    // ได้รับสิทธิ์เข้าถึงโครงการเกียรติบัตร → เห็นเมนูเกียรติบัตรด้วย
+    if (certAccess > 0) adminSet.add('CERTIFICATE');
     // โมดูลที่ค่าเริ่มต้น (ยังไม่ตั้งค่าสิทธิ์ตาม role) ให้เข้าถึงได้เฉพาะผู้มีสิทธิ์รายบุคคล/แอดมินเท่านั้น
     const RESTRICTED_DEFAULT = { CERTIFICATE: [] };
     const accessible = ALL_MODULES.filter((mod) => {

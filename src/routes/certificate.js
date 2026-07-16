@@ -82,6 +82,16 @@ async function hasCertModule(user) {
   return !!perm;
 }
 
+async function hasProjectAccess(user) {
+  const cnt = await prisma.certProjectAccess.count({ where: { userId: user.id } });
+  return cnt > 0;
+}
+
+// ใช้งานโมดูลได้ = admin / มีสิทธิ์โมดูล / ได้รับสิทธิ์เข้าถึงโครงการอย่างน้อย 1 โครงการ
+async function canUseCert(user) {
+  return (await isCertAdmin(user)) || (await hasCertModule(user)) || (await hasProjectAccess(user));
+}
+
 // คืน null = เข้าถึงได้ทุกโครงการ (admin), หรือ array ของ projectId ที่เข้าถึงได้
 async function allowedProjectIds(user) {
   if (await isCertAdmin(user)) return null;
@@ -91,10 +101,10 @@ async function allowedProjectIds(user) {
   return rows.map((r) => r.projectId);
 }
 
-// middleware: เข้าถึงโมดูลได้ (admin หรือมีสิทธิ์โมดูล)
+// middleware: เข้าถึงโมดูลได้ (admin / สิทธิ์โมดูล / สิทธิ์เข้าถึงโครงการ)
 async function requireCert(req, res, next) {
   try {
-    if (await isCertAdmin(req.user) || await hasCertModule(req.user)) return next();
+    if (await canUseCert(req.user)) return next();
     return res.status(403).json(error('ไม่มีสิทธิ์เข้าถึงโมดูลเกียรติบัตร'));
   } catch (e) { next(e); }
 }
@@ -168,6 +178,26 @@ router.get('/public/search', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// GET /api/certificate/qr?text=...&size=...  — proxy QR ให้เป็น same-origin (สำหรับดาวน์โหลดรูปภาพ/แคนวาส)
+router.get('/qr', async (req, res) => {
+  const text = (req.query.text ?? '').toString();
+  const size = Math.min(1000, Math.max(50, parseInt(req.query.size ?? '150', 10) || 150));
+  const primary  = `https://quickchart.io/qr?text=${encodeURIComponent(text)}&size=${size}&margin=1`;
+  const fallback = `https://chart.googleapis.com/chart?chs=${size}x${size}&cht=qr&chl=${encodeURIComponent(text)}`;
+  for (const url of [primary, fallback]) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) continue;
+      const buf = Buffer.from(await r.arrayBuffer());
+      res.set('Content-Type', r.headers.get('content-type') || 'image/png');
+      res.set('Cache-Control', 'public, max-age=86400');
+      res.set('Access-Control-Allow-Origin', '*');
+      return res.send(buf);
+    } catch { /* ลอง fallback */ }
+  }
+  res.status(502).json(error('ไม่สามารถสร้าง QR ได้'));
+});
+
 // GET /api/certificate/public/certs?ids=1,2,3  (ใช้หน้าพิมพ์)
 router.get('/public/certs', async (req, res, next) => {
   try {
@@ -193,7 +223,7 @@ router.use(auth);
 router.get('/me', async (req, res, next) => {
   try {
     const admin = await isCertAdmin(req.user);
-    res.json(success({ isCertAdmin: admin, canAccess: admin || await hasCertModule(req.user) }));
+    res.json(success({ isCertAdmin: admin, canAccess: await canUseCert(req.user) }));
   } catch (e) { next(e); }
 });
 
@@ -327,9 +357,12 @@ router.delete('/projects/:id', requireCertAdmin, async (req, res, next) => {
 
 // ─── SERIES (admin) ────────────────────────────────────────────────────────
 
-router.get('/series', requireCertAdmin, async (req, res, next) => {
+router.get('/series', requireCert, async (req, res, next) => {
   try {
+    const allowed = await allowedProjectIds(req.user);
+    const where = allowed === null ? {} : { projectId: { in: allowed.length ? allowed : [0] } };
     const list = await prisma.certSeries.findMany({
+      where,
       orderBy: { id: 'desc' },
       include: { project: { select: { name: true } } },
     });

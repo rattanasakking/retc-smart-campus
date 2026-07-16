@@ -92,6 +92,19 @@ export default function CertsPage() {
     try { await api.post('/certificate/certs/bulk-delete', { ids: Array.from(selected) }); load(); } catch (e) { alert((e as Error).message); }
   };
 
+  const printAll = async () => {
+    const params = new URLSearchParams({ limit: '2000' });
+    if (search)   params.set('search', search);
+    if (fProject) params.set('projectId', fProject);
+    if (fYear)    params.set('year', fYear);
+    try {
+      const r = await api.get<{ data: Cert[] }>(`/certificate/certs?${params}`);
+      const ids = (r.data ?? []).map((c) => c.id);
+      if (!ids.length) { alert('ไม่มีรายการสำหรับพิมพ์'); return; }
+      window.open(`/verify/print?ids=${ids.join(',')}`, '_blank');
+    } catch (e) { alert((e as Error).message); }
+  };
+
   const setF = (k: keyof IForm, v: string) => setForm((p) => ({ ...p, [k]: v }));
   const projectSeries = allSeries.filter((s) => String(s.projectId) === form.projectId && s.lastNum < s.quantity);
   const inp = 'w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400';
@@ -103,7 +116,8 @@ export default function CertsPage() {
           <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Stamp size={20} style={{ color: '#c2410c' }} /> ออกเกียรติบัตร</h1>
           <p className="text-sm text-gray-500 mt-0.5">ค้นหา ออก และจัดการเกียรติบัตร</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={printAll} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700" title="พิมพ์ทุกใบตามตัวกรองปัจจุบัน (เลือกโครงการเพื่อพิมพ์ทั้งโครงการ)"><Printer size={15} /> พิมพ์ทั้งหมด</button>
           <button onClick={() => setImportOpen(true)} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700"><FileSpreadsheet size={15} /> นำเข้า CSV</button>
           <button onClick={openNew} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-lg text-sm hover:bg-slate-700"><Plus size={15} /> เพิ่มทีละใบ</button>
         </div>

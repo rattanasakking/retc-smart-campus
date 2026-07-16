@@ -63,14 +63,14 @@ export default function CertProjectsPage() {
               <div className="h-44 bg-slate-100 relative overflow-hidden flex items-center justify-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={p.templateUrl} alt={p.name} className="w-full h-full group-hover:scale-105 transition duration-500" style={{ objectFit: 'fill' }} />
-                <div className="absolute bottom-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition">
-                  <Link href={`/certificate/projects/${p.id}`} className="bg-white text-blue-600 w-9 h-9 rounded-full shadow flex items-center justify-center hover:bg-blue-50" title="แก้ไข"><Pencil size={15} /></Link>
-                  {isAdmin && (
+                {isAdmin && (
+                  <div className="absolute bottom-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition">
+                    <Link href={`/certificate/projects/${p.id}`} className="bg-white text-blue-600 w-9 h-9 rounded-full shadow flex items-center justify-center hover:bg-blue-50" title="แก้ไข"><Pencil size={15} /></Link>
                     <button onClick={() => remove(p)} disabled={deleting === p.id} className="bg-white text-red-600 w-9 h-9 rounded-full shadow flex items-center justify-center hover:bg-red-50" title="ลบ">
                       {deleting === p.id ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
               <div className="p-4 border-t border-slate-100 flex-grow">
                 <h3 className="font-bold text-slate-800 line-clamp-2 mb-1">{p.name}</h3>
