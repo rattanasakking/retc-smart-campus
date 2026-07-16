@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Upload, Save, Loader2, ImageIcon, Users } from 'lucide-react';
+import { ArrowLeft, Upload, Save, Loader2, ImageIcon, Users, Search } from 'lucide-react';
 import { api } from '@/lib/api';
 import { CERT_FONTS, DEFAULT_TS, qrUrl, qrFallbackUrl, type CertTextSettings, type CertValues } from '@/components/certificate/CertRender';
 
@@ -36,8 +36,15 @@ export default function CertProjectEditor() {
   const [loading, setLoading]   = useState(!isNew);
   const [saving, setSaving]     = useState(false);
   const [err, setErr]           = useState('');
+  const [accessSearch, setAccessSearch] = useState('');
 
   const previewSrc = templateData || templateUrl;
+
+  const filteredCandidates = candidates.filter((u) => {
+    const kw = accessSearch.trim().toLowerCase();
+    if (!kw) return true;
+    return u.name.toLowerCase().includes(kw) || (u.email ?? '').toLowerCase().includes(kw) || (u.department ?? '').toLowerCase().includes(kw);
+  });
 
   useEffect(() => {
     api.get<{ data: Candidate[] }>('/certificate/access-candidates').then((r) => setCandidates(r.data ?? [])).catch(() => {});
@@ -170,10 +177,15 @@ export default function CertProjectEditor() {
           {/* Access control */}
           <div className="bg-white border border-slate-200 rounded-xl p-3.5">
             <h5 className="font-bold text-sm text-slate-700 mb-1 flex items-center gap-1.5"><Users size={14} /> สิทธิ์เข้าถึงโครงการ (เจ้าหน้าที่)</h5>
-            <p className="text-xs text-slate-400 mb-3">ผู้ดูแลระบบเข้าถึงได้ทุกโครงการอยู่แล้ว — เลือกเฉพาะเจ้าหน้าที่ที่ต้องการให้เข้าถึงโครงการนี้</p>
+            <p className="text-xs text-slate-400 mb-3">ผู้ดูแลระบบเข้าถึงได้ทุกโครงการอยู่แล้ว — เลือกเฉพาะเจ้าหน้าที่ที่ต้องการให้เข้าถึงโครงการนี้{accessIds.length > 0 && <span className="text-blue-600 font-bold"> (เลือกแล้ว {accessIds.length})</span>}</p>
+            <div className="relative mb-2">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input value={accessSearch} onChange={(e) => setAccessSearch(e.target.value)} placeholder="ค้นหาชื่อ / อีเมล / แผนก..."
+                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </div>
             <div className="max-h-48 overflow-y-auto border border-slate-100 rounded-lg divide-y divide-slate-50">
-              {candidates.length === 0 && <p className="text-xs text-slate-400 text-center py-4">ไม่มีรายชื่อ</p>}
-              {candidates.map((u) => (
+              {filteredCandidates.length === 0 && <p className="text-xs text-slate-400 text-center py-4">{candidates.length === 0 ? 'ไม่มีรายชื่อ' : 'ไม่พบผู้ใช้ที่ค้นหา'}</p>}
+              {filteredCandidates.map((u) => (
                 <label key={u.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 cursor-pointer text-sm">
                   <input type="checkbox" checked={accessIds.includes(u.id)} onChange={() => toggleAccess(u.id)} className="w-4 h-4 accent-blue-600" />
                   <span className="flex-1 min-w-0 truncate text-slate-700">{u.name}</span>

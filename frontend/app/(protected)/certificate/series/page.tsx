@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Hash, X, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Hash, X, Loader2, Search } from 'lucide-react';
 import { api } from '@/lib/api';
 import CertTabBar from '@/components/certificate/CertTabBar';
 
@@ -17,6 +17,8 @@ interface Form {
 }
 const BLANK: Form = { id: null, projectId: '', prefix: '', year: '', startNum: '1', quantity: '100', reqFirstname: '', reqLastname: '', reqDepartment: '' };
 
+interface PersonHit { id: number; name: string; department?: string | null; division?: { name: string } | null; workUnit?: { name: string } | null }
+
 export default function CertSeriesPage() {
   const [list, setList]       = useState<Series[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -25,6 +27,29 @@ export default function CertSeriesPage() {
   const [form, setForm]       = useState<Form>(BLANK);
   const [saving, setSaving]   = useState(false);
   const [err, setErr]         = useState('');
+
+  // ค้นหาบุคลากรสำหรับ "ผู้ขอ"
+  const [personSearch, setPersonSearch]   = useState('');
+  const [personResults, setPersonResults] = useState<PersonHit[]>([]);
+  const [personOpen, setPersonOpen]       = useState(false);
+
+  useEffect(() => {
+    const kw = personSearch.trim();
+    if (kw.length < 2) { setPersonResults([]); return; }
+    const t = setTimeout(() => {
+      api.get<{ data: PersonHit[] }>(`/personnel?search=${encodeURIComponent(kw)}&limit=8`)
+        .then((r) => setPersonResults(r.data ?? []))
+        .catch(() => setPersonResults([]));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [personSearch]);
+
+  const selectPerson = (p: PersonHit) => {
+    const parts = p.name.trim().split(/\s+/);
+    const dept = p.workUnit?.name || p.division?.name || p.department || '';
+    setForm((f) => ({ ...f, reqFirstname: parts[0] ?? '', reqLastname: parts.slice(1).join(' '), reqDepartment: dept }));
+    setPersonSearch(''); setPersonResults([]); setPersonOpen(false);
+  };
 
   const load = () => {
     setLoading(true);
@@ -35,8 +60,9 @@ export default function CertSeriesPage() {
     api.get<{ data: Project[] }>('/certificate/projects').then((r) => setProjects(r.data ?? [])).catch(() => {});
   }, []);
 
-  const openNew = () => { setForm(BLANK); setErr(''); setModal(true); };
+  const openNew = () => { setForm(BLANK); setErr(''); setPersonSearch(''); setPersonResults([]); setModal(true); };
   const openEdit = (s: Series) => {
+    setPersonSearch(''); setPersonResults([]);
     setForm({
       id: s.id, projectId: String(s.projectId ?? ''), prefix: s.prefix, year: s.year ?? '',
       startNum: String(s.startNum), quantity: String(s.quantity),
@@ -145,6 +171,30 @@ export default function CertSeriesPage() {
               </div>
               <div className="border-t border-slate-100 pt-4">
                 <p className="text-sm font-bold text-slate-700 mb-2">ข้อมูลผู้ขอออกเลขชุด (ถ้ามี)</p>
+                {/* ค้นหาบุคลากรเพื่อดึงข้อมูล */}
+                <div className="relative mb-3">
+                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    value={personSearch}
+                    onChange={(e) => { setPersonSearch(e.target.value); setPersonOpen(true); }}
+                    onFocus={() => setPersonOpen(true)}
+                    onBlur={() => setTimeout(() => setPersonOpen(false), 150)}
+                    placeholder="ค้นหาบุคลากรเพื่อดึงข้อมูล (ชื่อ/อีเมล/รหัส)..."
+                    className={`${inp} pl-9`} />
+                  {personOpen && personSearch.trim().length >= 2 && (
+                    <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                      {personResults.length === 0 ? (
+                        <p className="text-xs text-slate-400 text-center py-3">ไม่พบบุคลากร</p>
+                      ) : personResults.map((p) => (
+                        <button type="button" key={p.id} onMouseDown={(e) => { e.preventDefault(); selectPerson(p); }}
+                          className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm flex items-center justify-between gap-2">
+                          <span className="font-medium text-slate-700 truncate">{p.name}</span>
+                          <span className="text-xs text-slate-400 truncate flex-shrink-0">{p.workUnit?.name || p.division?.name || p.department || ''}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <input value={form.reqFirstname} onChange={(e) => setF('reqFirstname', e.target.value)} className={inp} placeholder="ชื่อผู้ขอ" />
                   <input value={form.reqLastname} onChange={(e) => setF('reqLastname', e.target.value)} className={inp} placeholder="นามสกุล" />
