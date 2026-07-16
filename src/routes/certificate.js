@@ -528,7 +528,8 @@ router.get('/certs', requireCert, async (req, res, next) => {
     if (month) { /* month filter applies to reports; handled there via issueDate */ }
 
     const [rows, total] = await Promise.all([
-      prisma.cert.findMany({ where, select: CERT_SELECT, orderBy: { id: 'desc' }, skip: (page - 1) * limit, take: limit }),
+      // เรียงจากน้อยไปมาก (ลำดับการนำเข้า/ออกเลข = แถวบนสุดของไฟล์ได้เลขแรก)
+      prisma.cert.findMany({ where, select: CERT_SELECT, orderBy: { id: 'asc' }, skip: (page - 1) * limit, take: limit }),
       prisma.cert.count({ where }),
     ]);
     res.json(paginate(rows.map(shapeCert), total, page, limit));
