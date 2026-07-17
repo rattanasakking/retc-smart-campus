@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  // รัน Next แบบ in-process ผ่าน custom server (src/middleware/nextjs.js) — ไม่ใช้ standalone
   images: {
     domains: ['app.retc.ac.th', 'localhost'],
     unoptimized: true,
