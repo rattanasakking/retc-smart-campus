@@ -471,6 +471,35 @@ router.put('/leaves/:id/reject', auth, requireApprover, async (req, res) => {
 // PERSONNEL (USERS)  — /:id routes MUST come after all /leaves/* routes
 // ═════════════════════════════════════════════════════════════════════════════
 
+// ทำเนียบบุคลากร — ทุกคน (ที่ login) ดู/ค้นหาได้ แสดงเฉพาะฟิลด์จำกัด (ต้องอยู่ก่อน /:id)
+router.get('/directory', auth, async (req, res) => {
+  try {
+    const page  = Math.max(1, parseInt(req.query.page  || '1',  10));
+    const limit = Math.min(60,  parseInt(req.query.limit || '30', 10));
+    const skip  = (page - 1) * limit;
+    const where = { isActive: true };
+    if (req.query.search) {
+      const s = req.query.search;
+      where.OR = [
+        { name:     { contains: s } },
+        { nickname: { contains: s } },
+        { position: { contains: s } },
+        { phone:    { contains: s } },
+        { email:    { contains: s } },
+      ];
+    }
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: { id: true, name: true, nickname: true, birthDate: true, position: true, phone: true, email: true, avatar: true },
+        orderBy: { name: 'asc' }, skip, take: limit,
+      }),
+      prisma.user.count({ where }),
+    ]);
+    res.json(paginate(users, total, page, limit));
+  } catch (e) { res.status(500).json(error('เกิดข้อผิดพลาด')); }
+});
+
 router.get('/', auth, async (req, res) => {
   try {
     const page  = Math.max(1, parseInt(req.query.page  || '1',  10));

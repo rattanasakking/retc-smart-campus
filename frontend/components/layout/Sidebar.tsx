@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import {
   LayoutDashboard, CalendarCheck, ClipboardList, Monitor,
   Wrench, DoorOpen, PackageSearch, BarChart3, Car, CalendarDays, Megaphone,
-  Lock, ChevronRight, Settings, Users, CalendarX, LogOut, Award,
+  Lock, ChevronRight, Settings, Users, CalendarX, LogOut, Award, Contact,
 } from 'lucide-react';
 import { TOKEN_KEY, USER_KEY } from '@/lib/api';
 
@@ -33,6 +33,7 @@ const NAV_PHASE1: {
   { href: '/lost-found/manage', label: 'ของหาย',     Icon: PackageSearch,   module: 'LOST_FOUND'   },
   { href: '/report',    label: 'รายงานภาพรวม',       Icon: BarChart3,       adminOnly: true        },
   { href: '/personnel', label: 'บุคลากร',             Icon: Users,           module: 'PERSONNEL'    },
+  { href: '/directory', label: 'ทำเนียบบุคลากร',      Icon: Contact                                 },
   { href: '/leave',     label: 'ระบบการลา',           Icon: CalendarX,       module: 'LEAVE'        },
   { href: '/certificate', label: 'เกียรติบัตร',       Icon: Award,           module: 'CERTIFICATE'  },
 ];
