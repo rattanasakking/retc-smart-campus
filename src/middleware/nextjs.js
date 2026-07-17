@@ -39,6 +39,12 @@ function startNextServer() {
     });
   }
 
+  // kill Next child เมื่อ parent (app.js) ปิด/restart เพื่อไม่ให้ค้างจับ port 3002 (กัน EADDRINUSE)
+  const killChild = () => { try { child.kill('SIGTERM'); } catch { /* */ } };
+  process.once('SIGTERM', killChild);
+  process.once('SIGINT', killChild);
+  process.once('exit', killChild);
+
   child.stdout.on('data', (d) => {
     const t = d.toString();
     process.stdout.write(`[Next.js] ${t}`);
