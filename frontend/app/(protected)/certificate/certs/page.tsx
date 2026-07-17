@@ -154,25 +154,32 @@ export default function CertsPage() {
             <thead className="bg-slate-50 text-slate-500 uppercase text-xs border-b border-slate-200">
               <tr>
                 <th className="px-4 py-4 w-10 text-center"><input type="checkbox" checked={items.length > 0 && selected.size === items.length} onChange={toggleAll} className="w-4 h-4 accent-blue-600" /></th>
-                <th className="px-6 py-4">รหัสเกียรติบัตร</th><th className="px-6 py-4">ผู้รับ</th>
+                <th className="px-6 py-4">เกียรติบัตร / ผู้รับ</th>
                 <th className="px-6 py-4">ตำแหน่ง/รางวัล</th><th className="px-6 py-4">โครงการ</th><th className="px-6 py-4 text-center">จัดการ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
-                <tr><td colSpan={6} className="px-6 py-14 text-center text-slate-400"><Loader2 className="animate-spin inline" /></td></tr>
+                <tr><td colSpan={5} className="px-6 py-14 text-center text-slate-400"><Loader2 className="animate-spin inline" /></td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan={6} className="px-6 py-14 text-center text-slate-500">ไม่พบข้อมูลเกียรติบัตร</td></tr>
+                <tr><td colSpan={5} className="px-6 py-14 text-center text-slate-500">ไม่พบข้อมูลเกียรติบัตร</td></tr>
               ) : items.map((c) => {
                 const empty = c.firstname === '-' && c.lastname === '-';
                 return (
                   <tr key={c.id} className="hover:bg-blue-50/40">
                     <td className="px-4 py-4 text-center"><input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSel(c.id)} className="w-4 h-4 accent-blue-600" /></td>
-                    <td className="px-6 py-4 font-bold text-blue-600 whitespace-nowrap">{c.certNo}</td>
                     <td className="px-6 py-4">
-                      {empty ? <span className="bg-yellow-100 text-yellow-800 text-xs px-2.5 py-1 rounded-md font-bold">ว่าง (รอระบุชื่อ)</span> : (
-                        <><div className="font-bold text-slate-800">{c.firstname} {c.lastname}</div><div className="text-xs text-slate-400">{c.idCard || 'ไม่ระบุบัตร'}</div></>
-                      )}
+                      <a href={`/verify/print?ids=${c.id}`} target="_blank" rel="noreferrer" className="group inline-block" title="คลิกเพื่อดูเกียรติบัตร">
+                        <span className="font-bold text-blue-600 font-mono text-sm group-hover:underline">{c.certNo}</span>
+                        {empty ? (
+                          <span className="block mt-1"><span className="bg-yellow-100 text-yellow-800 text-xs px-2.5 py-1 rounded-md font-bold">ว่าง (รอระบุชื่อ)</span></span>
+                        ) : (
+                          <>
+                            <span className="block font-bold text-slate-800 group-hover:text-blue-700 group-hover:underline">{c.firstname} {c.lastname}</span>
+                            <span className="block text-xs text-slate-400">{c.idCard || 'ไม่ระบุบัตร'}</span>
+                          </>
+                        )}
+                      </a>
                     </td>
                     <td className="px-6 py-4 text-xs">
                       {c.position && <span className="inline-block bg-slate-100 border px-2 py-0.5 rounded mr-1 mb-1">{c.position}</span>}
