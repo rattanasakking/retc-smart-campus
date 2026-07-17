@@ -3,11 +3,11 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
-  LayoutDashboard, CalendarCheck, ClipboardList, Monitor,
-  Wrench, DoorOpen, PackageSearch, BarChart3, Car, CalendarDays, Megaphone,
-  Lock, ChevronRight, Settings, Users, CalendarX, LogOut, Award, Contact,
+  Car, CalendarDays, Megaphone,
+  Lock, ChevronRight, Settings, LogOut,
 } from 'lucide-react';
 import { TOKEN_KEY, USER_KEY } from '@/lib/api';
+import { MAIN_NAV, applyMenuOrder, type MainNavItem, type MenuOrderCfg } from '@/lib/mainMenu';
 
 interface StoredUser {
   name: string; role: string; employeeId?: string; isSuperAdmin?: boolean; avatar?: string;
@@ -19,24 +19,6 @@ const ROLE_LABEL: Record<string, string> = {
 const ROLE_COLOR: Record<string, string> = {
   admin: 'bg-[#7c3aed]', executive: 'bg-[#dc2626]', teacher: 'bg-[#1d6ae5]', staff: 'bg-[#0d9068]',
 };
-
-const NAV_PHASE1: {
-  href: string; label: string; Icon: React.FC<{className?: string}>;
-  badge?: boolean; module?: string; modules?: string[]; adminOnly?: boolean; extraMatch?: string;
-}[] = [
-  { href: '/dashboard', label: 'หน้าหลัก',          Icon: LayoutDashboard },
-  { href: '/duty',      label: 'เวรรับนักเรียน',    Icon: CalendarCheck,   module: 'DUTY'         },
-  { href: '/worklog',   label: 'บันทึกปฏิบัติงาน', Icon: ClipboardList,   module: 'WORK_LOG'     },
-  { href: '/equipment', label: 'ครุภัณฑ์',           Icon: Monitor,         module: 'EQUIPMENT'    },
-  { href: '/helpdesk',  label: 'แจ้งซ่อม',           Icon: Wrench,          module: 'HELPDESK',    badge: true },
-  { href: '/room',      label: 'จองห้องประชุม',      Icon: DoorOpen,        module: 'ROOM_BOOKING' },
-  { href: '/lost-found/manage', label: 'ของหาย',     Icon: PackageSearch,   module: 'LOST_FOUND'   },
-  { href: '/report',    label: 'รายงานภาพรวม',       Icon: BarChart3,       adminOnly: true        },
-  { href: '/personnel', label: 'บุคลากร',             Icon: Users,           module: 'PERSONNEL'    },
-  { href: '/directory', label: 'ทำเนียบบุคลากร',      Icon: Contact                                 },
-  { href: '/leave',     label: 'ระบบการลา',           Icon: CalendarX,       module: 'LEAVE'        },
-  { href: '/certificate', label: 'เกียรติบัตร',       Icon: Award,           module: 'CERTIFICATE'  },
-];
 
 const NAV_PHASE2 = [
   { label: 'จองรถราชการ',    Icon: Car         },
@@ -54,6 +36,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
   const [allowedModules, setAllowedModules] = useState<string[] | null>(null);
   const [logoUrl, setLogoUrl]             = useState<string | null>(null);
   const [schoolName, setSchoolName]       = useState('Smart Campus');
+  const [menuOrder, setMenuOrder]         = useState<MenuOrderCfg[] | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem(USER_KEY);
@@ -66,17 +49,21 @@ export default function Sidebar({ onClose }: SidebarProps) {
       fetch('/api/settings/logo').then(r => r.json()).catch(() => ({})),
       fetch('/api/dashboard/summary', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
       fetch('/api/auth/my-modules',   { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-    ]).then(([logo, summary, modules]) => {
+      fetch('/api/settings/menu-order', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => ({})),
+    ]).then(([logo, summary, modules, order]) => {
       if (logo?.success) { setLogoUrl(logo.data?.logo_url ?? null); setSchoolName(logo.data?.school_name ?? 'Smart Campus'); }
       if (summary.success) setPendingRepairs(summary.data?.kpi?.pendingRepairs ?? 0);
       if (modules.success) setAllowedModules(modules.data?.modules ?? []);
       else setAllowedModules([]);
+      if (order?.success && Array.isArray(order.data)) setMenuOrder(order.data);
     }).catch(() => {
-      setAllowedModules(NAV_PHASE1.map(n => n.module).filter((m): m is string => m !== undefined));
+      setAllowedModules(MAIN_NAV.map(n => n.module).filter((m): m is string => m !== undefined));
     });
   }, []);
 
-  const canSeeItem = (item: typeof NAV_PHASE1[0]) => {
+  const nav = applyMenuOrder(menuOrder);
+
+  const canSeeItem = (item: MainNavItem) => {
     if (!item.module && !item.modules && !item.adminOnly) return true;
     if (allowedModules === null) return true;
     if (item.adminOnly) {
@@ -136,7 +123,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
         <p className="px-4 mb-1.5 text-[10px] font-semibold uppercase tracking-wider"
            style={{ color: 'rgba(255,255,255,0.3)' }}>Menu</p>
         <ul className="space-y-0.5 px-2">
-          {NAV_PHASE1.filter(canSeeItem).map(({ href, label, Icon, badge, extraMatch }) => {
+          {nav.filter(canSeeItem).map(({ href, label, Icon, badge, extraMatch }) => {
             const active = pathname === href || pathname.startsWith(href + '/')
               || (!!extraMatch && (pathname === extraMatch || pathname.startsWith(extraMatch + '/')));
             return (

@@ -340,6 +340,33 @@ router.get('/logo', async (_req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ─── ลำดับเมนูหลัก (Sidebar) ─────────────────────────────────────────────────
+// GET /api/settings/menu-order  → [{ href, visible }]  (ผู้ใช้ทุกคนอ่านได้)
+router.get('/menu-order', auth, async (req, res, next) => {
+  try {
+    const row = await prisma.systemSettings.findUnique({ where: { key: 'main_menu_order' } });
+    let order = [];
+    if (row?.value) { try { order = JSON.parse(row.value); } catch { order = []; } }
+    res.json(success(Array.isArray(order) ? order : []));
+  } catch (e) { next(e); }
+});
+
+// PUT /api/settings/menu-order  (superAdmin) — body: { order: [{ href, visible }] }
+router.put('/menu-order', superAdmin, async (req, res, next) => {
+  try {
+    const raw = Array.isArray(req.body.order) ? req.body.order : [];
+    const clean = raw
+      .filter((o) => o && typeof o.href === 'string')
+      .map((o) => ({ href: o.href, visible: o.visible !== false }));
+    await prisma.systemSettings.upsert({
+      where:  { key: 'main_menu_order' },
+      update: { value: JSON.stringify(clean) },
+      create: { key: 'main_menu_order', value: JSON.stringify(clean), group: 'general' },
+    });
+    res.json(success(null, 'บันทึกลำดับเมนูสำเร็จ'));
+  } catch (e) { next(e); }
+});
+
 // GET /api/settings/general  — คืนเป็น { key: value } object
 router.get('/general', auth, async (req, res, next) => {
   try {
