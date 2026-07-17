@@ -8,9 +8,58 @@ interface Room {
   id: number; name: string; capacity: number;
   facilities?: string; image?: string; requireApproval: boolean;
   status: string; note?: string;
+  managerId?: number | null; manager?: { id: number; name: string } | null;
 }
+interface Person { id: number; name: string }
+interface PersonHit { id: number; name: string; department?: string | null }
 
 const FACILITIES_OPTIONS = ['โปรเจกเตอร์','ไวท์บอร์ด','ลำโพง','แอร์','WiFi','กล้องวงจรปิด','ระบบเสียง','เวที'];
+
+// ค้นหาบุคลากรแล้วเลือก (ใช้ทั้งผู้ดูแลห้อง และหัวหน้างานอาคารสถานที่)
+function PersonPicker({ value, onChange, placeholder = 'ค้นหาบุคลากร...' }: {
+  value: Person | null; onChange: (v: Person | null) => void; placeholder?: string;
+}) {
+  const [q, setQ] = useState('');
+  const [res, setRes] = useState<PersonHit[]>([]);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const kw = q.trim();
+    if (kw.length < 2) { setRes([]); return; }
+    const t = setTimeout(() => {
+      api.get<{ data: PersonHit[] }>(`/personnel?search=${encodeURIComponent(kw)}&limit=8`)
+        .then((r) => setRes(r.data ?? [])).catch(() => setRes([]));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  if (value) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm" style={{ border: '1px solid #dce6f9', backgroundColor: '#f5f8ff' }}>
+        <span className="flex-1 truncate" style={{ color: '#1a2744' }}>{value.name}</span>
+        <button type="button" onClick={() => onChange(null)}><X className="w-3.5 h-3.5" style={{ color: '#94a3b8' }} /></button>
+      </div>
+    );
+  }
+  return (
+    <div className="relative">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#94a3b8' }} />
+      <input value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)} placeholder={placeholder} className="input-field pl-9" />
+      {open && q.trim().length >= 2 && (
+        <div className="absolute z-30 left-0 right-0 mt-1 bg-white rounded-xl shadow-lg max-h-52 overflow-y-auto" style={{ border: '1px solid #dce6f9' }}>
+          {res.length === 0 ? <p className="text-xs text-center py-3" style={{ color: '#94a3b8' }}>ไม่พบบุคลากร</p> :
+            res.map((p) => (
+              <button key={p.id} type="button" onMouseDown={(e) => { e.preventDefault(); onChange({ id: p.id, name: p.name }); setQ(''); setOpen(false); }}
+                className="w-full text-left px-3 py-2 hover:bg-[#f5f8ff] text-sm flex justify-between gap-2">
+                <span className="font-medium truncate" style={{ color: '#1a2744' }}>{p.name}</span>
+                <span className="text-xs truncate" style={{ color: '#94a3b8' }}>{p.department ?? ''}</span>
+              </button>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
 const STATUS_META: Record<string, { label: string; bg: string; text: string }> = {
   active:      { label: '✅ ใช้งาน', bg: '#e6f9f0', text: '#0d9068' },
   maintenance: { label: '🔧 ปรับปรุง', bg: '#fffbeb', text: '#b45309' },
@@ -33,6 +82,7 @@ function RoomModal({ room, onClose, onSave }: {
     try { return JSON.parse(room?.facilities ?? '[]'); } catch { return []; }
   });
   const [imagePreview, setImagePreview] = useState(room?.image ?? '');
+  const [manager, setManager] = useState<Person | null>(room?.manager ?? null);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
@@ -48,7 +98,7 @@ function RoomModal({ room, onClose, onSave }: {
     if (!form.name.trim() || !form.capacity) { setErr('กรุณากรอกชื่อและความจุ'); return; }
     setErr(''); setSaving(true);
     try {
-      const body = { ...form, capacity: parseInt(form.capacity), facilities };
+      const body = { ...form, capacity: parseInt(form.capacity), facilities, managerId: manager?.id ?? null };
       if (isEdit) await api.put(`/room/rooms/${room!.id}`, body);
       else        await api.post('/room/rooms', body);
       onSave();
@@ -100,6 +150,12 @@ function RoomModal({ room, onClose, onSave }: {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Room manager */}
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: '#4a6080' }}>ผู้ดูแลห้อง <span style={{ color: '#94a3b8' }}>(แจ้งเตือนผ่าน LINE เมื่อมีการจอง)</span></label>
+            <PersonPicker value={manager} onChange={setManager} placeholder="ค้นหาชื่อผู้ดูแล..." />
           </div>
 
           {/* Require approval toggle */}
@@ -166,10 +222,22 @@ export default function RoomManagePage() {
   const [deleting, setDeleting] = useState<number | null>(null);
   const [toast, setToast]       = useState('');
   const [toastErr, setToastErr] = useState('');
+  const [facHead, setFacHead]   = useState<Person | null>(null);
 
   const showToast = (msg: string, err = false) => {
     if (err) { setToastErr(msg); setToast(''); } else { setToast(msg); setToastErr(''); }
     setTimeout(() => { setToast(''); setToastErr(''); }, 3000);
+  };
+
+  useEffect(() => {
+    api.get<{ data: { facilitiesHead: Person | null } }>('/room/settings')
+      .then((r) => setFacHead(r.data.facilitiesHead)).catch(() => {});
+  }, []);
+
+  const saveFacHead = async (v: Person | null) => {
+    setFacHead(v);
+    try { await api.put('/room/settings', { facilitiesHeadId: v?.id ?? null }); showToast('บันทึกหัวหน้างานอาคารสถานที่แล้ว'); }
+    catch (e) { showToast((e as Error).message, true); }
   };
 
   const load = useCallback(async () => {
@@ -248,6 +316,17 @@ export default function RoomManagePage() {
         </div>
       </div>
 
+      {/* Facilities head (table-arrangement requests) */}
+      <div className="bg-white rounded-xl p-4" style={{ border: '1px solid #dce6f9' }}>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex-1">
+            <p className="text-sm font-semibold" style={{ color: '#1a2744' }}>🪑 หัวหน้างานอาคารสถานที่ (ผู้รับคำร้องจัดโต๊ะ)</p>
+            <p className="text-xs mt-0.5" style={{ color: '#4a6080' }}>เมื่อมีผู้จองเลือก “การจัดโต๊ะ” ระบบจะส่งคำร้องไปยังบุคคลนี้ผ่าน LINE</p>
+          </div>
+          <div className="sm:w-72"><PersonPicker value={facHead} onChange={saveFacHead} placeholder="ค้นหาชื่อหัวหน้างาน..." /></div>
+        </div>
+      </div>
+
       {/* Table */}
       <div className="bg-white rounded-xl overflow-hidden" style={{ border: '1px solid #dce6f9' }}>
         {loading ? (
@@ -286,6 +365,7 @@ export default function RoomManagePage() {
                           <div>
                             <p className="font-medium text-xs" style={{ color: '#1a2744' }}>{room.name}</p>
                             {room.note && <p className="text-[11px] truncate max-w-[120px]" style={{ color: '#94a3b8' }}>{room.note}</p>}
+                            {room.manager && <p className="text-[11px]" style={{ color: '#1d6ae5' }}>👤 {room.manager.name}</p>}
                           </div>
                         </div>
                       </td>

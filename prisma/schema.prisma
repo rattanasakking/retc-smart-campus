@@ -199,6 +199,7 @@ model User {
   pmSchedules           PmSchedule[]
   roomBookings          RoomBooking[]
   roomBookingApprovals  RoomBookingApproval[]
+  managedRooms          Room[]                @relation("RoomManager")
   notifications         Notification[]
 
   // ─── Relations (ใหม่) ───────────────────────────────────────────────────────
@@ -455,6 +456,8 @@ model Room {
   requireApproval Boolean    @default(false)
   status          RoomStatus @default(active)
   note            String?    @db.Text
+  managerId       Int?
+  manager         User?      @relation("RoomManager", fields: [managerId], references: [id])
 
   bookings RoomBooking[]
 
@@ -472,6 +475,7 @@ model RoomBooking {
   startTime       DateTime
   endTime         DateTime
   equipmentNeeded String?       @db.Text
+  tableLayout     String?
   purpose         String?       @db.Text
   status          BookingStatus @default(pending)
   createdAt       DateTime      @default(now())

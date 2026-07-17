@@ -4,7 +4,7 @@ const fs      = require('fs');
 const { PrismaClient } = require('@prisma/client');
 const auth = require('../middleware/auth');
 const { success, error, paginate } = require('../utils/response');
-const { notify, sendRoomBookingRequestFlex, sendRoomBookingStatusFlex } = require('../services/line');
+const { notify, sendRoomBookingRequestFlex, sendRoomBookingStatusFlex, pushMessage } = require('../services/line');
 const { sendRoomBookingRequestEmail, sendRoomBookingApprovedEmail, sendRoomBookingRejectedEmail } = require('../services/email');
 
 const router = express.Router();
@@ -29,6 +29,65 @@ function processRoomImage(image) {
 }
 
 const intId    = (s) => parseInt(s, 10);
+const intOrNull = (v) => (v !== undefined && v !== null && v !== '') ? parseInt(v, 10) : null;
+
+const MONTHS_TH = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+function bookingWhen(b) {
+  const dt = new Date(b.startTime), de = new Date(b.endTime);
+  const p = (n) => String(n).padStart(2, '0');
+  return {
+    dateS: `${dt.getDate()} ${MONTHS_TH[dt.getMonth()]} ${dt.getFullYear() + 543}`,
+    timeS: `${p(dt.getHours())}:${p(dt.getMinutes())} - ${p(de.getHours())}:${p(de.getMinutes())} น.`,
+  };
+}
+
+/** แจ้งเตือนผู้ดูแลห้อง (ถ้ากำหนดไว้) เมื่อมีการจอง */
+async function notifyRoomManager(booking) {
+  const managerId = booking.room?.managerId;
+  if (!managerId) return;
+  const mgr = await prisma.user.findUnique({ where: { id: managerId }, select: { name: true, lineUserId: true } });
+  if (!mgr?.lineUserId) return;
+  const { dateS, timeS } = bookingWhen(booking);
+  const statusTh = booking.status === 'approved' ? 'อนุมัติแล้ว' : 'รออนุมัติ';
+  const text = [
+    '\n🏢 มีการจองห้องที่คุณดูแล',
+    '━━━━━━━━━━━━━━',
+    `🏠 ห้อง: ${booking.room?.name ?? '-'}`,
+    `📅 ${dateS}`,
+    `⏰ ${timeS}`,
+    `👤 ผู้จอง: ${booking.user?.name ?? '-'}${booking.user?.department ? ` (${booking.user.department})` : ''}`,
+    `📝 ${booking.title}`,
+    booking.attendees ? `👥 ${booking.attendees} คน` : null,
+    `📌 สถานะ: ${statusTh}`,
+  ].filter(Boolean).join('\n');
+  pushMessage(mgr.lineUserId, [{ type: 'text', text }]).catch(() => {});
+}
+
+/** แจ้งเตือนหัวหน้างานอาคารสถานที่เมื่อมีการขอจัดโต๊ะ */
+async function notifyFacilitiesHead(booking) {
+  if (!booking.tableLayout) return;
+  const row = await prisma.systemSettings.findUnique({ where: { key: 'room_facilities_head_id' } });
+  const headId = row?.value ? parseInt(row.value, 10) : null;
+  if (!headId) return;
+  const head = await prisma.user.findUnique({ where: { id: headId }, select: { lineUserId: true } });
+  if (!head?.lineUserId) return;
+  const { dateS, timeS } = bookingWhen(booking);
+  const text = [
+    '\n🪑 คำร้องขอจัดโต๊ะห้องประชุม',
+    '━━━━━━━━━━━━━━',
+    `🏠 ห้อง: ${booking.room?.name ?? '-'}`,
+    `📅 ${dateS}`,
+    `⏰ ${timeS}`,
+    `🪑 รูปแบบการจัดโต๊ะ: ${booking.tableLayout}`,
+    `👤 ผู้ขอ: ${booking.user?.name ?? '-'}${booking.user?.department ? ` (${booking.user.department})` : ''}`,
+    `📝 งาน: ${booking.title}`,
+    booking.attendees ? `👥 ${booking.attendees} คน` : null,
+    '━━━━━━━━━━━━━━',
+    '👉 กรุณาจัดเตรียมโต๊ะตามรูปแบบที่ขอ',
+  ].filter(Boolean).join('\n');
+  pushMessage(head.lineUserId, [{ type: 'text', text }]).catch(() => {});
+}
+
 async function canAdmin(u) {
   if (u.isSuperAdmin || u.role === 'admin' || u.role === 'executive') return true;
   const perm = await prisma.modulePermission.findFirst({
@@ -38,7 +97,7 @@ async function canAdmin(u) {
 }
 
 const BOOKING_INC = {
-  room:      { select: { id: true, name: true, capacity: true, requireApproval: true, image: true } },
+  room:      { select: { id: true, name: true, capacity: true, requireApproval: true, image: true, managerId: true } },
   user:      { select: { id: true, name: true, department: true, email: true, lineUserId: true } },
   approvals: { include: { approver: { select: { id: true, name: true } } }, orderBy: { createdAt: 'desc' } },
 };
@@ -225,15 +284,41 @@ router.get('/rooms', auth, async (req, res, next) => {
 
 router.get('/rooms/all', auth, async (req, res, next) => {
   try {
-    const rooms = await prisma.room.findMany({ orderBy: { name: 'asc' } });
+    const rooms = await prisma.room.findMany({
+      orderBy: { name: 'asc' },
+      include: { manager: { select: { id: true, name: true } } },
+    });
     res.json(success(rooms));
+  } catch (e) { next(e); }
+});
+
+// ตั้งค่าโมดูล: หัวหน้างานอาคารสถานที่ (ผู้รับคำร้องจัดโต๊ะ)
+router.get('/settings', auth, async (req, res, next) => {
+  try {
+    const row = await prisma.systemSettings.findUnique({ where: { key: 'room_facilities_head_id' } });
+    const id  = row?.value ? parseInt(row.value, 10) : null;
+    const head = id ? await prisma.user.findUnique({ where: { id }, select: { id: true, name: true, department: true } }) : null;
+    res.json(success({ facilitiesHeadId: id, facilitiesHead: head }));
+  } catch (e) { next(e); }
+});
+
+router.put('/settings', auth, async (req, res, next) => {
+  try {
+    if (!await canAdmin(req.user)) return res.status(403).json(error('ต้องการสิทธิ์ Admin'));
+    const id = intOrNull(req.body.facilitiesHeadId);
+    await prisma.systemSettings.upsert({
+      where:  { key: 'room_facilities_head_id' },
+      update: { value: id ? String(id) : '' },
+      create: { key: 'room_facilities_head_id', value: id ? String(id) : '', group: 'room' },
+    });
+    res.json(success(null, 'บันทึกการตั้งค่าสำเร็จ'));
   } catch (e) { next(e); }
 });
 
 router.post('/rooms', auth, async (req, res, next) => {
   try {
     if (!await canAdmin(req.user)) return res.status(403).json(error('ต้องการสิทธิ์ Admin'));
-    const { name, capacity, facilities, image, requireApproval, note } = req.body;
+    const { name, capacity, facilities, image, requireApproval, note, managerId } = req.body;
     if (!name?.trim() || !capacity) return res.status(400).json(error('กรุณากรอกชื่อและความจุ'));
     const room = await prisma.room.create({
       data: {
@@ -243,6 +328,7 @@ router.post('/rooms', auth, async (req, res, next) => {
         image:           processRoomImage(image),
         requireApproval: !!requireApproval,
         note:            note?.trim() || null,
+        managerId:       intOrNull(managerId),
         status:          'active',
       },
     });
@@ -253,7 +339,7 @@ router.post('/rooms', auth, async (req, res, next) => {
 router.put('/rooms/:id', auth, async (req, res, next) => {
   try {
     if (!await canAdmin(req.user)) return res.status(403).json(error('ต้องการสิทธิ์ Admin'));
-    const { name, capacity, facilities, image, requireApproval, status, note } = req.body;
+    const { name, capacity, facilities, image, requireApproval, status, note, managerId } = req.body;
     const room = await prisma.room.update({
       where: { id: intId(req.params.id) },
       data: {
@@ -264,6 +350,7 @@ router.put('/rooms/:id', auth, async (req, res, next) => {
         ...(requireApproval !== undefined && { requireApproval: !!requireApproval }),
         ...(status          !== undefined && { status }),
         ...(note            !== undefined && { note: note?.trim() || null }),
+        ...(managerId       !== undefined && { managerId: intOrNull(managerId) }),
       },
     });
     res.json(success(room, 'แก้ไขสำเร็จ'));
@@ -399,7 +486,7 @@ router.get('/bookings', auth, async (req, res, next) => {
 
 router.post('/bookings', auth, async (req, res, next) => {
   try {
-    const { roomId, title, attendees, startTime, endTime, equipmentNeeded, purpose } = req.body;
+    const { roomId, title, attendees, startTime, endTime, equipmentNeeded, purpose, tableLayout } = req.body;
     if (!roomId || !title?.trim() || !startTime || !endTime) {
       return res.status(400).json(error('กรุณากรอก ห้อง หัวข้อ เวลาเริ่ม-สิ้นสุด'));
     }
@@ -424,6 +511,7 @@ router.post('/bookings', auth, async (req, res, next) => {
         attendees:       attendees ? intId(attendees) : null,
         startTime: start, endTime: end,
         equipmentNeeded: equipmentNeeded?.length ? JSON.stringify(equipmentNeeded) : null,
+        tableLayout:     tableLayout?.trim() || null,
         purpose:         purpose?.trim() || null,
         status,
       },
@@ -432,6 +520,8 @@ router.post('/bookings', auth, async (req, res, next) => {
 
     if (room.requireApproval) notifyAdminsNewBooking(booking).catch(() => {});
     else notify(lineMsg(booking, 'approved')).catch(() => {});
+    notifyRoomManager(booking).catch(() => {});     // แจ้งผู้ดูแลห้อง
+    notifyFacilitiesHead(booking).catch(() => {});  // แจ้งหัวหน้างานอาคารสถานที่ (ถ้าขอจัดโต๊ะ)
     res.status(201).json(success(booking, room.requireApproval ? 'ส่งคำขอจองสำเร็จ รอการอนุมัติ' : 'จองห้องสำเร็จ'));
   } catch (e) { next(e); }
 });

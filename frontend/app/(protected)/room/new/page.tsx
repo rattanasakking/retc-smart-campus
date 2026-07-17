@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronLeft, Check, AlertTriangle, Loader2, Users, Clock, Info } from 'lucide-react';
 import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
@@ -15,6 +15,14 @@ interface ConflictBooking {
 }
 
 const EQUIPMENTS = ['โปรเจกเตอร์', 'ไวท์บอร์ด', 'ลำโพง', 'แอร์', 'WiFi', 'กล้อง'];
+const TABLE_LAYOUTS = [
+  'แบบห้องเรียน (Classroom)',
+  'แบบตัวยู (U-Shape)',
+  'แบบประชุม (Boardroom)',
+  'แบบโรงละคร (Theater)',
+  'แบบกลุ่ม (Cluster)',
+  'แบบจัดเลี้ยง (Banquet)',
+];
 
 const fmtTime = (d: string) => {
   const dt = new Date(d);
@@ -56,8 +64,16 @@ export default function RoomNewPage() {
   const [conflicts, setConflicts]   = useState<ConflictBooking[]>([]);
   const [checking, setChecking]     = useState(false);
 
-  const [form, setForm] = useState({ title: '', attendees: '', purpose: '' });
+  const [form, setForm] = useState({ title: '', attendees: '', purpose: '', tableLayout: '' });
   const [equipment, setEquipment] = useState<string[]>([]);
+  const step2Ref = useRef<HTMLDivElement>(null);
+
+  // เลื่อนไปขั้นตอนที่ 2 อัตโนมัติเมื่อเลือกห้อง
+  useEffect(() => {
+    if (selectedRoom) {
+      requestAnimationFrame(() => step2Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    }
+  }, [selectedRoom]);
 
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState('');
@@ -124,6 +140,7 @@ export default function RoomNewPage() {
         endTime:         end.toISOString(),
         purpose:         form.purpose || undefined,
         equipmentNeeded: equipment.length > 0 ? equipment : undefined,
+        tableLayout:     form.tableLayout || undefined,
       });
       setToast(selectedRoom.requireApproval ? 'ส่งคำขอจองสำเร็จ รอการอนุมัติ' : 'จองห้องสำเร็จ');
       setTimeout(() => router.push('/room'), 900);
@@ -217,7 +234,7 @@ export default function RoomNewPage() {
 
         {/* Step 2: Date + Time */}
         {selectedRoom && (
-          <div className="card">
+          <div className="card" ref={step2Ref} style={{ scrollMarginTop: 16 }}>
             <p className="text-xs font-semibold mb-3 pb-2" style={{ color: '#94a3b8', borderBottom: '1px solid #f0f4ff' }}>
               2. วันที่และเวลา
             </p>
@@ -297,6 +314,21 @@ export default function RoomNewPage() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Table layout */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: '#4a6080' }}>การจัดโต๊ะ</label>
+              <select className="input-field" value={form.tableLayout} onChange={(e) => setForm((f) => ({ ...f, tableLayout: e.target.value }))}>
+                <option value="">ไม่ต้องจัดโต๊ะ</option>
+                {TABLE_LAYOUTS.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+              {form.tableLayout && (
+                <div className="flex items-start gap-2 px-3 py-2 rounded-xl text-xs mt-2" style={{ backgroundColor: '#eff6ff', border: '1px solid #dce6f9' }}>
+                  <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: '#1d6ae5' }} />
+                  <p style={{ color: '#1d6ae5' }}>ระบบจะส่งคำร้องขอจัดโต๊ะไปยังหัวหน้างานอาคารสถานที่ผ่าน LINE</p>
+                </div>
+              )}
             </div>
 
             {/* Approval notice */}
