@@ -2,8 +2,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  CalendarCheck, ChevronRight, Plus, Bell, Check, AlertTriangle,
-  Loader2, Pencil, Trash2, X,
+  CalendarCheck, ChevronRight, ChevronLeft, Plus, Bell, Check, AlertTriangle,
+  Loader2, Pencil, Trash2, X, Search, LayoutGrid, List,
 } from 'lucide-react';
 import { api, USER_KEY } from '@/lib/api';
 import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
@@ -31,10 +31,19 @@ interface AcYear { year: number; semester: number; isCurrent: boolean }
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const MONTH_SHORT = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+const MONTH_FULL  = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+const DOW_SHORT   = ['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const ymd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
 function fmtDate(d: string) {
   const dt = new Date(d);
   return `${dt.getDate()} ${MONTH_SHORT[dt.getMonth()]} ${dt.getFullYear() + 543}`;
+}
+function fmtDayLong(iso: string) {
+  const dt = new Date(iso + 'T00:00:00');
+  return `วัน${['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'][dt.getDay()]}ที่ ${dt.getDate()} ${MONTH_FULL[dt.getMonth()]} ${dt.getFullYear() + 543}`;
 }
 
 function statusBadge(present: number, logged: number) {
@@ -129,6 +138,10 @@ export default function DutyPage() {
   const [toast, setToast]           = useState('');
   const [toastErr, setToastErr]     = useState('');
   const [editItem, setEditItem]     = useState<Schedule | null>(null);
+  const [view, setView]             = useState<'calendar' | 'list'>('calendar');
+  const [search, setSearch]         = useState('');
+  const [cursor, setCursor]         = useState(() => new Date());
+  const [dayModal, setDayModal]     = useState<string | null>(null);
 
   const showToast = (msg: string, isErr = false) => {
     if (isErr) { setToastErr(msg); setToast(''); } else { setToast(msg); setToastErr(''); }
@@ -161,20 +174,15 @@ export default function DutyPage() {
     if (!semester) return;
     setLoading(true);
     try {
-      const params = new URLSearchParams({ semester });
-      if (selMonth !== null) {
-        const [, yr] = semester.split('/');
-        params.set('month', String(selMonth + 1));
-        params.set('year', yr);
-      }
-      const res = await api.get<{ data: Schedule[] }>(`/duty/schedules?${params}`);
+      // โหลดทั้งภาคเรียน แล้วค่อยกรองเดือน/ค้นหาฝั่ง client (รองรับทั้งปฏิทินและรายการ)
+      const res = await api.get<{ data: Schedule[] }>(`/duty/schedules?semester=${encodeURIComponent(semester)}`);
       setSchedules(res.data);
     } catch (e) {
       showToast((e as Error).message, true);
     } finally {
       setLoading(false);
     }
-  }, [semester, selMonth]);
+  }, [semester]);
 
   const loadToday = useCallback(async () => {
     try {
@@ -184,6 +192,11 @@ export default function DutyPage() {
   }, []);
 
   useEffect(() => { loadSchedules(); loadToday(); }, [loadSchedules, loadToday]);
+
+  // เมื่อเปลี่ยนภาคเรียนแล้วโหลดข้อมูลใหม่ ให้เลื่อนปฏิทินไปเดือนแรกที่มีเวร
+  useEffect(() => {
+    if (schedules.length) setCursor(new Date(Math.min(...schedules.map((s) => +new Date(s.dutyDate)))));
+  }, [schedules]);
 
   const handleDelete = async (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -197,7 +210,27 @@ export default function DutyPage() {
     }
   };
 
+  // กรองด้วยคำค้นหา
+  const kw = search.trim().toLowerCase();
+  const filtered = schedules.filter((s) =>
+    !kw || s.departmentName.toLowerCase().includes(kw) || (s.note ?? '').toLowerCase().includes(kw));
+
   const monthsWithData = new Set(schedules.map(s => new Date(s.dutyDate).getMonth()));
+  const listItems = selMonth === null ? filtered : filtered.filter((s) => new Date(s.dutyDate).getMonth() === selMonth);
+
+  // ปฏิทิน
+  const cy = cursor.getFullYear(), cm = cursor.getMonth();
+  const byDay: Record<string, Schedule[]> = {};
+  for (const s of filtered) { const k = ymd(new Date(s.dutyDate)); (byDay[k] ??= []).push(s); }
+  const calCells: (number | null)[] = [];
+  {
+    const startDow = new Date(cy, cm, 1).getDay();
+    const days = new Date(cy, cm + 1, 0).getDate();
+    for (let i = 0; i < startDow; i++) calCells.push(null);
+    for (let d = 1; d <= days; d++) calCells.push(d);
+    while (calCells.length % 7 !== 0) calCells.push(null);
+  }
+  const todayKey = ymd(new Date());
 
   return (
     <div className="space-y-4">
@@ -268,100 +301,168 @@ export default function DutyPage() {
         </div>
       )}
 
-      {/* Month tabs */}
-      <div className="flex gap-1 overflow-x-auto pb-1">
-        <button onClick={() => setSelMonth(null)}
-          className="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap flex-shrink-0"
-          style={selMonth === null
-            ? { backgroundColor: '#2979ff', color: '#fff' }
-            : { backgroundColor: '#f5f8ff', color: '#4a6080', border: '1px solid #dce6f9' }}>
-          ทั้งหมด
-        </button>
-        {MONTH_SHORT.map((m, i) => (
-          <button key={i} onClick={() => setSelMonth(i === selMonth ? null : i)}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap flex-shrink-0"
-            style={selMonth === i
-              ? { backgroundColor: '#2979ff', color: '#fff' }
-              : monthsWithData.has(i)
-              ? { backgroundColor: '#f5f8ff', color: '#1a2744', border: '1px solid #dce6f9' }
-              : { backgroundColor: 'transparent', color: '#c4cdd6' }}>
-            {m}
+      {/* Controls: view toggle + search */}
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex rounded-xl p-1 flex-shrink-0" style={{ backgroundColor: '#f5f8ff', border: '1px solid #dce6f9' }}>
+          <button onClick={() => setView('calendar')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors"
+            style={view === 'calendar' ? { backgroundColor: '#2979ff', color: '#fff' } : { color: '#4a6080' }}>
+            <LayoutGrid className="w-4 h-4" /> ปฏิทิน
           </button>
-        ))}
+          <button onClick={() => setView('list')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors"
+            style={view === 'list' ? { backgroundColor: '#2979ff', color: '#fff' } : { color: '#4a6080' }}>
+            <List className="w-4 h-4" /> รายการ
+          </button>
+        </div>
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#94a3b8' }} />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ค้นหาแผนกวิชา / หมายเหตุ..."
+            className="w-full pl-9 pr-9 py-2 rounded-xl text-sm focus:outline-none" style={{ border: '1px solid #dce6f9' }} />
+          {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2"><X className="w-3.5 h-3.5" style={{ color: '#94a3b8' }} /></button>}
+        </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl overflow-hidden" style={{ border: '1px solid #dce6f9' }}>
-        {loading ? (
-          <div className="flex items-center justify-center py-16 gap-3" style={{ color: '#94a3b8' }}>
-            <Loader2 className="w-5 h-5 animate-spin" /> กำลังโหลด...
+      {loading ? (
+        <div className="flex items-center justify-center py-16 gap-3" style={{ color: '#94a3b8' }}>
+          <Loader2 className="w-5 h-5 animate-spin" /> กำลังโหลด...
+        </div>
+      ) : view === 'calendar' ? (
+        /* ── Calendar view ── */
+        <div className="bg-white rounded-xl p-3 sm:p-5" style={{ border: '1px solid #dce6f9' }}>
+          <div className="flex items-center justify-between mb-4">
+            <button onClick={() => setCursor(new Date(cy, cm - 1, 1))} className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-slate-100" style={{ color: '#4a6080' }}><ChevronLeft className="w-4 h-4" /></button>
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-bold" style={{ color: '#1a2744' }}>{MONTH_FULL[cm]} {cy + 543}</h3>
+              <button onClick={() => setCursor(new Date())} className="text-xs font-medium px-2.5 py-1 rounded-lg" style={{ backgroundColor: '#e8f0fe', color: '#1d6ae5' }}>วันนี้</button>
+            </div>
+            <button onClick={() => setCursor(new Date(cy, cm + 1, 1))} className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-slate-100" style={{ color: '#4a6080' }}><ChevronRight className="w-4 h-4" /></button>
           </div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ borderBottom: '1px solid #f0f4ff', backgroundColor: '#f8faff' }}>
-                {['วันที่','แผนกวิชา','มา / บันทึก','สถานะ',''].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: '#94a3b8' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {schedules.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-12 text-center text-sm" style={{ color: '#94a3b8' }}>
-                  ไม่มีตารางเวร{selMonth !== null ? `เดือน ${MONTH_SHORT[selMonth]}` : ''}
-                </td></tr>
-              ) : schedules.map(s => {
-                const badge = statusBadge(s.presentCount, s.loggedCount);
+          <div className="grid grid-cols-7 mb-1">
+            {DOW_SHORT.map((d, i) => (
+              <div key={d} className="text-center text-[11px] font-bold py-1.5" style={{ color: i === 0 ? '#dc2626' : i === 6 ? '#1d6ae5' : '#94a3b8' }}>{d}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {calCells.map((d, idx) => {
+              if (d === null) return <div key={idx} className="rounded-lg" style={{ minHeight: 92, backgroundColor: '#fafbfe' }} />;
+              const key = ymd(new Date(cy, cm, d));
+              const items = byDay[key] ?? [];
+              const isToday = key === todayKey;
+              const dow = new Date(cy, cm, d).getDay();
+              return (
+                <button key={idx} onClick={() => items.length && setDayModal(key)}
+                  className="rounded-lg p-1.5 text-left flex flex-col transition-colors"
+                  style={{ minHeight: 92, border: isToday ? '2px solid #2979ff' : '1px solid #eef2fb', backgroundColor: '#fff', cursor: items.length ? 'pointer' : 'default' }}>
+                  <span className="text-xs font-bold mb-1" style={{ color: isToday ? '#1d6ae5' : dow === 0 ? '#dc2626' : dow === 6 ? '#1d6ae5' : '#1a2744' }}>{d}</span>
+                  <div className="flex-1 space-y-0.5 overflow-hidden">
+                    {items.slice(0, 3).map((s) => {
+                      const b = statusBadge(s.presentCount, s.loggedCount);
+                      return <div key={s.id} className="text-[9px] leading-tight px-1 py-0.5 rounded truncate" style={{ backgroundColor: b.bg, color: b.color }} title={s.departmentName}>{s.departmentName}</div>;
+                    })}
+                    {items.length > 3 && <div className="text-[9px] font-bold px-1" style={{ color: '#2979ff' }}>+{items.length - 3} เวร</div>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          {filtered.length === 0 && <p className="text-center text-sm py-6" style={{ color: '#94a3b8' }}>ไม่มีตารางเวรในภาคเรียนนี้{search ? ' ที่ตรงกับคำค้นหา' : ''}</p>}
+        </div>
+      ) : (
+        /* ── List view ── */
+        <>
+          <div className="flex gap-1 overflow-x-auto pb-1">
+            <button onClick={() => setSelMonth(null)}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap flex-shrink-0"
+              style={selMonth === null ? { backgroundColor: '#2979ff', color: '#fff' } : { backgroundColor: '#f5f8ff', color: '#4a6080', border: '1px solid #dce6f9' }}>
+              ทั้งหมด
+            </button>
+            {MONTH_SHORT.map((m, i) => (
+              <button key={i} onClick={() => setSelMonth(i === selMonth ? null : i)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap flex-shrink-0"
+                style={selMonth === i ? { backgroundColor: '#2979ff', color: '#fff' }
+                  : monthsWithData.has(i) ? { backgroundColor: '#f5f8ff', color: '#1a2744', border: '1px solid #dce6f9' }
+                  : { backgroundColor: 'transparent', color: '#c4cdd6' }}>
+                {m}
+              </button>
+            ))}
+          </div>
+
+          <div className="bg-white rounded-xl overflow-hidden" style={{ border: '1px solid #dce6f9' }}>
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ borderBottom: '1px solid #f0f4ff', backgroundColor: '#f8faff' }}>
+                  {['วันที่','แผนกวิชา','มา / บันทึก','สถานะ',''].map(h => (
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: '#94a3b8' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {listItems.length === 0 ? (
+                  <tr><td colSpan={5} className="px-4 py-12 text-center text-sm" style={{ color: '#94a3b8' }}>
+                    ไม่มีตารางเวร{selMonth !== null ? `เดือน ${MONTH_SHORT[selMonth]}` : ''}
+                  </td></tr>
+                ) : listItems.map(s => {
+                  const badge = statusBadge(s.presentCount, s.loggedCount);
+                  return (
+                    <tr key={s.id} onClick={() => router.push(`/duty/${s.id}`)}
+                      style={{ borderBottom: '1px solid #f5f8ff', cursor: 'pointer' }} className="hover:bg-[#f8faff] transition-colors">
+                      <td className="px-4 py-3 font-medium" style={{ color: '#1a2744' }}>{fmtDate(s.dutyDate)}</td>
+                      <td className="px-4 py-3" style={{ color: '#1a2744' }}>
+                        {s.departmentName}
+                        {s.note && <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>{s.note}</p>}
+                      </td>
+                      <td className="px-4 py-3">
+                        {s.loggedCount > 0 ? <span className="text-sm font-medium">{s.presentCount}/{s.loggedCount}</span> : <span className="text-xs" style={{ color: '#94a3b8' }}>—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ backgroundColor: badge.bg, color: badge.color }}>{badge.label}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          {isAdmin ? (
+                            <>
+                              <button onClick={e => { e.stopPropagation(); setEditItem(s); }} className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-blue-50" title="แก้ไข"><Pencil className="w-3.5 h-3.5" style={{ color: '#1d6ae5' }} /></button>
+                              <button onClick={e => handleDelete(s.id, e)} className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-red-50" title="ลบ"><Trash2 className="w-3.5 h-3.5 text-red-400" /></button>
+                            </>
+                          ) : <ChevronRight className="w-4 h-4" style={{ color: '#dce6f9' }} />}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* Day detail modal (calendar) */}
+      {dayModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setDayModal(null)}>
+          <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b sticky top-0 bg-white" style={{ borderColor: '#eef2fb' }}>
+              <h3 className="font-bold" style={{ color: '#1a2744' }}>{fmtDayLong(dayModal)}</h3>
+              <button onClick={() => setDayModal(null)} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-4 space-y-2.5">
+              {(byDay[dayModal] ?? []).map((s) => {
+                const b = statusBadge(s.presentCount, s.loggedCount);
                 return (
-                  <tr key={s.id}
-                    onClick={() => router.push(`/duty/${s.id}`)}
-                    style={{ borderBottom: '1px solid #f5f8ff', cursor: 'pointer' }}
-                    className="hover:bg-[#f8faff] transition-colors">
-                    <td className="px-4 py-3 font-medium" style={{ color: '#1a2744' }}>
-                      {fmtDate(s.dutyDate)}
-                    </td>
-                    <td className="px-4 py-3" style={{ color: '#1a2744' }}>
-                      {s.departmentName}
+                  <button key={s.id} onClick={() => router.push(`/duty/${s.id}`)}
+                    className="w-full text-left bg-white rounded-xl p-4 flex items-center gap-3 hover:bg-[#f8faff]" style={{ border: '1px solid #dce6f9' }}>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold" style={{ color: '#1a2744' }}>{s.departmentName}</p>
                       {s.note && <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>{s.note}</p>}
-                    </td>
-                    <td className="px-4 py-3">
-                      {s.loggedCount > 0
-                        ? <span className="text-sm font-medium">{s.presentCount}/{s.loggedCount}</span>
-                        : <span className="text-xs" style={{ color: '#94a3b8' }}>—</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium"
-                            style={{ backgroundColor: badge.bg, color: badge.color }}>
-                        {badge.label}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1">
-                        {isAdmin ? (
-                          <>
-                            <button onClick={e => { e.stopPropagation(); setEditItem(s); }}
-                              className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-blue-50"
-                              title="แก้ไข">
-                              <Pencil className="w-3.5 h-3.5" style={{ color: '#1d6ae5' }} />
-                            </button>
-                            <button onClick={e => handleDelete(s.id, e)}
-                              className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-red-50"
-                              title="ลบ">
-                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                            </button>
-                          </>
-                        ) : (
-                          <ChevronRight className="w-4 h-4" style={{ color: '#dce6f9' }} />
-                        )}
-                      </div>
-                    </td>
-                  </tr>
+                      {s.loggedCount > 0 && <p className="text-xs mt-1" style={{ color: '#4a6080' }}>มา/บันทึก: {s.presentCount}/{s.loggedCount}</p>}
+                    </div>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium flex-shrink-0" style={{ backgroundColor: b.bg, color: b.color }}>{b.label}</span>
+                    <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: '#cbd5e1' }} />
+                  </button>
                 );
               })}
-            </tbody>
-          </table>
-        )}
-      </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
