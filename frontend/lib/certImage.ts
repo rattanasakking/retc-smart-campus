@@ -11,10 +11,10 @@ function loadImg(src: string): Promise<HTMLImageElement> {
 
 const TEXT_KEYS: (keyof CertValues)[] = ['name', 'pos', 'awd', 'cert'];
 
-// เรนเดอร์เกียรติบัตรเป็นรูปภาพ PNG (ความละเอียดสูง) ด้วย canvas
-export async function certToPngBlob(
+// เรนเดอร์เกียรติบัตรลง canvas (ความละเอียดสูง) — ใช้ต่อได้ทั้ง PNG และ PDF
+async function renderCertCanvas(
   templateUrl: string, ts: CertTextSettings, values: CertValues, verifyUrl: string,
-): Promise<Blob> {
+): Promise<{ canvas: HTMLCanvasElement; w: number; h: number }> {
   const tpl = await loadImg(templateUrl);
 
   // base coordinate เดียวกับที่ CertRender ใช้ (fontSize/QR อ้างอิงจากฐานนี้)
@@ -86,8 +86,36 @@ export async function certToPngBlob(
     } catch { /* ข้าม QR ถ้าโหลดไม่ได้ */ }
   }
 
+  return { canvas, w, h };
+}
+
+// เรนเดอร์เป็น PNG Blob
+export async function certToPngBlob(
+  templateUrl: string, ts: CertTextSettings, values: CertValues, verifyUrl: string,
+): Promise<Blob> {
+  const { canvas } = await renderCertCanvas(templateUrl, ts, values, verifyUrl);
   return new Promise<Blob>((resolve, reject) =>
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('สร้างรูปภาพไม่สำเร็จ'))), 'image/png', 0.95));
+}
+
+export interface CertPdfInput {
+  templateUrl: string; ts: CertTextSettings; values: CertValues; verifyUrl: string;
+}
+
+// รวมเกียรติบัตรหลายใบเป็นไฟล์ PDF เดียว แล้วดาวน์โหลด (แต่ละใบ = 1 หน้า ขนาดพอดีเกียรติบัตร)
+export async function downloadCertsPdf(filename: string, inputs: CertPdfInput[]): Promise<void> {
+  if (inputs.length === 0) return;
+  const { jsPDF } = await import('jspdf');
+  let pdf: import('jspdf').jsPDF | null = null;
+  for (const inp of inputs) {
+    const { canvas, w, h } = await renderCertCanvas(inp.templateUrl, inp.ts, inp.values, inp.verifyUrl);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    const orientation = w >= h ? 'l' : 'p';
+    if (!pdf) pdf = new jsPDF({ orientation, unit: 'px', format: [w, h], compress: true });
+    else pdf.addPage([w, h], orientation);
+    pdf.addImage(dataUrl, 'JPEG', 0, 0, w, h);
+  }
+  pdf!.save(filename.replace(/[\\/:*?"<>|]+/g, '_') + '.pdf');
 }
 
 export async function downloadCertImage(

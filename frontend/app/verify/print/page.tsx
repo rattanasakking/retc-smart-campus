@@ -1,8 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Printer, X, Loader2, ImageDown } from 'lucide-react';
+import { Printer, X, Loader2, ImageDown, FileDown } from 'lucide-react';
 import CertRender, { type CertTextSettings } from '@/components/certificate/CertRender';
-import { downloadCertImage } from '@/lib/certImage';
+import { downloadCertImage, downloadCertsPdf, type CertPdfInput } from '@/lib/certImage';
 
 interface PublicCert {
   id: number; certNo: string; firstname: string; lastname: string;
@@ -15,6 +15,27 @@ export default function CertPrintPage() {
   const [loading, setLoading] = useState(true);
   const [origin, setOrigin] = useState('');
   const [dlAll, setDlAll]   = useState(false);
+  const [dlPdf, setDlPdf]   = useState(false);
+
+  const valuesOf = (c: PublicCert) => ({
+    name: (c.firstname === '-' && c.lastname === '-') ? '(เว้นว่างรอระบุชื่อ)' : `${c.firstname} ${c.lastname}`,
+    pos: c.position ?? '', awd: c.award ?? '', cert: c.certNo,
+  });
+
+  const downloadPdf = async () => {
+    setDlPdf(true);
+    try {
+      const inputs: CertPdfInput[] = certs.filter((c) => c.templateUrl).map((c) => ({
+        templateUrl: c.templateUrl as string,
+        ts: c.textSettings,
+        values: valuesOf(c),
+        verifyUrl: `${origin}/verify?keyword=${encodeURIComponent(c.certNo)}`,
+      }));
+      const fname = certs.length === 1 ? `${certs[0].certNo}_${certs[0].firstname}${certs[0].lastname}` : `เกียรติบัตร_${certs.length}ใบ`;
+      await downloadCertsPdf(fname, inputs);
+    } catch (e) { alert('ดาวน์โหลด PDF ไม่สำเร็จ: ' + (e as Error).message); }
+    finally { setDlPdf(false); }
+  };
 
   const downloadAll = async () => {
     setDlAll(true);
@@ -52,7 +73,8 @@ export default function CertPrintPage() {
           .print-toolbar { display: none !important; }
           body { background: #fff !important; }
           .print-stage { padding: 0 !important; }
-          .cert-page { margin: 0 !important; box-shadow: none !important; page-break-after: always; max-width: none !important; width: 100% !important; }
+          .cert-page { margin: 0 !important; box-shadow: none !important; max-width: none !important; width: 100% !important; }
+          .cert-page:not(:last-child) { page-break-after: always; }
         }
         @page { size: auto; margin: 0; }
       `}</style>
@@ -62,11 +84,14 @@ export default function CertPrintPage() {
           <span className="font-bold">🖨️ พิมพ์เกียรติบัตร</span>
           <span className="ml-3 text-slate-300">จำนวน {certs.length} ใบ</span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={downloadPdf} disabled={dlPdf || certs.length === 0} className="bg-rose-600 hover:bg-rose-500 disabled:opacity-60 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-1.5">
+            {dlPdf ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />} ดาวน์โหลด PDF
+          </button>
           <button onClick={downloadAll} disabled={dlAll || certs.length === 0} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-1.5">
             {dlAll ? <Loader2 size={14} className="animate-spin" /> : <ImageDown size={14} />} ดาวน์โหลดรูปภาพ
           </button>
-          <button onClick={() => window.print()} className="bg-blue-600 hover:bg-blue-500 px-5 py-2 rounded-lg font-bold text-sm">พิมพ์ / บันทึก PDF</button>
+          <button onClick={() => window.print()} className="bg-blue-600 hover:bg-blue-500 px-5 py-2 rounded-lg font-bold text-sm flex items-center gap-1.5"><Printer size={14} /> พิมพ์</button>
           <button onClick={() => window.close()} className="bg-slate-600 hover:bg-slate-500 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-1.5"><X size={14} /> ปิด</button>
         </div>
       </div>
