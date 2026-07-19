@@ -16,18 +16,25 @@ export default function CertPrintPage() {
   const [origin, setOrigin] = useState('');
   const [dlAll, setDlAll]   = useState(false);
   const [dlPdf, setDlPdf]   = useState(false);
+  const [showSig, setShowSig] = useState(true);
 
   const valuesOf = (c: PublicCert) => ({
     name: (c.firstname === '-' && c.lastname === '-') ? '(เว้นว่างรอระบุชื่อ)' : `${c.firstname} ${c.lastname}`,
     pos: c.position ?? '', awd: c.award ?? '', cert: c.certNo,
   });
 
+  // ปิดลายเซ็นเมื่อไม่ต้องการแสดง
+  const tsOf = (c: PublicCert): CertTextSettings =>
+    showSig ? c.textSettings : { ...c.textSettings, signatures: [] };
+
+  const hasSignatures = certs.some((c) => (c.textSettings.signatures ?? []).some((s) => s.show && s.url));
+
   const downloadPdf = async () => {
     setDlPdf(true);
     try {
       const inputs: CertPdfInput[] = certs.filter((c) => c.templateUrl).map((c) => ({
         templateUrl: c.templateUrl as string,
-        ts: c.textSettings,
+        ts: tsOf(c),
         values: valuesOf(c),
         verifyUrl: `${origin}/verify?keyword=${encodeURIComponent(c.certNo)}`,
       }));
@@ -43,11 +50,8 @@ export default function CertPrintPage() {
       for (const c of certs) {
         if (!c.templateUrl) continue;
         await downloadCertImage(
-          `${c.certNo}_${c.firstname}${c.lastname}`, c.templateUrl, c.textSettings,
-          {
-            name: (c.firstname === '-' && c.lastname === '-') ? '(เว้นว่างรอระบุชื่อ)' : `${c.firstname} ${c.lastname}`,
-            pos: c.position ?? '', awd: c.award ?? '', cert: c.certNo,
-          },
+          `${c.certNo}_${c.firstname}${c.lastname}`, c.templateUrl, tsOf(c),
+          valuesOf(c),
           `${origin}/verify?keyword=${encodeURIComponent(c.certNo)}`,
         );
       }
@@ -80,9 +84,14 @@ export default function CertPrintPage() {
       `}</style>
 
       <div className="print-toolbar sticky top-0 z-50 flex items-center justify-between px-5 py-3 text-white shadow-lg" style={{ background: '#1e293b' }}>
-        <div className="text-sm">
-          <span className="font-bold">🖨️ พิมพ์เกียรติบัตร</span>
-          <span className="ml-3 text-slate-300">จำนวน {certs.length} ใบ</span>
+        <div className="text-sm flex items-center gap-4 flex-wrap">
+          <span><span className="font-bold">🖨️ พิมพ์เกียรติบัตร</span><span className="ml-3 text-slate-300">จำนวน {certs.length} ใบ</span></span>
+          {hasSignatures && (
+            <label className="flex items-center gap-1.5 cursor-pointer select-none bg-slate-700 px-3 py-1.5 rounded-lg">
+              <input type="checkbox" checked={showSig} onChange={(e) => setShowSig(e.target.checked)} className="w-4 h-4 accent-blue-500" />
+              <span className="text-slate-100">แสดงลายเซ็น</span>
+            </label>
+          )}
         </div>
         <div className="flex gap-2 flex-wrap">
           <button onClick={downloadPdf} disabled={dlPdf || certs.length === 0} className="bg-rose-600 hover:bg-rose-500 disabled:opacity-60 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-1.5">
@@ -109,11 +118,8 @@ export default function CertPrintPage() {
             {c.templateUrl && (
               <CertRender
                 templateUrl={c.templateUrl}
-                ts={c.textSettings}
-                values={{
-                  name: (c.firstname === '-' && c.lastname === '-') ? '(เว้นว่างรอระบุชื่อ)' : `${c.firstname} ${c.lastname}`,
-                  pos: c.position ?? '', awd: c.award ?? '', cert: c.certNo,
-                }}
+                ts={tsOf(c)}
+                values={valuesOf(c)}
                 verifyUrl={`${origin}/verify?keyword=${encodeURIComponent(c.certNo)}`}
               />
             )}
