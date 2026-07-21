@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Clock, DoorOpen, Users, Loader2, MapPin, X, List, LayoutGrid, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarDays, Clock, DoorOpen, Users, Loader2, MapPin, X, List, LayoutGrid, ChevronLeft, ChevronRight, CalendarPlus } from 'lucide-react';
 
 interface Booking {
   id: number; title: string; startTime: string; endTime: string;
@@ -91,6 +91,16 @@ export default function PublicRoomsPage() {
   const todayKey = ymd(new Date());
   const changeMonth = (delta: number) => setCursor(new Date(cy, cm + delta, 1));
 
+  // ลิงก์ไปหน้าจองห้อง พร้อมส่งห้อง/วันที่ที่เลือกไปให้ (ถ้ายังไม่ล็อกอินระบบจะพาไปหน้าเข้าสู่ระบบก่อน)
+  const bookHref = (d?: string) => {
+    const p = new URLSearchParams();
+    if (roomId) p.set('roomId', roomId);
+    const dd = d ?? (view === 'list' ? date : '');
+    if (dd) p.set('date', dd);
+    const q = p.toString();
+    return `/room/new${q ? `?${q}` : ''}`;
+  };
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#f5f8ff', fontFamily: "'Prompt','Sarabun',sans-serif" }}>
       {/* Header */}
@@ -98,10 +108,14 @@ export default function PublicRoomsPage() {
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logoretc.png" alt="โลโก้" className="w-10 h-10 object-contain rounded-lg p-0.5" style={{ backgroundColor: 'rgba(255,255,255,0.12)' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="text-base md:text-lg font-bold text-white leading-tight truncate">ตารางการใช้ห้องประชุม</h1>
             <p className="text-[11px] tracking-wider truncate" style={{ color: 'rgba(255,255,255,0.5)' }}>วิทยาลัยเทคนิคร้อยเอ็ด</p>
           </div>
+          <a href={bookHref()} className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-sm font-bold text-white flex-shrink-0 transition-transform hover:-translate-y-0.5"
+            style={{ backgroundColor: '#2979ff' }}>
+            <CalendarPlus size={16} /> <span className="hidden sm:inline">จองห้องประชุม</span><span className="sm:hidden">จอง</span>
+          </a>
         </div>
       </header>
 
@@ -110,7 +124,11 @@ export default function PublicRoomsPage() {
         <div aria-hidden className="absolute -top-24 -right-16 w-72 h-72 rounded-full" style={{ background: 'rgba(41,121,255,0.25)', filter: 'blur(20px)' }} />
         <div className="relative max-w-5xl mx-auto px-4 py-9 text-center">
           <h2 className="text-2xl md:text-3xl font-extrabold text-white mb-1.5 flex items-center justify-center gap-2"><CalendarDays size={26} /> ตารางการจองห้องประชุม</h2>
-          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.72)' }}>ตรวจสอบตารางการใช้ห้องประชุมล่วงหน้า</p>
+          <p className="text-sm mb-5" style={{ color: 'rgba(255,255,255,0.72)' }}>ตรวจสอบตารางการใช้ห้องประชุมล่วงหน้า</p>
+          <a href={bookHref()} className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-white shadow-lg transition-transform hover:-translate-y-0.5"
+            style={{ backgroundColor: '#2979ff', boxShadow: '0 10px 25px -8px rgba(41,121,255,0.7)' }}>
+            <CalendarPlus size={18} /> จองห้องประชุม
+          </a>
         </div>
       </div>
 
@@ -239,6 +257,10 @@ export default function PublicRoomsPage() {
             </div>
             <div className="p-4 space-y-2.5">
               {(byDay[dayModal] ?? []).map((b) => <BookingRow key={b.id} b={b} />)}
+              <a href={bookHref(dayModal)} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-white transition-transform hover:-translate-y-0.5"
+                style={{ backgroundColor: '#2979ff' }}>
+                <CalendarPlus size={17} /> จองห้องประชุมวันนี้
+              </a>
             </div>
           </div>
         </div>
