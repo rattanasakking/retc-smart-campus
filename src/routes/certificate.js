@@ -400,12 +400,16 @@ router.get('/series', requireCert, async (req, res, next) => {
     const list = await prisma.certSeries.findMany({
       where,
       orderBy: { id: 'desc' },
-      include: { project: { select: { name: true } } },
+      // _count.certs = จำนวนใบที่ออกจากชุดนี้จริง (รวมที่นำเข้าจาก CSV) ใช้เป็นตัวเลข "ใช้ไปแล้ว"
+      include: { project: { select: { name: true } }, _count: { select: { certs: true } } },
     });
     res.json(success(list.map((s) => ({
       id: s.id, projectId: s.projectId, projectName: s.project?.name ?? null,
       prefix: s.prefix, year: s.year, startNum: s.startNum,
-      quantity: s.quantity, lastNum: s.lastNum,
+      quantity: s.quantity,
+      // ใช้จำนวนจริงเป็นหลัก (กันกรณีตัวนับกับข้อมูลจริงไม่ตรงกัน)
+      lastNum: Math.max(s.lastNum, s._count.certs),
+      issuedCount: s._count.certs,
       reqFirstname: s.reqFirstname, reqLastname: s.reqLastname, reqDepartment: s.reqDepartment,
       createdAt: s.createdAt,
     }))));
@@ -711,6 +715,13 @@ router.post('/certs/import', requireCert, async (req, res, next) => {
         count++;
       }
     });
+
+    // ปรับตัวนับของชุดให้ตรงกับจำนวนใบจริงเสมอ (จำนวนคงเหลือจะลดลงถูกต้องหลังนำเข้า)
+    if (sid) {
+      const actual = await prisma.cert.count({ where: { seriesId: sid } });
+      await prisma.certSeries.update({ where: { id: sid }, data: { lastNum: actual } }).catch(() => {});
+    }
+
     res.json(success({ count, skipped }, `นำเข้า ${count} รายการสำเร็จ${skipped ? ` (ข้าม ${skipped} รายการ)` : ''}`));
   } catch (e) { next(e); }
 });

@@ -6,7 +6,7 @@ import CertTabBar from '@/components/certificate/CertTabBar';
 import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
 
 interface Project { id: number; name: string }
-interface Series { id: number; projectId: number | null; prefix: string; year: string | null; lastNum: number; quantity: number }
+interface Series { id: number; projectId: number | null; prefix: string; year: string | null; lastNum: number; quantity: number; issuedCount?: number }
 interface Cert {
   id: number; projectId: number; certNo: string; firstname: string; lastname: string;
   idCard: string | null; position: string | null; award: string | null; projectName: string | null;
@@ -46,12 +46,16 @@ export default function CertsPage() {
     api.get<{ data: Cert[] }>(`/certificate/certs?${params}`).then((r) => { setItems(r.data ?? []); setSelected(new Set()); }).catch(() => {}).finally(() => setLoading(false));
   }, [search, fProject, fYear]);
 
-  useEffect(() => { load(); }, [load]);
-  useEffect(() => {
-    api.get<{ data: Project[] }>('/certificate/projects').then((r) => setProjects(r.data ?? [])).catch(() => {});
+  const loadSeries = useCallback(() => {
     api.get<{ data: Series[] }>('/certificate/series').then((r) => setAllSeries(r.data ?? [])).catch(() => {
       /* staff อาจไม่มีสิทธิ์ดู series → ไม่เป็นไร */ });
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    api.get<{ data: Project[] }>('/certificate/projects').then((r) => setProjects(r.data ?? [])).catch(() => {});
+    loadSeries();
+  }, [loadSeries]);
 
   const openNew = () => { setForm({ ...IBLANK, projectId: projects[0] ? String(projects[0].id) : '' }); setErr(''); setModal(true); };
   const openEdit = (c: Cert) => {
@@ -69,7 +73,7 @@ export default function CertsPage() {
     try {
       if (form.id) await api.put(`/certificate/certs/${form.id}`, form);
       else await api.post('/certificate/certs', form);
-      setModal(false); load();
+      setModal(false); load(); loadSeries();
     } catch (e) { setErr((e as Error).message); }
     finally { setSaving(false); }
   };
@@ -106,7 +110,7 @@ export default function CertsPage() {
   };
 
   const setF = (k: keyof IForm, v: string) => setForm((p) => ({ ...p, [k]: v }));
-  const projectSeries = allSeries.filter((s) => String(s.projectId) === form.projectId && s.lastNum < s.quantity);
+  const projectSeries = allSeries.filter((s) => String(s.projectId) === form.projectId && (s.issuedCount ?? s.lastNum) < s.quantity);
   const inp = 'w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400';
 
   return (
@@ -204,7 +208,7 @@ export default function CertsPage() {
       </div>
 
       {modal && <IssueModal form={form} setF={setF} projectSeries={projectSeries} projects={projects} err={err} saving={saving} onSave={save} onClose={() => setModal(false)} inp={inp} />}
-      {importOpen && <ImportModal projects={projects} allSeries={allSeries} onClose={() => setImportOpen(false)} onDone={() => { setImportOpen(false); load(); }} inp={inp} />}
+      {importOpen && <ImportModal projects={projects} allSeries={allSeries} onClose={() => setImportOpen(false)} onDone={() => { setImportOpen(false); load(); loadSeries(); }} inp={inp} />}
     </div>
   );
 }
@@ -236,7 +240,7 @@ function IssueModal({ form, setF, projectSeries, projects, err, saving, onSave, 
                 <label className="block text-sm font-bold text-slate-700 mb-1.5">รับหมายเลขอัตโนมัติ (จากชุด)</label>
                 <select value={form.seriesId} onChange={(e) => setF('seriesId', e.target.value)} className={`${inp} bg-white`}>
                   <option value="">-- ไม่ใช้ชุด (กรอกรหัสเอง) --</option>
-                  {projectSeries.map((s) => <option key={s.id} value={s.id}>{s.prefix}###{s.year} (ออกแล้ว {s.lastNum}/{s.quantity})</option>)}
+                  {projectSeries.map((s) => <option key={s.id} value={s.id}>{s.prefix}###{s.year} (ออกแล้ว {s.issuedCount ?? s.lastNum}/{s.quantity} · เหลือ {Math.max(0, s.quantity - (s.issuedCount ?? s.lastNum))})</option>)}
                 </select>
               </div>
             )}
@@ -305,7 +309,7 @@ function ImportModal({ projects, allSeries, onClose, onDone, inp }: {
   const [saving, setSaving]       = useState(false);
   const [err, setErr]             = useState('');
 
-  const projectSeries = allSeries.filter((s) => String(s.projectId) === projectId && s.lastNum < s.quantity);
+  const projectSeries = allSeries.filter((s) => String(s.projectId) === projectId && (s.issuedCount ?? s.lastNum) < s.quantity);
 
   const onFile = (file: File) => {
     setFileName(file.name);
@@ -354,7 +358,7 @@ function ImportModal({ projects, allSeries, onClose, onDone, inp }: {
               <label className="block text-sm font-bold text-slate-700 mb-1.5">ชุดเลขอัตโนมัติ (ถ้ามี)</label>
               <select value={seriesId} onChange={(e) => setSeriesId(e.target.value)} className={`${inp} bg-white`}>
                 <option value="">-- ใช้รหัสจาก CSV --</option>
-                {projectSeries.map((s) => <option key={s.id} value={s.id}>{s.prefix}###{s.year} (ออกแล้ว {s.lastNum}/{s.quantity})</option>)}
+                {projectSeries.map((s) => <option key={s.id} value={s.id}>{s.prefix}###{s.year} (ออกแล้ว {s.issuedCount ?? s.lastNum}/{s.quantity} · เหลือ {Math.max(0, s.quantity - (s.issuedCount ?? s.lastNum))})</option>)}
               </select>
             </div>
           </div>

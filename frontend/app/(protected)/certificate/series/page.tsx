@@ -8,6 +8,7 @@ interface Project { id: number; name: string }
 interface Series {
   id: number; projectId: number | null; projectName: string | null;
   prefix: string; year: string | null; startNum: number; quantity: number; lastNum: number;
+  issuedCount?: number;
   reqFirstname: string | null; reqLastname: string | null; reqDepartment: string | null;
 }
 
@@ -119,7 +120,9 @@ export default function CertSeriesPage() {
               ) : list.length === 0 ? (
                 <tr><td colSpan={6} className="px-6 py-10 text-center text-slate-500">ยังไม่มีชุดเลข</td></tr>
               ) : list.map((s) => {
-                const full = s.lastNum >= s.quantity;
+                const used = s.issuedCount ?? s.lastNum;   // ใบที่ออกไปแล้วจริง
+                const remain = Math.max(0, s.quantity - used);
+                const full = used >= s.quantity;
                 return (
                   <tr key={s.id} className="border-b border-slate-100 hover:bg-slate-50">
                     <td className="px-6 py-4 font-bold text-slate-700">{s.projectName ?? 'ไม่มีโครงการ'}</td>
@@ -131,7 +134,9 @@ export default function CertSeriesPage() {
                     <td className="px-6 py-4"><span className="bg-blue-100 text-blue-700 px-2.5 py-1 rounded-md font-mono text-xs">{s.prefix}<span className="text-blue-400">###</span>{s.year}</span></td>
                     <td className="px-6 py-4 text-center font-bold text-slate-600">{s.startNum}</td>
                     <td className={`px-6 py-4 text-center font-bold ${full ? 'text-red-500' : 'text-emerald-600'}`}>
-                      {s.lastNum} / {s.quantity}{full && <span className="block text-[10px] bg-red-100 text-red-700 px-1.5 rounded mt-1 inline-block">เต็มแล้ว</span>}
+                      {used} / {s.quantity}
+                      <span className="block text-[10px] font-normal text-slate-500 mt-0.5">คงเหลือ {remain} ใบ</span>
+                      {full && <span className="block text-[10px] bg-red-100 text-red-700 px-1.5 rounded mt-1 inline-block">เต็มแล้ว</span>}
                     </td>
                     <td className="px-6 py-4 text-center whitespace-nowrap">
                       <button onClick={() => openEdit(s)} className="text-blue-500 hover:bg-blue-50 w-8 h-8 rounded-full inline-flex items-center justify-center mr-1"><Pencil size={14} /></button>
