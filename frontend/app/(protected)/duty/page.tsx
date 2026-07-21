@@ -193,11 +193,6 @@ export default function DutyPage() {
 
   useEffect(() => { loadSchedules(); loadToday(); }, [loadSchedules, loadToday]);
 
-  // เมื่อเปลี่ยนภาคเรียนแล้วโหลดข้อมูลใหม่ ให้เลื่อนปฏิทินไปเดือนแรกที่มีเวร
-  useEffect(() => {
-    if (schedules.length) setCursor(new Date(Math.min(...schedules.map((s) => +new Date(s.dutyDate)))));
-  }, [schedules]);
-
   const handleDelete = async (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!confirm('ยืนยันการลบตารางเวรนี้?')) return;
