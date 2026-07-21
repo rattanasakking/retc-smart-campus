@@ -206,9 +206,9 @@ export default function PublicRoomsPage() {
                     const isToday = key === todayKey;
                     const dow = new Date(cy, cm, d).getDay();
                     return (
-                      <button key={idx} onClick={() => items.length && setDayModal(key)}
-                        className="rounded-lg p-1.5 text-left flex flex-col transition-colors"
-                        style={{ minHeight: 92, border: isToday ? '2px solid #2979ff' : '1px solid #eef2fb', backgroundColor: '#fff', cursor: items.length ? 'pointer' : 'default' }}>
+                      <button key={idx} onClick={() => setDayModal(key)}
+                        className="rounded-lg p-1.5 text-left flex flex-col transition-colors cursor-pointer hover:bg-[#f5f8ff]"
+                        style={{ minHeight: 92, border: isToday ? '2px solid #2979ff' : '1px solid #eef2fb', backgroundColor: '#fff' }}>
                         <span className="text-xs font-bold mb-1" style={{ color: isToday ? '#1d6ae5' : dow === 0 ? '#dc2626' : dow === 6 ? '#1d6ae5' : '#1a2744' }}>{d}</span>
                         <div className="flex-1 space-y-0.5 overflow-hidden">
                           {items.slice(0, 3).map((b) => {
@@ -256,7 +256,13 @@ export default function PublicRoomsPage() {
               <button onClick={() => setDayModal(null)} className="text-slate-400 hover:text-slate-700"><X size={18} /></button>
             </div>
             <div className="p-4 space-y-2.5">
-              {(byDay[dayModal] ?? []).map((b) => <BookingRow key={b.id} b={b} />)}
+              {(byDay[dayModal] ?? []).length === 0 ? (
+                <div className="text-center py-8">
+                  <CalendarDays size={38} className="mx-auto mb-3" style={{ color: '#cbd5e1' }} />
+                  <p className="font-bold" style={{ color: '#1a2744' }}>ยังไม่มีการจองในวันนี้</p>
+                  <p className="text-sm mt-1" style={{ color: '#4a6080' }}>ห้องประชุมว่าง — จองได้เลย</p>
+                </div>
+              ) : (byDay[dayModal] ?? []).map((b) => <BookingRow key={b.id} b={b} />)}
               <a href={bookHref(dayModal)} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-white transition-transform hover:-translate-y-0.5"
                 style={{ backgroundColor: '#2979ff' }}>
                 <CalendarPlus size={17} /> จองห้องประชุมวันนี้
