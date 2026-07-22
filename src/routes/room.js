@@ -63,6 +63,49 @@ async function notifyRoomManager(booking) {
   pushMessage(mgr.lineUserId, [{ type: 'text', text }]).catch(() => {});
 }
 
+const STATUS_TH = {
+  pending: 'รออนุมัติ', approved: 'อนุมัติแล้ว', rejected: 'ปฏิเสธ',
+  cancelled: 'ยกเลิก', completed: 'เสร็จสิ้น',
+};
+const STATUS_ICON = {
+  pending: '⏳', approved: '✅', rejected: '❌', cancelled: '🚫', completed: '🏁',
+};
+
+/** แจ้งผู้ดูแลห้อง + admin โมดูลจองห้องประชุม เมื่อสถานะการจองเปลี่ยน */
+async function notifyStaffStatusChange(booking, status, note, actorId) {
+  if (!booking) return;
+  const { dateS, timeS } = bookingWhen(booking);
+  const text = [
+    `\n${STATUS_ICON[status] ?? '🔔'} อัปเดตสถานะการจองห้องประชุม`,
+    '━━━━━━━━━━━━━━',
+    `🏠 ห้อง: ${booking.room?.name ?? '-'}`,
+    `📅 ${dateS}`,
+    `⏰ ${timeS}`,
+    `👤 ผู้จอง: ${booking.user?.name ?? '-'}${booking.user?.department ? ` (${booking.user.department})` : ''}`,
+    `📝 ${booking.title}`,
+    `📌 สถานะ: ${STATUS_TH[status] ?? status}`,
+    note ? `💬 หมายเหตุ: ${note}` : null,
+  ].filter(Boolean).join('\n');
+
+  // รวมผู้รับแบบไม่ซ้ำ: ผู้ดูแลห้อง + admin โมดูล
+  const recipients = new Map();
+  if (booking.room?.managerId) {
+    const mgr = await prisma.user.findUnique({
+      where: { id: booking.room.managerId }, select: { id: true, lineUserId: true },
+    });
+    if (mgr?.lineUserId) recipients.set(mgr.id, mgr.lineUserId);
+  }
+  for (const a of await getRoomAdmins()) {
+    if (a.lineUserId) recipients.set(a.id, a.lineUserId);
+  }
+  recipients.delete(actorId);         // คนที่กดเปลี่ยนสถานะเอง ไม่ต้องแจ้งซ้ำ
+  recipients.delete(booking.userId);  // ผู้จองได้รับจาก notifyBookerStatus แล้ว
+
+  for (const lineUserId of recipients.values()) {
+    pushMessage(lineUserId, [{ type: 'text', text }]).catch(() => {});
+  }
+}
+
 /** แจ้งเตือนหัวหน้างานอาคารสถานที่เมื่อมีการขอจัดโต๊ะ */
 async function notifyFacilitiesHead(booking) {
   if (!booking.tableLayout) return;
@@ -541,6 +584,8 @@ router.put('/bookings/:id/cancel', auth, async (req, res, next) => {
     if (b.userId !== req.user.id && !await canAdmin(req.user)) return res.status(403).json(error('ไม่มีสิทธิ์'));
     if (!['pending','approved'].includes(b.status)) return res.status(400).json(error('ไม่สามารถยกเลิกได้'));
     await prisma.roomBooking.update({ where: { id: intId(req.params.id) }, data: { status: 'cancelled' } });
+    const updated = await prisma.roomBooking.findUnique({ where: { id: intId(req.params.id) }, include: BOOKING_INC });
+    notifyStaffStatusChange(updated, 'cancelled', null, req.user.id).catch(() => {});
     res.json(success(null, 'ยกเลิกการจองสำเร็จ'));
   } catch (e) { next(e); }
 });
@@ -558,6 +603,7 @@ router.put('/bookings/:id/approve', auth, async (req, res, next) => {
     ]);
     const updated = await prisma.roomBooking.findUnique({ where: { id: intId(req.params.id) }, include: BOOKING_INC });
     notifyBookerStatus(updated, 'approved', note?.trim() || null).catch(() => {});
+    notifyStaffStatusChange(updated, 'approved', note?.trim() || null, req.user.id).catch(() => {});
     res.json(success(null, 'อนุมัติสำเร็จ'));
   } catch (e) { next(e); }
 });
@@ -575,6 +621,7 @@ router.put('/bookings/:id/reject', auth, async (req, res, next) => {
     ]);
     const updated = await prisma.roomBooking.findUnique({ where: { id: intId(req.params.id) }, include: BOOKING_INC });
     notifyBookerStatus(updated, 'rejected', note?.trim() || null).catch(() => {});
+    notifyStaffStatusChange(updated, 'rejected', note?.trim() || null, req.user.id).catch(() => {});
     res.json(success(null, 'ปฏิเสธสำเร็จ'));
   } catch (e) { next(e); }
 });
@@ -594,14 +641,18 @@ router.put('/bookings/:id/status', auth, async (req, res, next) => {
 
     await prisma.roomBooking.update({ where: { id }, data: { status } });
 
-    // บันทึกประวัติ + แจ้งผู้จอง เฉพาะอนุมัติ/ปฏิเสธ
+    // บันทึกประวัติ เฉพาะอนุมัติ/ปฏิเสธ
     if (status === 'approved' || status === 'rejected') {
       await prisma.roomBookingApproval.create({
         data: { bookingId: id, approverId: req.user.id, status, note: note?.trim() || null },
       });
-      const updated = await prisma.roomBooking.findUnique({ where: { id }, include: BOOKING_INC });
+    }
+    const updated = await prisma.roomBooking.findUnique({ where: { id }, include: BOOKING_INC });
+    // แจ้งผู้จอง เฉพาะอนุมัติ/ปฏิเสธ | แจ้งผู้ดูแลห้อง + admin ทุกการเปลี่ยนสถานะ
+    if (status === 'approved' || status === 'rejected') {
       notifyBookerStatus(updated, status, note?.trim() || null).catch(() => {});
     }
+    notifyStaffStatusChange(updated, status, note?.trim() || null, req.user.id).catch(() => {});
     res.json(success(null, 'เปลี่ยนสถานะสำเร็จ'));
   } catch (e) { next(e); }
 });
