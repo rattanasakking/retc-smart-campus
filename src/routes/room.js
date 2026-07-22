@@ -579,6 +579,33 @@ router.put('/bookings/:id/reject', auth, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// เปลี่ยนสถานะการจองโดยตรง (admin) — ใช้จากหน้าจัดการการจอง
+const VALID_BOOKING_STATUS = ['pending', 'approved', 'rejected', 'cancelled', 'completed'];
+router.put('/bookings/:id/status', auth, async (req, res, next) => {
+  try {
+    if (!await canAdmin(req.user)) return res.status(403).json(error('ต้องการสิทธิ์ Admin'));
+    const id = intId(req.params.id);
+    const { status, note } = req.body;
+    if (!VALID_BOOKING_STATUS.includes(status)) return res.status(400).json(error('สถานะไม่ถูกต้อง'));
+
+    const b = await prisma.roomBooking.findUnique({ where: { id } });
+    if (!b) return res.status(404).json(error('ไม่พบการจอง'));
+    if (b.status === status) return res.json(success(null, 'เป็นสถานะนี้อยู่แล้ว'));
+
+    await prisma.roomBooking.update({ where: { id }, data: { status } });
+
+    // บันทึกประวัติ + แจ้งผู้จอง เฉพาะอนุมัติ/ปฏิเสธ
+    if (status === 'approved' || status === 'rejected') {
+      await prisma.roomBookingApproval.create({
+        data: { bookingId: id, approverId: req.user.id, status, note: note?.trim() || null },
+      });
+      const updated = await prisma.roomBooking.findUnique({ where: { id }, include: BOOKING_INC });
+      notifyBookerStatus(updated, status, note?.trim() || null).catch(() => {});
+    }
+    res.json(success(null, 'เปลี่ยนสถานะสำเร็จ'));
+  } catch (e) { next(e); }
+});
+
 // ลบการจอง (admin เท่านั้น)
 router.delete('/bookings/:id', auth, async (req, res, next) => {
   try {
@@ -587,6 +614,10 @@ router.delete('/bookings/:id', auth, async (req, res, next) => {
     const id = intId(req.params.id);
     const booking = await prisma.roomBooking.findUnique({ where: { id } });
     if (!booking) return res.status(404).json(error('ไม่พบการจอง'));
+    // ห้ามลบการจองที่อนุมัติแล้ว — ต้องเปลี่ยนสถานะ (เช่น ยกเลิก) ก่อน
+    if (booking.status === 'approved') {
+      return res.status(400).json(error('ไม่สามารถลบการจองที่อนุมัติแล้วได้ กรุณาเปลี่ยนสถานะเป็น "ยกเลิก" ก่อน'));
+    }
     await prisma.roomBookingApproval.deleteMany({ where: { bookingId: id } });
     await prisma.roomBooking.delete({ where: { id } });
     res.json(success(null, 'ลบการจองสำเร็จ'));

@@ -9,11 +9,14 @@ import { api } from '@/lib/api';
 
 interface Booking {
   id: number; title: string; startTime: string; endTime: string; status: string;
-  attendees?: number; purpose?: string;
-  room: { id: number; name: string };
-  user: { id: number; name: string; department?: string };
-  approvals: { approver: { name: string }; status: string; note?: string }[];
+  attendees?: number; purpose?: string; equipmentNeeded?: string | null; tableLayout?: string | null;
+  createdAt?: string;
+  room: { id: number; name: string; capacity?: number };
+  user: { id: number; name: string; department?: string; email?: string };
+  approvals: { approver: { name: string }; status: string; note?: string; createdAt?: string }[];
 }
+
+const STATUS_OPTIONS = ['pending', 'approved', 'rejected', 'cancelled', 'completed'] as const;
 interface Room { id: number; name: string }
 
 const STATUS_META: Record<string, { label: string; bg: string; text: string }> = {
@@ -49,6 +52,8 @@ export default function BookingManagePage() {
   const [acting, setActing]         = useState<number | null>(null);
   const [rejModal, setRejModal]     = useState<Booking | null>(null);
   const [rejNote, setRejNote]       = useState('');
+  const [detail, setDetail]         = useState<Booking | null>(null);
+  const [statusMenu, setStatusMenu] = useState<number | null>(null);
 
   const showToast = (msg: string, err = false) => {
     if (err) { setToastErr(msg); setToast(''); } else { setToast(msg); setToastErr(''); }
@@ -90,21 +95,30 @@ export default function BookingManagePage() {
     setPage(1);
   };
 
-  const handleApprove = async (id: number) => {
-    setActing(id);
+  // เปลี่ยนสถานะโดยตรง (ปฏิเสธจะเปิดหน้าต่างให้ใส่เหตุผลก่อน)
+  const changeStatus = async (b: Booking, status: string) => {
+    setStatusMenu(null);
+    if (status === b.status) return;
+    if (status === 'rejected') { setRejModal(b); setRejNote(''); return; }
+    setActing(b.id);
     try {
-      await api.put(`/room/bookings/${id}/approve`, {});
-      showToast('อนุมัติสำเร็จ');
+      await api.put(`/room/bookings/${b.id}/status`, { status });
+      showToast('เปลี่ยนสถานะสำเร็จ');
       load();
     } catch (e: unknown) { showToast((e as Error).message, true); }
     finally { setActing(null); }
+  };
+
+  const handleApprove = (id: number) => {
+    const b = bookings.find((x) => x.id === id);
+    if (b) changeStatus(b, 'approved');
   };
 
   const handleReject = async () => {
     if (!rejModal) return;
     setActing(rejModal.id);
     try {
-      await api.put(`/room/bookings/${rejModal.id}/reject`, { note: rejNote });
+      await api.put(`/room/bookings/${rejModal.id}/status`, { status: 'rejected', note: rejNote });
       showToast('ปฏิเสธสำเร็จ');
       setRejModal(null); setRejNote('');
       load();
@@ -113,6 +127,10 @@ export default function BookingManagePage() {
   };
 
   const handleDelete = async (b: Booking) => {
+    if (b.status === 'approved') {
+      showToast('ลบไม่ได้ — การจองนี้อนุมัติแล้ว กรุณาเปลี่ยนสถานะเป็น "ยกเลิก" ก่อน', true);
+      return;
+    }
     if (!confirm(`ลบการจอง "${b.title}" ของ ${b.user.name}?\nไม่สามารถย้อนกลับได้`)) return;
     setActing(b.id);
     try {
@@ -251,7 +269,7 @@ export default function BookingManagePage() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ backgroundColor: '#f8faff', borderBottom: '1px solid #f0f4ff' }}>
-                  {['ห้อง','หัวข้อ','ผู้จอง','วันที่','เวลา','สถานะ','จัดการ'].map(h => (
+                  {['ห้อง','หัวข้อการประชุม','ผู้จอง','วันที่ / เวลา','สถานะ','จัดการ'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: '#94a3b8' }}>{h}</th>
                   ))}
                 </tr>
@@ -259,7 +277,7 @@ export default function BookingManagePage() {
               <tbody>
                 {bookings.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-sm" style={{ color: '#94a3b8' }}>
+                    <td colSpan={6} className="px-4 py-12 text-center text-sm" style={{ color: '#94a3b8' }}>
                       {hasFilters ? 'ไม่พบรายการที่ตรงกับเงื่อนไข' : 'ยังไม่มีการจอง'}
                     </td>
                   </tr>
@@ -270,20 +288,49 @@ export default function BookingManagePage() {
                   return (
                     <tr key={b.id} style={{ borderBottom: '1px solid #f5f8ff' }} className="hover:bg-[#fafbff]">
                       <td className="px-4 py-3 text-xs font-medium whitespace-nowrap" style={{ color: '#1a2744' }}>{b.room.name}</td>
-                      <td className="px-4 py-3 text-xs max-w-[180px]">
-                        <p className="truncate font-medium" style={{ color: '#1a2744' }}>{b.title}</p>
-                        {b.attendees && <p className="text-[11px] mt-0.5" style={{ color: '#94a3b8' }}>{b.attendees} คน</p>}
+                      <td className="px-4 py-3 text-xs min-w-[240px]">
+                        <button onClick={() => setDetail(b)} className="text-left w-full group" title="คลิกเพื่อดูรายละเอียด">
+                          <p className="font-medium group-hover:underline" style={{ color: '#1d6ae5' }}>{b.title}</p>
+                          <div className="flex gap-2 mt-0.5 text-[11px]" style={{ color: '#94a3b8' }}>
+                            {b.attendees ? <span>{b.attendees} คน</span> : null}
+                            {b.tableLayout ? <span>· 🪑 {b.tableLayout}</span> : null}
+                          </div>
+                        </button>
                       </td>
                       <td className="px-4 py-3 text-xs whitespace-nowrap">
                         <p style={{ color: '#1a2744' }}>{b.user.name}</p>
                         {b.user.department && <p className="text-[11px] mt-0.5" style={{ color: '#94a3b8' }}>{b.user.department}</p>}
                       </td>
-                      <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: '#4a6080' }}>{fmtDate(b.startTime)}</td>
-                      <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: '#4a6080' }}>{fmtTime(b.startTime)}-{fmtTime(b.endTime)} น.</td>
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style={{ backgroundColor: sm.bg, color: sm.text }}>{sm.label}</span>
+                      <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: '#4a6080' }}>
+                        <p style={{ color: '#1a2744' }}>{fmtDate(b.startTime)}</p>
+                        <p className="text-[11px] mt-0.5">{fmtTime(b.startTime)}-{fmtTime(b.endTime)} น.</p>
+                      </td>
+                      <td className="px-4 py-3 relative">
+                        <button onClick={() => setStatusMenu(statusMenu === b.id ? null : b.id)} disabled={isActing}
+                          className="px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap hover:ring-2 hover:ring-offset-1 transition disabled:opacity-50"
+                          style={{ backgroundColor: sm.bg, color: sm.text }} title="คลิกเพื่อเปลี่ยนสถานะ">
+                          {sm.label} ▾
+                        </button>
                         {lastApproval?.note && (
                           <p className="text-[11px] mt-0.5 max-w-[120px] truncate" style={{ color: '#94a3b8' }} title={lastApproval.note}>{lastApproval.note}</p>
+                        )}
+                        {statusMenu === b.id && (
+                          <>
+                            <div className="fixed inset-0 z-20" onClick={() => setStatusMenu(null)} />
+                            <div className="absolute z-30 left-2 mt-1 bg-white rounded-xl shadow-lg py-1 min-w-[150px]" style={{ border: '1px solid #dce6f9' }}>
+                              {STATUS_OPTIONS.map((st) => {
+                                const m = STATUS_META[st];
+                                return (
+                                  <button key={st} onClick={() => changeStatus(b, st)}
+                                    className="w-full text-left px-3 py-2 text-xs hover:bg-[#f5f8ff] flex items-center justify-between gap-2"
+                                    style={{ color: '#1a2744' }}>
+                                    <span>{m.label}</span>
+                                    {st === b.status && <Check className="w-3 h-3" style={{ color: '#0d9068' }} />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </>
                         )}
                       </td>
                       <td className="px-4 py-3">
@@ -310,9 +357,9 @@ export default function BookingManagePage() {
                           )}
                           <button
                             onClick={() => handleDelete(b)}
-                            disabled={isActing}
-                            className="p-1.5 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
-                            title="ลบ">
+                            disabled={isActing || b.status === 'approved'}
+                            className="p-1.5 rounded-lg hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            title={b.status === 'approved' ? 'ลบไม่ได้ — อนุมัติแล้ว (เปลี่ยนสถานะเป็นยกเลิกก่อน)' : 'ลบ'}>
                             {isActing
                               ? <Loader2 className="w-3.5 h-3.5 animate-spin text-red-400" />
                               : <Trash2 className="w-3.5 h-3.5 text-red-400" />}
@@ -357,6 +404,67 @@ export default function BookingManagePage() {
           </button>
         </div>
       )}
+
+      {/* Detail modal */}
+      {detail && (() => {
+        const sm = STATUS_META[detail.status] ?? STATUS_META.pending;
+        let equip: string[] = [];
+        try { equip = detail.equipmentNeeded ? JSON.parse(detail.equipmentNeeded) : []; } catch { equip = []; }
+        const Row = ({ label, children }: { label: string; children: React.ReactNode }) => (
+          <div className="flex gap-3 py-2" style={{ borderBottom: '1px solid #f5f8ff' }}>
+            <span className="text-xs w-28 flex-shrink-0" style={{ color: '#94a3b8' }}>{label}</span>
+            <div className="text-sm flex-1 min-w-0" style={{ color: '#1a2744' }}>{children}</div>
+          </div>
+        );
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setDetail(null)} />
+            <div className="relative w-full max-w-lg rounded-2xl shadow-xl z-10 bg-white max-h-[85vh] flex flex-col" style={{ border: '1px solid #dce6f9' }}>
+              <div className="flex items-start justify-between px-5 py-4" style={{ borderBottom: '1px solid #dce6f9' }}>
+                <div className="min-w-0">
+                  <h3 className="font-semibold truncate" style={{ color: '#1a2744' }}>{detail.title}</h3>
+                  <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: sm.bg, color: sm.text }}>{sm.label}</span>
+                </div>
+                <button onClick={() => setDetail(null)}><X className="w-4 h-4" style={{ color: '#94a3b8' }} /></button>
+              </div>
+              <div className="px-5 py-2 overflow-y-auto">
+                <Row label="ห้องประชุม">{detail.room.name}</Row>
+                <Row label="วันที่">{fmtDate(detail.startTime)}</Row>
+                <Row label="เวลา">{fmtTime(detail.startTime)} - {fmtTime(detail.endTime)} น.</Row>
+                <Row label="ผู้จอง">
+                  {detail.user.name}
+                  {detail.user.department && <span className="text-xs ml-1" style={{ color: '#94a3b8' }}>({detail.user.department})</span>}
+                </Row>
+                {detail.attendees ? <Row label="จำนวนผู้เข้าร่วม">{detail.attendees} คน</Row> : null}
+                {detail.purpose ? <Row label="วัตถุประสงค์"><span className="whitespace-pre-wrap">{detail.purpose}</span></Row> : null}
+                {equip.length > 0 && (
+                  <Row label="อุปกรณ์">
+                    <div className="flex flex-wrap gap-1">
+                      {equip.map((e) => <span key={e} className="px-2 py-0.5 rounded text-xs" style={{ backgroundColor: '#e8f0fe', color: '#1d6ae5' }}>{e}</span>)}
+                    </div>
+                  </Row>
+                )}
+                {detail.tableLayout ? <Row label="การจัดโต๊ะ">🪑 {detail.tableLayout}</Row> : null}
+                {detail.approvals?.length > 0 && (
+                  <Row label="ประวัติอนุมัติ">
+                    <div className="space-y-1">
+                      {detail.approvals.map((a, i) => (
+                        <p key={i} className="text-xs" style={{ color: '#4a6080' }}>
+                          {a.status === 'approved' ? '✅ อนุมัติ' : '❌ ปฏิเสธ'} โดย {a.approver?.name ?? '-'}
+                          {a.note && <span className="block" style={{ color: '#94a3b8' }}>หมายเหตุ: {a.note}</span>}
+                        </p>
+                      ))}
+                    </div>
+                  </Row>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 px-5 py-4" style={{ borderTop: '1px solid #dce6f9' }}>
+                <button onClick={() => setDetail(null)} className="btn-secondary text-sm">ปิด</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Reject modal */}
       {rejModal && (
