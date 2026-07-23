@@ -5,7 +5,7 @@ const { PrismaClient } = require('@prisma/client');
 const auth = require('../middleware/auth');
 const { success, error, paginate } = require('../utils/response');
 const { notify, sendRoomBookingRequestFlex, sendRoomBookingStatusFlex, pushMessage } = require('../services/line');
-const { sendRoomBookingRequestEmail, sendRoomBookingApprovedEmail, sendRoomBookingRejectedEmail } = require('../services/email');
+const { sendRoomBookingRequestEmail, sendRoomBookingApprovedEmail, sendRoomBookingRejectedEmail, sendMail } = require('../services/email');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -106,14 +106,21 @@ async function notifyStaffStatusChange(booking, status, note, actorId) {
   }
 }
 
-/** แจ้งเตือนหัวหน้างานอาคารสถานที่เมื่อมีการขอจัดโต๊ะ */
+/** แจ้งเตือนหัวหน้างานอาคารสถานที่เมื่อมีการขอจัดโต๊ะ (LINE + อีเมลสำรอง) */
 async function notifyFacilitiesHead(booking) {
-  if (!booking.tableLayout) return;
+  if (!booking.tableLayout) {
+    console.log(`[facilitiesHead] booking#${booking.id}: ไม่มีการจัดโต๊ะ → ข้าม`);
+    return;
+  }
   const row = await prisma.systemSettings.findUnique({ where: { key: 'room_facilities_head_id' } });
   const headId = row?.value ? parseInt(row.value, 10) : null;
-  if (!headId) return;
-  const head = await prisma.user.findUnique({ where: { id: headId }, select: { lineUserId: true } });
-  if (!head?.lineUserId) return;
+  if (!headId) {
+    console.warn('[facilitiesHead] ยังไม่ได้ตั้งค่าหัวหน้างานอาคารสถานที่ (ตั้งได้ที่หน้าจัดการห้องประชุม)');
+    return;
+  }
+  const head = await prisma.user.findUnique({ where: { id: headId }, select: { name: true, lineUserId: true, email: true } });
+  if (!head) { console.warn(`[facilitiesHead] ไม่พบผู้ใช้ id=${headId}`); return; }
+
   const { dateS, timeS } = bookingWhen(booking);
   const text = [
     '\n🪑 คำร้องขอจัดโต๊ะห้องประชุม',
@@ -128,7 +135,25 @@ async function notifyFacilitiesHead(booking) {
     '━━━━━━━━━━━━━━',
     '👉 กรุณาจัดเตรียมโต๊ะตามรูปแบบที่ขอ',
   ].filter(Boolean).join('\n');
-  pushMessage(head.lineUserId, [{ type: 'text', text }]).catch(() => {});
+
+  console.log(`[facilitiesHead] booking#${booking.id} layout="${booking.tableLayout}" → ${head.name} (LINE:${head.lineUserId ? 'yes' : 'no'}, email:${head.email ? 'yes' : 'no'})`);
+
+  if (head.lineUserId) {
+    pushMessage(head.lineUserId, [{ type: 'text', text }])
+      .then((r) => console.log('[facilitiesHead] LINE ส่งสำเร็จ', JSON.stringify(r)))
+      .catch((e) => console.error('[facilitiesHead] LINE error:', e.message));
+  } else {
+    console.warn(`[facilitiesHead] ${head.name} ยังไม่ได้เชื่อม LINE — ส่งทางอีเมลแทน`);
+  }
+
+  if (head.email) {
+    sendMail({
+      to: head.email,
+      subject: `🪑 คำร้องขอจัดโต๊ะห้องประชุม — ${booking.room?.name ?? ''} (${dateS})`,
+      text,
+      html: `<div style="font-family:sans-serif;line-height:1.7">${text.replace(/\n/g, '<br>')}</div>`,
+    }).catch((e) => console.error('[facilitiesHead] email error:', e.message));
+  }
 }
 
 async function canAdmin(u) {
