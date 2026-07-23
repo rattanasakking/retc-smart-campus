@@ -107,6 +107,26 @@ async function getChannelAccessToken() {
   } catch { return ''; }
 }
 
+// Reply message = ฟรี ไม่นับโควตา (ใช้ได้เฉพาะตอบกลับทันทีด้วย replyToken จาก webhook)
+const REPLY_API = 'https://api.line.me/v2/bot/message/reply';
+async function replyMessage(replyToken, messages) {
+  if (!replyToken) return null;
+  const token = await getChannelAccessToken();
+  if (!token) { console.warn('[LINE Bot] replyMessage: no channel access token configured'); return null; }
+  try {
+    const res = await fetch(REPLY_API, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ replyToken, messages }),
+    });
+    if (!res.ok) console.error('[LINE Bot] reply failed:', res.status, await res.text());
+    return res.ok;
+  } catch (err) {
+    console.error('[LINE Bot] reply error:', err.message);
+    return null;
+  }
+}
+
 async function pushMessage(lineUserId, messages) {
   const token = await getChannelAccessToken();
   if (!token) { console.warn('[LINE Bot] pushMessage: no channel access token configured'); return null; }
@@ -589,7 +609,7 @@ module.exports = {
   sendLeaveRequestFlex, sendLeaveStatusNotify,
   sendRoomBookingRequestFlex, sendRoomBookingStatusFlex,
   sendWorkLogFlex, sendWorkLogStatusFlex,
-  pushMessage,
+  pushMessage, replyMessage,
   formatThaiDate, formatDateTime,
   isModuleNotifyEnabled,
 };

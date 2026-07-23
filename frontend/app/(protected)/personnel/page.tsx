@@ -428,6 +428,10 @@ export default function PersonnelPage() {
                           <div className="font-medium text-gray-800 hover:text-blue-600 transition-colors">{p.name}</div>
                           <div className="text-xs text-gray-400">{p.email}</div>
                           {p.nationalId && <div className="text-xs text-gray-400">บัตรฯ: {p.nationalId}</div>}
+                          <span className="inline-flex items-center gap-1 mt-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                            style={p.lineUserId ? { backgroundColor: '#e6f9f0', color: '#06c755' } : { backgroundColor: '#f1f5f9', color: '#94a3b8' }}>
+                            {p.lineUserId ? '🟢 เชื่อม LINE' : '⚪ ยังไม่เชื่อม LINE'}
+                          </span>
                         </div>
                       </button>
                     </td>

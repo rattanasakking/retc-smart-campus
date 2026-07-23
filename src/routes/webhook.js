@@ -1,7 +1,7 @@
 const express  = require('express');
 const crypto   = require('crypto');
 const { PrismaClient } = require('@prisma/client');
-const { sendLeaveStatusNotify, sendLeaveRequestFlex, sendRoomBookingStatusFlex, sendWorkLogStatusFlex, pushMessage } = require('../services/line');
+const { sendLeaveStatusNotify, sendLeaveRequestFlex, sendRoomBookingStatusFlex, sendWorkLogStatusFlex, pushMessage, replyMessage } = require('../services/line');
 const { sendRoomBookingApprovedEmail, sendRoomBookingRejectedEmail } = require('../services/email');
 
 const router = express.Router();
@@ -137,6 +137,8 @@ router.post('/line', async (req, res) => {
     try {
       if (event.type === 'postback') {
         await handlePostback(event);
+      } else if (event.type === 'message' && event.message?.type === 'text') {
+        await handleTextMessage(event);   // บอทตอบกลับ (ฟรี ใช้ reply)
       }
     } catch (err) {
       console.error('[Webhook] event error:', err.message, err.stack);
@@ -148,6 +150,7 @@ async function handlePostback(event) {
   const params     = new URLSearchParams(event.postback?.data ?? '');
   const action     = params.get('action');
   const lineUserId = event.source?.userId;
+  const replyToken = event.replyToken;   // ตอบกลับด้วย reply (ฟรี ไม่นับโควตา)
 
   if (!action || !lineUserId) return;
 
@@ -159,14 +162,14 @@ async function handlePostback(event) {
     const approver = await prisma.user.findFirst({ where: { lineUserId, isActive: true } });
     if (!approver) {
       console.warn('[Webhook] room postback: approver not found for lineUserId', lineUserId);
-      pushMessage(lineUserId, [{ type: 'text', text: '❌ ไม่พบบัญชีผู้ใช้ในระบบ กรุณาเชื่อมต่อ LINE กับบัญชีของคุณก่อน' }]).catch(() => {});
+      replyMessage(replyToken, [{ type: 'text', text: '❌ ไม่พบบัญชีผู้ใช้ในระบบ กรุณาเชื่อมต่อ LINE กับบัญชีของคุณก่อน' }]).catch(() => {});
       return;
     }
 
     const isRoomAdmin = approver.isSuperAdmin || ['admin', 'executive'].includes(approver.role)
       || !!(await prisma.modulePermission.findFirst({ where: { userId: approver.id, module: 'ROOM_BOOKING' } }));
     if (!isRoomAdmin) {
-      pushMessage(lineUserId, [{ type: 'text', text: '❌ คุณไม่มีสิทธิ์อนุมัติการจองห้องประชุม' }]).catch(() => {});
+      replyMessage(replyToken, [{ type: 'text', text: '❌ คุณไม่มีสิทธิ์อนุมัติการจองห้องประชุม' }]).catch(() => {});
       return;
     }
 
@@ -178,12 +181,12 @@ async function handlePostback(event) {
       },
     });
     if (!booking) {
-      pushMessage(lineUserId, [{ type: 'text', text: '❌ ไม่พบข้อมูลการจอง' }]).catch(() => {});
+      replyMessage(replyToken, [{ type: 'text', text: '❌ ไม่พบข้อมูลการจอง' }]).catch(() => {});
       return;
     }
     if (booking.status !== 'pending') {
       const already = booking.status === 'approved' ? 'อนุมัติแล้ว' : booking.status === 'rejected' ? 'ปฏิเสธแล้ว' : 'ยกเลิกแล้ว';
-      pushMessage(lineUserId, [{ type: 'text', text: `ℹ️ การจองนี้ถูก${already} ไม่สามารถดำเนินการซ้ำได้` }]).catch(() => {});
+      replyMessage(replyToken, [{ type: 'text', text: `ℹ️ การจองนี้ถูก${already} ไม่สามารถดำเนินการซ้ำได้` }]).catch(() => {});
       return;
     }
 
@@ -201,7 +204,7 @@ async function handlePostback(event) {
     const confirmText = newStatus === 'approved'
       ? `✅ อนุมัติสำเร็จ\n🏢 ${booking.room?.name}\n👤 ${booking.user?.name}\n📅 ${dateStr} ${timeStr} น.`
       : `❌ ปฏิเสธสำเร็จ\n🏢 ${booking.room?.name}\n👤 ${booking.user?.name}\n📅 ${dateStr} ${timeStr} น.`;
-    pushMessage(lineUserId, [{ type: 'text', text: confirmText }]).catch(() => {});
+    replyMessage(replyToken, [{ type: 'text', text: confirmText }]).catch(() => {});
 
     // แจ้งผู้จอง
     const bookerLine  = booking.user?.lineUserId;
@@ -221,7 +224,7 @@ async function handlePostback(event) {
 
     const approver = await prisma.user.findFirst({ where: { lineUserId, isActive: true } });
     if (!approver) {
-      pushMessage(lineUserId, [{ type: 'text', text: '❌ ไม่พบบัญชีผู้ใช้ในระบบ กรุณาเชื่อมต่อ LINE กับบัญชีของคุณก่อน' }]).catch(() => {});
+      replyMessage(replyToken, [{ type: 'text', text: '❌ ไม่พบบัญชีผู้ใช้ในระบบ กรุณาเชื่อมต่อ LINE กับบัญชีของคุณก่อน' }]).catch(() => {});
       return;
     }
 
@@ -233,7 +236,7 @@ async function handlePostback(event) {
       },
     });
     if (!log) {
-      pushMessage(lineUserId, [{ type: 'text', text: '❌ ไม่พบบันทึกปฏิบัติงาน' }]).catch(() => {});
+      replyMessage(replyToken, [{ type: 'text', text: '❌ ไม่พบบันทึกปฏิบัติงาน' }]).catch(() => {});
       return;
     }
 
@@ -247,13 +250,13 @@ async function handlePostback(event) {
       canAct = unit?.headId === approver.id;
     }
     if (!canAct) {
-      pushMessage(lineUserId, [{ type: 'text', text: '❌ คุณไม่มีสิทธิ์อนุมัติบันทึกปฏิบัติงานนี้' }]).catch(() => {});
+      replyMessage(replyToken, [{ type: 'text', text: '❌ คุณไม่มีสิทธิ์อนุมัติบันทึกปฏิบัติงานนี้' }]).catch(() => {});
       return;
     }
 
     if (log.status !== 'submitted') {
       const statusTh = { approved: 'อนุมัติแล้ว', rejected: 'ปฏิเสธแล้ว', returned: 'ส่งคืนแล้ว', draft: 'ยังเป็นร่าง' }[log.status] ?? log.status;
-      pushMessage(lineUserId, [{ type: 'text', text: `ℹ️ บันทึกนี้${statusTh} ไม่สามารถดำเนินการซ้ำได้` }]).catch(() => {});
+      replyMessage(replyToken, [{ type: 'text', text: `ℹ️ บันทึกนี้${statusTh} ไม่สามารถดำเนินการซ้ำได้` }]).catch(() => {});
       return;
     }
 
@@ -269,7 +272,7 @@ async function handlePostback(event) {
 
     // แจ้ง approver ว่าดำเนินการสำเร็จ
     const actionTh = newStatus === 'approved' ? '✅ อนุมัติสำเร็จ' : newStatus === 'rejected' ? '❌ ปฏิเสธสำเร็จ' : '🔄 ส่งคืนสำเร็จ';
-    pushMessage(lineUserId, [{ type: 'text', text: `${actionTh}\n📝 ${log.title}\n👤 ${log.user?.name ?? '-'}` }]).catch(() => {});
+    replyMessage(replyToken, [{ type: 'text', text: `${actionTh}\n📝 ${log.title}\n👤 ${log.user?.name ?? '-'}` }]).catch(() => {});
 
     // แจ้ง user
     if (log.user?.lineUserId) {
@@ -325,6 +328,60 @@ async function handlePostback(event) {
       await sendLeaveStatusNotify(request.user.lineUserId, request, 'REJECTED');
     }
   }
+}
+
+// ─── บอทตอบข้อความ (reply = ฟรี ไม่นับโควตา) ─────────────────────────────────
+const MONTHS_TH = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+function fmtWhen(start, end) {
+  const s = new Date(start), e = new Date(end);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${s.getDate()} ${MONTHS_TH[s.getMonth()]} ${s.getFullYear() + 543} ${p(s.getHours())}:${p(s.getMinutes())}-${p(e.getHours())}:${p(e.getMinutes())} น.`;
+}
+const BK_STATUS = { pending: '⏳ รออนุมัติ', approved: '✅ อนุมัติแล้ว', rejected: '❌ ปฏิเสธ', cancelled: '🚫 ยกเลิก', completed: '🏁 เสร็จสิ้น' };
+
+async function handleTextMessage(event) {
+  const replyToken = event.replyToken;
+  const lineUserId = event.source?.userId;
+  const text = (event.message?.text ?? '').trim();
+  if (!replyToken) return;
+
+  const user = await prisma.user.findFirst({
+    where: { lineUserId, isActive: true },
+    select: { id: true, name: true, departmentId: true, department: true },
+  });
+  if (!user) {
+    return replyMessage(replyToken, [{ type: 'text', text: '❌ ยังไม่ได้เชื่อมต่อ LINE กับบัญชีในระบบ\n\nกรุณาเข้าเว็บ RETC Smart Campus → เมนูโปรไฟล์ → เชื่อมต่อ LINE ก่อนใช้งานครับ' }]);
+  }
+
+  const t = text.toLowerCase();
+
+  // การจองห้องของฉัน
+  if (t.includes('จอง') || t.includes('ห้อง')) {
+    const bks = await prisma.roomBooking.findMany({
+      where: { userId: user.id, endTime: { gte: new Date() }, status: { in: ['pending', 'approved'] } },
+      include: { room: { select: { name: true } } },
+      orderBy: { startTime: 'asc' }, take: 5,
+    });
+    if (!bks.length) return replyMessage(replyToken, [{ type: 'text', text: `📅 คุณ ${user.name}\nไม่มีการจองห้องที่กำลังจะถึง` }]);
+    const body = bks.map((b) => `• ${fmtWhen(b.startTime, b.endTime)}\n  🏢 ${b.room?.name ?? '-'} · ${BK_STATUS[b.status] ?? b.status}\n  📝 ${b.title}`).join('\n\n');
+    return replyMessage(replyToken, [{ type: 'text', text: `📅 การจองห้องของคุณ ${user.name}\n━━━━━━━━━━━━━━\n${body}` }]);
+  }
+
+  // เวรวันนี้
+  if (t.includes('เวร')) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+    const deptFilter = user.departmentId ? { departmentId: user.departmentId }
+      : (user.department ? { departmentName: user.department } : null);
+    if (!deptFilter) return replyMessage(replyToken, [{ type: 'text', text: `ℹ️ คุณ ${user.name} ยังไม่ได้ระบุแผนก จึงตรวจเวรไม่ได้` }]);
+    const schedules = await prisma.dutySchedule.findMany({ where: { dutyDate: { gte: today, lt: tomorrow }, ...deptFilter } });
+    if (!schedules.length) return replyMessage(replyToken, [{ type: 'text', text: `📋 วันนี้คุณ ${user.name} ไม่มีเวรรับนักเรียน` }]);
+    const body = schedules.map((s) => `• ${s.departmentName ?? '-'}${s.note ? ` (${s.note})` : ''}`).join('\n');
+    return replyMessage(replyToken, [{ type: 'text', text: `📋 เวรรับนักเรียนวันนี้ (${user.name})\n━━━━━━━━━━━━━━\n${body}` }]);
+  }
+
+  // help / default
+  return replyMessage(replyToken, [{ type: 'text', text: `🤖 สวัสดีคุณ ${user.name}\nพิมพ์คำสั่งเพื่อดูข้อมูล (ฟรี):\n• "การจอง" — การจองห้องประชุมของคุณ\n• "เวร" — เวรรับนักเรียนวันนี้` }]);
 }
 
 module.exports = router;

@@ -491,12 +491,14 @@ router.get('/directory', auth, async (req, res) => {
     const [users, total] = await Promise.all([
       prisma.user.findMany({
         where,
-        select: { id: true, name: true, nickname: true, birthDate: true, position: true, phone: true, email: true, avatar: true },
+        select: { id: true, name: true, nickname: true, birthDate: true, position: true, phone: true, email: true, avatar: true, lineUserId: true },
         orderBy: { name: 'asc' }, skip, take: limit,
       }),
       prisma.user.count({ where }),
     ]);
-    res.json(paginate(users, total, page, limit));
+    // ไม่เปิดเผย lineUserId — ส่งแค่สถานะว่าเชื่อมต่อแล้วหรือยัง
+    const shaped = users.map(({ lineUserId, ...u }) => ({ ...u, lineLinked: !!lineUserId }));
+    res.json(paginate(shaped, total, page, limit));
   } catch (e) { res.status(500).json(error('เกิดข้อผิดพลาด')); }
 });
 

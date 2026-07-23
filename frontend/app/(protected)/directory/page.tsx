@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 interface Person {
   id: number; name: string; nickname?: string | null; birthDate?: string | null;
   position?: string | null; phone?: string | null; email?: string | null; avatar?: string | null;
+  lineLinked?: boolean;
 }
 
 const LEGACY_POSITION: Record<string, string> = {
@@ -106,6 +107,10 @@ export default function DirectoryPage() {
                     <p className="font-bold text-[#1a2744] truncate">{u.name}</p>
                     {u.nickname && <p className="text-xs text-[#4a6080] truncate">({u.nickname})</p>}
                     {u.position && <p className="text-xs text-[#1d6ae5] truncate mt-0.5">{posLabel(u.position)}</p>}
+                    <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                      style={u.lineLinked ? { backgroundColor: '#e6f9f0', color: '#06c755' } : { backgroundColor: '#f1f5f9', color: '#94a3b8' }}>
+                      {u.lineLinked ? '🟢 เชื่อม LINE แล้ว' : '⚪ ยังไม่เชื่อม LINE'}
+                    </span>
                   </div>
                 </div>
 
