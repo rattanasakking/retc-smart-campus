@@ -97,11 +97,13 @@ async function notifyRoomBooking(booking, status) {
 const MESSAGING_API = 'https://api.line.me/v2/bot/message/push';
 
 async function getChannelAccessToken() {
-  if (process.env.LINE_CHANNEL_ACCESS_TOKEN) return process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  // รองรับชื่อ env ทั้งสองแบบ (Plesk ตั้งเป็น LINE_MESSAGING_TOKEN)
+  const envToken = process.env.LINE_CHANNEL_ACCESS_TOKEN || process.env.LINE_MESSAGING_TOKEN;
+  if (envToken) return envToken.trim();
   try {
     // ใช้ key เดียวกับที่ general/page.tsx บันทึก
     const row = await _prisma.systemSettings.findUnique({ where: { key: 'line_messaging_token' } });
-    return row?.value ?? '';
+    return (row?.value ?? '').trim();
   } catch { return ''; }
 }
 
