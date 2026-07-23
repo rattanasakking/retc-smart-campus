@@ -62,14 +62,34 @@ router.get('/line/debug', async (req, res) => {
       take: 5,
     });
 
+    // ทดสอบ push จริง: /api/webhook/line/debug?testUserId=Uxxxx  (ดูคำตอบจาก LINE โดยตรง)
+    let test_push = null;
+    const testUserId = req.query.testUserId;
+    if (testUserId) {
+      const token = (process.env.LINE_CHANNEL_ACCESS_TOKEN || process.env.LINE_MESSAGING_TOKEN || tokenRow?.value || '').trim();
+      if (!token) {
+        test_push = { error: 'ไม่พบ channel access token' };
+      } else {
+        try {
+          const r = await fetch('https://api.line.me/v2/bot/message/push', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to: testUserId, messages: [{ type: 'text', text: `✅ ทดสอบ push จาก RETC Smart Campus\n${new Date().toLocaleString('th-TH')}` }] }),
+          });
+          test_push = { status: r.status, ok: r.ok, body: await r.text(), token_len: token.length };
+        } catch (e) { test_push = { error: e.message }; }
+      }
+    }
+
     res.json({
       messaging_secret_set: !!(secretRow?.value),
       messaging_token_set:  !!(tokenRow?.value),
       env_secret_set: !!(process.env.LINE_CHANNEL_SECRET),
-      env_token_set:  !!(process.env.LINE_CHANNEL_ACCESS_TOKEN),
+      env_token_set:  !!(process.env.LINE_CHANNEL_ACCESS_TOKEN || process.env.LINE_MESSAGING_TOKEN),
       last_webhook_event: lastEventRow?.value ? JSON.parse(lastEventRow.value) : null,
       admins: allAdmins,
       pending_bookings: pendingBookings,
+      test_push,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
