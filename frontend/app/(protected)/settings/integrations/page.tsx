@@ -449,6 +449,106 @@ function LineSection({ showToast }: { showToast: (msg: string, ok: boolean) => v
   );
 }
 
+// ─── Telegram section ──────────────────────────────────────────────────────────
+
+function TelegramSection({ showToast }: { showToast: (msg: string, ok: boolean) => void }) {
+  const [token, setToken]     = useState('');
+  const [show, setShow]       = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving]   = useState(false);
+  const [setting, setSetting] = useState(false);
+  const [botInfo, setBotInfo] = useState('');
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      const res = await api.get<{ data: Record<string, string> }>('/settings/general');
+      setToken(res.data?.['telegram_bot_token'] ?? '');
+    } finally { setLoading(false); }
+  }, []);
+  useEffect(() => { fetchSettings(); }, [fetchSettings]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api.put('/settings/general', { telegram_bot_token: token });
+      showToast('บันทึก Telegram bot token สำเร็จ', true);
+    } catch (e: unknown) { showToast((e as Error).message, false); }
+    finally { setSaving(false); }
+  };
+
+  const handleSetup = async () => {
+    setSetting(true); setBotInfo('');
+    try {
+      const r = await api.get<{ bot_username?: string; result?: { ok?: boolean }; error?: string }>('/webhook/telegram/setup');
+      if (r?.result?.ok) {
+        setBotInfo(r.bot_username ? `@${r.bot_username}` : 'สำเร็จ');
+        showToast('ผูก Webhook Telegram สำเร็จ ✅', true);
+      } else {
+        showToast(r?.error ?? 'ผูก webhook ไม่สำเร็จ', false);
+      }
+    } catch (e: unknown) { showToast((e as Error).message || 'ผูก webhook ไม่สำเร็จ', false); }
+    finally { setSetting(false); }
+  };
+
+  const inp = 'w-full bg-navy-800 border border-navy-600 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 placeholder-gray-600';
+
+  if (loading) return (
+    <div className="card flex items-center justify-center py-10 gap-2 text-gray-500">
+      <Loader2 className="w-4 h-4 animate-spin" /> กำลังโหลด...
+    </div>
+  );
+
+  return (
+    <div className="card space-y-5">
+      <div className="flex items-center gap-3 pb-4 border-b border-navy-600">
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: 'rgba(34,158,217,0.2)' }}>
+          <Send className="w-4 h-4" style={{ color: '#229ED9' }} />
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold text-gray-200">Telegram <span className="text-[10px] text-green-400 font-normal">(ฟรี ไม่จำกัด)</span></h2>
+          <p className="text-xs text-gray-500">แจ้งเตือนผ่าน Telegram — ไม่มีโควตาเหมือน LINE</p>
+        </div>
+      </div>
+
+      <div className="bg-blue-950/30 border border-blue-800/40 rounded-xl px-4 py-3 text-xs text-blue-300 space-y-1">
+        <p className="font-medium">วิธีตั้งค่า:</p>
+        <ol className="list-decimal pl-4 space-y-0.5 text-blue-400">
+          <li>เปิด Telegram แชทกับ <strong>@BotFather</strong> → พิมพ์ <code className="bg-blue-900/50 px-1 rounded">/newbot</code> → ตั้งชื่อ → ได้ Bot Token</li>
+          <li>วาง Token ด้านล่าง แล้วกด <strong>บันทึก</strong></li>
+          <li>กด <strong>ผูก Webhook</strong> 1 ครั้ง</li>
+          <li>ผู้ใช้ไปที่ โปรไฟล์ → เชื่อมต่อ Telegram → กด START</li>
+        </ol>
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-gray-400 mb-1.5">Bot Token (จาก @BotFather)</label>
+        <div className="relative">
+          <input type={show ? 'text' : 'password'} value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder="123456789:ABCdef..." className={`${inp} pr-10`} />
+          <button onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
+            {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        </div>
+        <p className="text-xs text-gray-600 mt-1">หรือจะตั้งเป็น env <code className="bg-navy-700 px-1 rounded">TELEGRAM_BOT_TOKEN</code> ใน Plesk ก็ได้ (จะมีความสำคัญเหนือค่าที่นี่)</p>
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <button onClick={handleSave} disabled={saving}
+          className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors disabled:opacity-60">
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} บันทึก
+        </button>
+        <button onClick={handleSetup} disabled={setting}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+          style={{ color: '#229ED9', backgroundColor: 'rgba(34,158,217,0.15)', border: '1px solid rgba(34,158,217,0.4)' }}>
+          {setting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />} ผูก Webhook
+        </button>
+        {botInfo && <span className="text-xs text-green-400">บอท: {botInfo} · webhook พร้อม</span>}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
 export default function IntegrationsPage() {
@@ -463,10 +563,11 @@ export default function IntegrationsPage() {
     <div className="space-y-5 max-w-2xl">
       <div>
         <h1 className="text-xl font-bold text-white">การเชื่อมต่อภายนอก</h1>
-        <p className="text-xs text-gray-400 mt-0.5">ตั้งค่า LINE และ Email สำหรับส่งการแจ้งเตือน</p>
+        <p className="text-xs text-gray-400 mt-0.5">ตั้งค่า LINE, Telegram และ Email สำหรับส่งการแจ้งเตือน</p>
       </div>
 
       <LineSection showToast={showToast} />
+      <TelegramSection showToast={showToast} />
       <EmailSection showToast={showToast} />
 
       {/* Google — coming soon */}
