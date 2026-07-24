@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  Building2, Network, Shield, ChevronLeft, Settings, Users, Smartphone, CalendarX, Bell, ListOrdered,
+  Building2, Network, Shield, ChevronLeft, Settings, Users, Smartphone, CalendarX, Bell, ListOrdered, Link2,
 } from 'lucide-react';
 import { USER_KEY } from '@/lib/api';
 
@@ -14,6 +14,7 @@ const MENU = [
   { href: '/settings/organization', label: 'โครงสร้างองค์กร',  Icon: Network     },
   { href: '/settings/users',        label: 'จัดการผู้ใช้',      Icon: Users       },
   { href: '/settings/permissions',  label: 'สิทธิ์การใช้งาน',  Icon: Shield      },
+  { href: '/settings/integrations',   label: 'การเชื่อมต่อภายนอก', Icon: Link2     },
   { href: '/settings/menu',           label: 'เมนูหลัก',          Icon: ListOrdered },
   { href: '/settings/quick-menu',     label: 'เมนูด่วน (มือถือ)', Icon: Smartphone  },
   { href: '/settings/leave-types',    label: 'ประเภทการลา',       Icon: CalendarX   },
