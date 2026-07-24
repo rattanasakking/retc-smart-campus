@@ -21,18 +21,24 @@ async function notifyUsers(userIds, { title, message, type = 'general', link = n
     });
   } catch (e) { console.error('[notifyUsers] in-app error:', e.message); }
 
-  // 2) Telegram + Email (ฟรี ไม่กินโควตา LINE)
+  // 2) Telegram + Email (ฟรี ไม่กินโควตา LINE) — เคารพสวิตช์เปิด/ปิดช่องทาง
   try {
+    const [telegramOn, emailOn] = await Promise.all([
+      isChannelEnabled('telegram'),
+      isChannelEnabled('email'),
+    ]);
+    if (!telegramOn && !emailOn) return;
+
     const users = await prisma.user.findMany({
       where: { id: { in: ids } },
       select: { id: true, email: true, telegramChatId: true, notifyByEmail: true },
     });
     const url = link ? `${FRONTEND}${link}` : null;
     for (const u of users) {
-      if (u.telegramChatId) {
+      if (telegramOn && u.telegramChatId) {
         sendTelegram(u.telegramChatId, `<b>${escapeHtml(title)}</b>\n${escapeHtml(message)}${url ? `\n\n🔗 ${url}` : ''}`).catch(() => {});
       }
-      if (u.email && u.notifyByEmail) {
+      if (emailOn && u.email && u.notifyByEmail) {
         sendMail({
           to: u.email,
           subject: title,
@@ -46,6 +52,14 @@ async function notifyUsers(userIds, { title, message, type = 'general', link = n
 
 function escapeHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** ช่องทางแจ้งเตือนเปิดอยู่ไหม (line/telegram/email) — default: เปิด */
+async function isChannelEnabled(channel) {
+  try {
+    const row = await prisma.systemSettings.findUnique({ where: { key: `notify_channel_${channel}` } });
+    return row ? row.value === 'true' : true;
+  } catch { return true; }
 }
 
 /** รายชื่อ userId ของ admin ที่ดูแลโมดูลนั้น (admin/executive ของระบบ + ผู้มีสิทธิ์โมดูล) */
@@ -70,4 +84,4 @@ async function getModuleAdminIds(module) {
   }
 }
 
-module.exports = { notifyUsers, getModuleAdminIds };
+module.exports = { notifyUsers, getModuleAdminIds, isChannelEnabled };

@@ -16,6 +16,14 @@ async function isModuleNotifyEnabled(module) {
   } catch { return true; }
 }
 
+/** ตรวจสอบว่าเปิดช่องทาง LINE (global) หรือไม่ (default: เปิด) */
+async function isLineChannelEnabled() {
+  try {
+    const row = await _prisma.systemSettings.findUnique({ where: { key: 'notify_channel_line' } });
+    return row ? row.value === 'true' : true;
+  } catch { return true; }
+}
+
 /**
  * ส่ง LINE Notify message
  * @param {string} token  — LINE Notify token
@@ -128,6 +136,7 @@ async function replyMessage(replyToken, messages) {
 }
 
 async function pushMessage(lineUserId, messages) {
+  if (!await isLineChannelEnabled()) return null;   // ปิดช่องทาง LINE ทั้งระบบ
   const token = await getChannelAccessToken();
   if (!token) { console.warn('[LINE Bot] pushMessage: no channel access token configured'); return null; }
   if (!lineUserId) { console.warn('[LINE Bot] pushMessage: lineUserId is empty'); return null; }
