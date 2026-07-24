@@ -278,23 +278,17 @@ function EmailSection({ showToast }: { showToast: (msg: string, ok: boolean) => 
 // ─── LINE section (Notify + Bot) ──────────────────────────────────────────────
 
 function LineSection({ showToast }: { showToast: (msg: string, ok: boolean) => void }) {
-  const [token, setToken]           = useState('');
-  const [enabled, setEnabled]       = useState(false);
   const [accessToken, setAccessToken] = useState('');
   const [channelSecret, setChannelSecret] = useState('');
-  const [showToken, setShowToken]   = useState(false);
   const [showAT, setShowAT]         = useState(false);
   const [showCS, setShowCS]         = useState(false);
   const [loading, setLoading]       = useState(true);
   const [saving, setSaving]         = useState(false);
-  const [testing, setTesting]       = useState(false);
 
   const fetchSettings = useCallback(async () => {
     try {
       const res = await api.get<{ data: Record<string, string> }>('/settings/general');
       const map = res.data ?? {};
-      setToken(map['line_notify_token'] ?? '');
-      setEnabled(map['line_notify_enabled'] === 'true');
       setAccessToken(map['line_channel_access_token'] ?? '');
       setChannelSecret(map['line_channel_secret'] ?? '');
     } finally { setLoading(false); }
@@ -306,8 +300,6 @@ function LineSection({ showToast }: { showToast: (msg: string, ok: boolean) => v
     setSaving(true);
     try {
       await api.put('/settings/general', {
-        line_notify_token:          token,
-        line_notify_enabled:        String(enabled),
         line_channel_access_token:  accessToken,
         line_channel_secret:        channelSecret,
       });
@@ -315,17 +307,6 @@ function LineSection({ showToast }: { showToast: (msg: string, ok: boolean) => v
     } catch (e: unknown) {
       showToast((e as Error).message, false);
     } finally { setSaving(false); }
-  };
-
-  const handleTest = async () => {
-    if (!token) { showToast('กรุณากรอก LINE Notify Token ก่อน', false); return; }
-    setTesting(true);
-    try {
-      await api.post('/settings/test-line', { token });
-      showToast('ส่ง LINE Notify สำเร็จ ✅ ตรวจสอบใน LINE ของคุณ', true);
-    } catch (e: unknown) {
-      showToast((e as Error).message, false);
-    } finally { setTesting(false); }
   };
 
   const inp = 'w-full bg-navy-800 border border-navy-600 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 placeholder-gray-600';
@@ -343,55 +324,17 @@ function LineSection({ showToast }: { showToast: (msg: string, ok: boolean) => v
           <Link2 className="w-4 h-4 text-green-400" />
         </div>
         <div>
-          <h2 className="text-sm font-semibold text-gray-200">LINE</h2>
-          <p className="text-xs text-gray-500">Notify (แจ้งเตือนทั่วไป) และ Bot (อนุมัติผ่าน LINE)</p>
-        </div>
-        <div className="ml-auto">
-          <button
-            onClick={() => setEnabled(!enabled)}
-            className={`relative w-11 h-6 rounded-full transition-colors ${enabled ? 'bg-green-600' : 'bg-navy-600'}`}
-          >
-            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'}`} />
-          </button>
+          <h2 className="text-sm font-semibold text-gray-200">LINE Messaging API (Bot)</h2>
+          <p className="text-xs text-gray-500">อนุมัติผ่าน LINE + แจ้งเตือน (มีโควตา 300/เดือน สำหรับแผนฟรี)</p>
         </div>
       </div>
 
-      {/* LINE Notify */}
-      <div className="space-y-3">
-        <p className="text-xs font-semibold text-gray-300 flex items-center gap-2">
-          <span className="px-1.5 py-0.5 rounded bg-green-900/50 text-green-400 text-[10px]">Notify</span>
-          แจ้งเตือนทั่วไป (ซ่อม, ของหาย ฯลฯ)
-        </p>
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1.5">
-            LINE Notify Token
-            <a href="https://notify-bot.line.me/my/" target="_blank" rel="noopener noreferrer"
-               className="ml-2 text-blue-400 hover:underline">รับ Token ที่นี่ →</a>
-          </label>
-          <div className="relative">
-            <input type={showToken ? 'text' : 'password'} value={token}
-              onChange={(e) => setToken(e.target.value)}
-              placeholder="token จาก notify-bot.line.me"
-              className={`${inp} pr-10`} />
-            <button onClick={() => setShowToken(!showToken)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
-              {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-        </div>
-        <div>
-          <button onClick={handleTest} disabled={testing || !token}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-green-300
-                       bg-green-900/30 border border-green-700/50 hover:bg-green-900/50
-                       rounded-lg transition-colors disabled:opacity-50">
-            {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            ทดสอบส่ง
-          </button>
-        </div>
+      <div className="bg-amber-950/30 border border-amber-800/40 rounded-xl px-4 py-2.5 text-xs text-amber-300">
+        ⚠️ <strong>LINE Notify ปิดบริการถาวรแล้ว</strong> (มี.ค. 2568) — ระบบใช้ Messaging API แทน และแนะนำ Telegram (ฟรีไม่จำกัด) เป็นช่องทางหลัก
       </div>
 
       {/* LINE Messaging API (Bot) */}
-      <div className="pt-4 border-t border-navy-600 space-y-3">
+      <div className="space-y-3">
         <p className="text-xs font-semibold text-gray-300 flex items-center gap-2">
           <span className="px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-400 text-[10px]">Messaging API</span>
           LINE Bot — อนุมัติ/ปฏิเสธผ่าน LINE ได้เลย

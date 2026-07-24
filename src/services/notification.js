@@ -48,4 +48,26 @@ function escapeHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-module.exports = { notifyUsers };
+/** รายชื่อ userId ของ admin ที่ดูแลโมดูลนั้น (admin/executive ของระบบ + ผู้มีสิทธิ์โมดูล) */
+async function getModuleAdminIds(module) {
+  try {
+    const [sysAdmins, moduleAdmins] = await Promise.all([
+      prisma.user.findMany({
+        where: { isActive: true, role: { in: ['admin', 'executive'] } },
+        select: { id: true },
+      }),
+      prisma.modulePermission.findMany({
+        where: { module },
+        include: { user: { select: { id: true, isActive: true } } },
+      }),
+    ]);
+    const ids = new Set(sysAdmins.map((u) => u.id));
+    for (const p of moduleAdmins) if (p.user?.isActive) ids.add(p.user.id);
+    return [...ids];
+  } catch (e) {
+    console.error('[getModuleAdminIds] error:', e.message);
+    return [];
+  }
+}
+
+module.exports = { notifyUsers, getModuleAdminIds };

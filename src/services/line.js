@@ -51,33 +51,33 @@ async function notify(message, opts = {}) {
   return sendLineNotify(token, message, opts);
 }
 
-/** แจ้งเตือนซ่อมใหม่ */
+/** แจ้งเตือนซ่อมใหม่ → admin โมดูล HELPDESK (ในระบบ + Telegram + Email) */
 async function notifyRepairTicket(ticket) {
   if (!await isModuleNotifyEnabled('HELPDESK')) return null;
+  const { notifyUsers, getModuleAdminIds } = require('./notification');
   const urgencyLabel = { normal: 'ปกติ', urgent: '⚠️ เร่งด่วน', critical: '🚨 วิกฤต' };
-  const msg = [
-    '\n🔧 แจ้งซ่อมใหม่',
-    `เลขที่: ${ticket.ticketNo}`,
-    `หัวข้อ: ${ticket.title}`,
-    `ความเร่งด่วน: ${urgencyLabel[ticket.urgency] ?? ticket.urgency}`,
-    `สถานที่: ${ticket.location}`,
-    `ผู้แจ้ง: ${ticket.reporter?.name ?? '-'}`,
-  ].join('\n');
-  return notify(msg);
+  const ids = await getModuleAdminIds('HELPDESK');
+  return notifyUsers(ids, {
+    title: `🔧 แจ้งซ่อมใหม่ ${ticket.ticketNo ?? ''}`,
+    message: `${ticket.title} — ${urgencyLabel[ticket.urgency] ?? ticket.urgency} @ ${ticket.location} (โดย ${ticket.reporter?.name ?? '-'})`,
+    type: 'helpdesk',
+    link: '/helpdesk',
+  });
 }
 
-/** แจ้งเตือนของหาย/ของได้ */
+/** แจ้งเตือนของหาย/ของได้ → admin โมดูล LOST_FOUND (ในระบบ + Telegram + Email) */
 async function notifyLostFound(item) {
   if (!await isModuleNotifyEnabled('LOST_FOUND')) return null;
+  const { notifyUsers, getModuleAdminIds } = require('./notification');
   const typeLabel = item.type === 'lost' ? '🔍 แจ้งของหาย' : '📦 แจ้งของได้';
-  const msg = [
-    `\n${typeLabel}`,
-    `หัวข้อ: ${item.title}`,
-    `สถานที่: ${item.foundLocation ?? '-'}`,
-    `วันที่: ${item.foundDate ? new Date(item.foundDate).toLocaleDateString('th-TH') : '-'}`,
-    `ผู้แจ้ง: ${item.reporter?.name ?? '-'}`,
-  ].join('\n');
-  return notify(msg);
+  const dateS = item.foundDate ? new Date(item.foundDate).toLocaleDateString('th-TH') : '-';
+  const ids = await getModuleAdminIds('LOST_FOUND');
+  return notifyUsers(ids, {
+    title: `${typeLabel}: ${item.title}`,
+    message: `สถานที่: ${item.foundLocation ?? '-'} · วันที่: ${dateS} (โดย ${item.reporter?.name ?? '-'})`,
+    type: 'lostfound',
+    link: '/lost-found',
+  });
 }
 
 /** แจ้งเตือนการจองห้อง (pending → approved/rejected) */

@@ -4,7 +4,7 @@ const fs      = require('fs');
 const { PrismaClient } = require('@prisma/client');
 const auth = require('../middleware/auth');
 const { success, error, paginate } = require('../utils/response');
-const { notify, sendRoomBookingRequestFlex, sendRoomBookingStatusFlex, pushMessage } = require('../services/line');
+const { sendRoomBookingRequestFlex, sendRoomBookingStatusFlex, pushMessage } = require('../services/line');
 const { sendRoomBookingRequestEmail, sendRoomBookingApprovedEmail, sendRoomBookingRejectedEmail, sendMail } = require('../services/email');
 const { notifyUsers } = require('../services/notification');
 
@@ -615,7 +615,6 @@ router.post('/bookings', auth, async (req, res, next) => {
     });
 
     if (room.requireApproval) notifyAdminsNewBooking(booking).catch(() => {});
-    else notify(lineMsg(booking, 'approved')).catch(() => {});
     notifyRoomManager(booking).catch(() => {});     // แจ้งผู้ดูแลห้อง
     notifyFacilitiesHead(booking).catch(() => {});  // แจ้งหัวหน้างานอาคารสถานที่ (ถ้าขอจัดโต๊ะ)
     res.status(201).json(success(booking, room.requireApproval ? 'ส่งคำขอจองสำเร็จ รอการอนุมัติ' : 'จองห้องสำเร็จ'));
