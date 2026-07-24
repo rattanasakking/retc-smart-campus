@@ -1,295 +1,56 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Link2, Eye, EyeOff, Send, Save, CheckCircle, AlertTriangle, Loader2, Mail, ChevronDown,
+  Link2, Eye, EyeOff, Send, Save, Check, AlertTriangle, Loader2, Mail,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
 type Toast = { msg: string; ok: boolean };
 
-// ─── Email settings ────────────────────────────────────────────────────────────
+// ─── Shared light-theme UI ────────────────────────────────────────────────────
 
-interface EmailSettings {
-  email_provider: 'resend' | 'smtp' | '';
-  email_from: string;
-  resend_api_key: string;
-  smtp_host: string;
-  smtp_port: string;
-  smtp_user: string;
-  smtp_pass: string;
-}
-
-const EMAIL_DEFAULTS: EmailSettings = {
-  email_provider: '',
-  email_from: '',
-  resend_api_key: '',
-  smtp_host: 'smtp.gmail.com',
-  smtp_port: '587',
-  smtp_user: '',
-  smtp_pass: '',
-};
-
-function EmailSection({ showToast }: { showToast: (msg: string, ok: boolean) => void }) {
-  const [cfg, setCfg]         = useState<EmailSettings>(EMAIL_DEFAULTS);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving]   = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [testTo, setTestTo]   = useState('');
-  const [showPass, setShowPass] = useState(false);
-  const [showKey, setShowKey]   = useState(false);
-
-  const fetchSettings = useCallback(async () => {
-    try {
-      const res = await api.get<{ data: Record<string, string> }>('/settings/general');
-      const m   = res.data ?? {};
-      setCfg({
-        email_provider: (m['email_provider'] as EmailSettings['email_provider']) ?? '',
-        email_from:     m['email_from']     ?? '',
-        resend_api_key: m['resend_api_key'] ?? '',
-        smtp_host:      m['smtp_host']      ?? 'smtp.gmail.com',
-        smtp_port:      m['smtp_port']      ?? '587',
-        smtp_user:      m['smtp_user']      ?? '',
-        smtp_pass:      m['smtp_pass']      ?? '',
-      });
-    } finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { fetchSettings(); }, [fetchSettings]);
-
-  const set = (k: keyof EmailSettings, v: string) => setCfg((p) => ({ ...p, [k]: v }));
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await api.put('/settings/general', {
-        email_provider: cfg.email_provider,
-        email_from:     cfg.email_from,
-        resend_api_key: cfg.resend_api_key,
-        smtp_host:      cfg.smtp_host,
-        smtp_port:      cfg.smtp_port,
-        smtp_user:      cfg.smtp_user,
-        smtp_pass:      cfg.smtp_pass,
-      });
-      showToast('บันทึกการตั้งค่า Email สำเร็จ', true);
-    } catch (e: unknown) {
-      showToast((e as Error).message, false);
-    } finally { setSaving(false); }
-  };
-
-  const handleTest = async () => {
-    if (!testTo) { showToast('กรุณาระบุอีเมลทดสอบ', false); return; }
-    setTesting(true);
-    try {
-      await api.post('/settings/test-email', {
-        to: testTo,
-        provider:       cfg.email_provider,
-        resend_api_key: cfg.resend_api_key,
-        email_from:     cfg.email_from,
-        smtp_host:      cfg.smtp_host,
-        smtp_port:      cfg.smtp_port,
-        smtp_user:      cfg.smtp_user,
-        smtp_pass:      cfg.smtp_pass,
-      });
-      showToast('ส่ง Email ทดสอบสำเร็จ ✅ ตรวจสอบใน Inbox ของคุณ', true);
-    } catch (e: unknown) {
-      showToast((e as Error).message, false);
-    } finally { setTesting(false); }
-  };
-
-  const inp = 'w-full bg-navy-800 border border-navy-600 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 placeholder-gray-600';
-
-  if (loading) return (
-    <div className="card flex items-center justify-center py-10 gap-2 text-gray-500">
-      <Loader2 className="w-4 h-4 animate-spin" /> กำลังโหลด...
-    </div>
-  );
-
+function SectionCard({ icon, iconBg, title, badge, subtitle, children }: {
+  icon: React.ReactNode; iconBg: string; title: string;
+  badge?: React.ReactNode; subtitle: string; children: React.ReactNode;
+}) {
   return (
-    <div className="card space-y-5">
-      {/* Header */}
-      <div className="flex items-center gap-3 pb-4 border-b border-navy-600">
-        <div className="w-9 h-9 bg-blue-900/40 rounded-xl flex items-center justify-center">
-          <Mail className="w-4 h-4 text-blue-400" />
+    <div className="card space-y-4">
+      <div className="flex items-center gap-3 pb-3" style={{ borderBottom: '1px solid #f0f4ff' }}>
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: iconBg }}>
+          {icon}
         </div>
-        <div>
-          <h2 className="text-sm font-semibold text-gray-200">Email</h2>
-          <p className="text-xs text-gray-500">ส่งการแจ้งเตือนผ่านอีเมลเมื่อมีกิจกรรมสำคัญ</p>
-        </div>
-      </div>
-
-      {/* Provider selector */}
-      <div>
-        <label className="block text-xs font-medium text-gray-400 mb-2">Email Provider</label>
-        <div className="flex gap-2">
-          {[
-            { v: 'resend', label: 'Resend', sub: 'API key เดียว · ง่าย · ฟรี 3,000/เดือน' },
-            { v: 'smtp',   label: 'SMTP',   sub: 'Gmail, Outlook, หรือ mail server ของตัวเอง' },
-          ].map(({ v, label, sub }) => (
-            <button
-              key={v}
-              onClick={() => set('email_provider', v as EmailSettings['email_provider'])}
-              className={`flex-1 text-left px-3 py-2.5 rounded-xl border transition-colors text-sm ${
-                cfg.email_provider === v
-                  ? 'border-blue-500 bg-blue-900/30 text-blue-300'
-                  : 'border-navy-600 bg-navy-800 text-gray-400 hover:border-navy-500'
-              }`}
-            >
-              <p className="font-semibold">{label}</p>
-              <p className="text-xs opacity-70 mt-0.5">{sub}</p>
-            </button>
-          ))}
-          <button
-            onClick={() => set('email_provider', '')}
-            className={`px-3 py-2.5 rounded-xl border transition-colors text-sm ${
-              cfg.email_provider === ''
-                ? 'border-red-500 bg-red-900/20 text-red-400'
-                : 'border-navy-600 bg-navy-800 text-gray-500 hover:border-navy-500'
-            }`}
-          >
-            ปิด
-          </button>
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold flex items-center gap-2" style={{ color: '#1a2744' }}>
+            {title}{badge}
+          </h2>
+          <p className="text-xs mt-0.5" style={{ color: '#4a6080' }}>{subtitle}</p>
         </div>
       </div>
-
-      {cfg.email_provider !== '' && (
-        <>
-          {/* Resend fields */}
-          {cfg.email_provider === 'resend' && (
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                  Resend API Key
-                  <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer"
-                    className="ml-2 text-blue-400 hover:underline">รับ Key ที่นี่ →</a>
-                </label>
-                <div className="relative">
-                  <input type={showKey ? 'text' : 'password'} value={cfg.resend_api_key}
-                    onChange={(e) => set('resend_api_key', e.target.value)}
-                    placeholder="re_xxxxxxxxxxxxxxxxxxxx"
-                    className={`${inp} pr-10`} />
-                  <button onClick={() => setShowKey(!showKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
-                    {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                <p className="text-xs text-gray-600 mt-1">สมัครฟรีที่ resend.com · ฟรี 3,000 อีเมล/เดือน · 100 อีเมล/วัน</p>
-              </div>
-            </div>
-          )}
-
-          {/* SMTP fields */}
-          {cfg.email_provider === 'smtp' && (
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1.5">SMTP Host</label>
-                  <input type="text" value={cfg.smtp_host}
-                    onChange={(e) => set('smtp_host', e.target.value)}
-                    placeholder="smtp.gmail.com" className={inp} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1.5">Port</label>
-                  <div className="relative">
-                    <input type="number" value={cfg.smtp_port}
-                      onChange={(e) => set('smtp_port', e.target.value)}
-                      placeholder="587" className={`${inp} pr-8`} />
-                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-600 pointer-events-none" />
-                  </div>
-                  <p className="text-xs text-gray-600 mt-1">587 (TLS) หรือ 465 (SSL)</p>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1.5">Username / Email</label>
-                <input type="email" value={cfg.smtp_user}
-                  onChange={(e) => set('smtp_user', e.target.value)}
-                  placeholder="your@gmail.com" className={inp} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                  Password
-                  {cfg.smtp_host.includes('gmail') && (
-                    <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer"
-                      className="ml-2 text-blue-400 hover:underline">Gmail: ใช้ App Password →</a>
-                  )}
-                </label>
-                <div className="relative">
-                  <input type={showPass ? 'text' : 'password'} value={cfg.smtp_pass}
-                    onChange={(e) => set('smtp_pass', e.target.value)}
-                    placeholder="password หรือ app password"
-                    className={`${inp} pr-10`} />
-                  <button onClick={() => setShowPass(!showPass)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
-                    {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* From address (shared) */}
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">ชื่อผู้ส่ง (From)</label>
-            <input type="text" value={cfg.email_from}
-              onChange={(e) => set('email_from', e.target.value)}
-              placeholder={cfg.email_provider === 'resend' ? 'Smart Campus <noreply@yourdomain.com>' : cfg.smtp_user}
-              className={inp} />
-            {cfg.email_provider === 'resend' && (
-              <p className="text-xs text-gray-600 mt-1">ต้องใช้โดเมนที่ verify แล้ว หรือ onboarding@resend.dev สำหรับทดสอบ</p>
-            )}
-          </div>
-
-          {/* Test */}
-          <div className="pt-1 border-t border-navy-600">
-            <p className="text-xs font-medium text-gray-400 mb-2">ทดสอบส่ง Email</p>
-            <div className="flex gap-2">
-              <input type="email" value={testTo}
-                onChange={(e) => setTestTo(e.target.value)}
-                placeholder="อีเมลทดสอบ..."
-                className={`${inp} flex-1`} />
-              <button
-                onClick={handleTest}
-                disabled={testing || !testTo}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-300
-                           bg-blue-900/30 border border-blue-700/50 hover:bg-blue-900/50
-                           rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap">
-                {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                ทดสอบ
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Save */}
-      <div className="flex justify-end pt-1">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white
-                     bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors disabled:opacity-60">
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          บันทึก
-        </button>
-      </div>
+      {children}
     </div>
   );
 }
 
-// ─── Secret input (dark) ──────────────────────────────────────────────────────
+function Label({ children }: { children: React.ReactNode }) {
+  return <label className="block text-xs font-medium mb-1.5" style={{ color: '#4a6080' }}>{children}</label>;
+}
+
+function Hint({ children }: { children: React.ReactNode }) {
+  return <p className="text-xs mt-1" style={{ color: '#94a3b8' }}>{children}</p>;
+}
 
 function SecretInput({ value, onChange, placeholder }: {
   value: string; onChange: (v: string) => void; placeholder?: string;
 }) {
   const [show, setShow] = useState(false);
-  const inp = 'w-full bg-navy-800 border border-navy-600 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 placeholder-gray-600';
   return (
     <div className="relative">
       <input type={show ? 'text' : 'password'} value={value}
         onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
-        className={`${inp} pr-10`} />
-      <button onClick={() => setShow(!show)}
-        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
-        {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        className="input-field pr-10" />
+      <button type="button" onClick={() => setShow(!show)}
+        className="absolute right-3 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100 transition-opacity">
+        {show ? <EyeOff className="w-4 h-4" style={{ color: '#4a6080' }} /> : <Eye className="w-4 h-4" style={{ color: '#4a6080' }} />}
       </button>
     </div>
   );
@@ -297,21 +58,44 @@ function SecretInput({ value, onChange, placeholder }: {
 
 function ReadonlyUrl({ children }: { children: React.ReactNode }) {
   return (
-    <div className="w-full bg-navy-900 border border-navy-700 text-gray-400 rounded-lg px-3 py-2 text-xs select-all break-all">
+    <div className="input-field cursor-text text-xs select-all break-all" style={{ backgroundColor: '#f5f8ff', color: '#4a6080' }}>
       {children}
     </div>
   );
 }
 
+function SubLabel({ color, bg, tag, children }: { color: string; bg: string; tag: string; children: React.ReactNode }) {
+  return (
+    <p className="text-xs font-semibold flex items-center gap-2" style={{ color: '#1a2744' }}>
+      <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: bg, color }}>{tag}</span>
+      {children}
+    </p>
+  );
+}
+
+function SaveBtn({ saving, onClick }: { saving: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick} disabled={saving} className="btn-primary flex items-center gap-2">
+      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} บันทึก
+    </button>
+  );
+}
+
+const InfoBox = ({ children }: { children: React.ReactNode }) => (
+  <div className="text-xs rounded-xl px-4 py-3 space-y-1" style={{ backgroundColor: '#f0f4ff', color: '#4a6080' }}>
+    {children}
+  </div>
+);
+
 // ─── LINE section (Login + Messaging Bot) ─────────────────────────────────────
 
 function LineSection({ showToast }: { showToast: (msg: string, ok: boolean) => void }) {
-  const [channelId, setChannelId]       = useState('');   // line_channel_id (Login)
-  const [loginSecret, setLoginSecret]   = useState('');   // line_channel_secret (Login)
-  const [msgToken, setMsgToken]         = useState('');   // line_messaging_token (Bot)
-  const [msgSecret, setMsgSecret]       = useState('');   // line_messaging_secret (Bot)
-  const [loading, setLoading]           = useState(true);
-  const [saving, setSaving]             = useState(false);
+  const [channelId, setChannelId]     = useState('');   // line_channel_id (Login)
+  const [loginSecret, setLoginSecret] = useState('');   // line_channel_secret (Login)
+  const [msgToken, setMsgToken]       = useState('');   // line_messaging_token (Bot)
+  const [msgSecret, setMsgSecret]     = useState('');   // line_messaging_secret (Bot)
+  const [loading, setLoading]         = useState(true);
+  const [saving, setSaving]           = useState(false);
 
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://app.retc.ac.th';
 
@@ -325,7 +109,6 @@ function LineSection({ showToast }: { showToast: (msg: string, ok: boolean) => v
       setMsgSecret(map['line_messaging_secret'] ?? '');
     } finally { setLoading(false); }
   }, []);
-
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
 
   const handleSave = async () => {
@@ -338,179 +121,71 @@ function LineSection({ showToast }: { showToast: (msg: string, ok: boolean) => v
         line_messaging_secret: msgSecret,
       });
       showToast('บันทึกการตั้งค่า LINE สำเร็จ', true);
-    } catch (e: unknown) {
-      showToast((e as Error).message, false);
-    } finally { setSaving(false); }
+    } catch (e: unknown) { showToast((e as Error).message, false); }
+    finally { setSaving(false); }
   };
 
-  const inp = 'w-full bg-navy-800 border border-navy-600 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 placeholder-gray-600';
-
-  if (loading) return (
-    <div className="card flex items-center justify-center py-10 gap-2 text-gray-500">
-      <Loader2 className="w-4 h-4 animate-spin" /> กำลังโหลด...
-    </div>
-  );
+  if (loading) return <LoadingCard />;
 
   return (
-    <div className="card space-y-5">
-      <div className="flex items-center gap-3 pb-4 border-b border-navy-600">
-        <div className="w-9 h-9 bg-green-900/40 rounded-xl flex items-center justify-center">
-          <Link2 className="w-4 h-4 text-green-400" />
-        </div>
-        <div>
-          <h2 className="text-sm font-semibold text-gray-200">LINE</h2>
-          <p className="text-xs text-gray-500">เข้าสู่ระบบด้วย LINE + Bot อนุมัติ/แจ้งเตือน (โควตา 300/เดือน แผนฟรี)</p>
-        </div>
-      </div>
-
-      <div className="bg-amber-950/30 border border-amber-800/40 rounded-xl px-4 py-2.5 text-xs text-amber-300">
+    <SectionCard
+      icon={<Link2 className="w-4 h-4" style={{ color: '#06c755' }} />} iconBg="#e6f9f0"
+      title="LINE" subtitle="เข้าสู่ระบบด้วย LINE + Bot อนุมัติ/แจ้งเตือน (โควตา 300/เดือน แผนฟรี)"
+    >
+      <div className="text-xs rounded-xl px-4 py-2.5" style={{ backgroundColor: '#fffbeb', border: '1px solid #fde68a', color: '#b45309' }}>
         ⚠️ <strong>LINE Notify ปิดบริการถาวรแล้ว</strong> (มี.ค. 2568) — ระบบใช้ Messaging API แทน และแนะนำ Telegram (ฟรีไม่จำกัด) เป็นช่องทางหลัก
       </div>
 
       {/* LINE Login */}
       <div className="space-y-3">
-        <p className="text-xs font-semibold text-gray-300 flex items-center gap-2">
-          <span className="px-1.5 py-0.5 rounded bg-green-900/50 text-green-400 text-[10px]">Login</span>
-          เข้าสู่ระบบด้วย LINE
-        </p>
+        <SubLabel color="#0d9068" bg="#e6f9f0" tag="Login">เข้าสู่ระบบด้วย LINE</SubLabel>
         <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1.5">Channel ID</label>
+          <Label>Channel ID</Label>
           <input type="text" value={channelId} onChange={(e) => setChannelId(e.target.value)}
-            placeholder="1234567890" className={inp} />
+            placeholder="1234567890" className="input-field" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1.5">Channel Secret</label>
+          <Label>Channel Secret</Label>
           <SecretInput value={loginSecret} onChange={setLoginSecret} placeholder="LINE Login channel secret" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1.5">Callback URL (ลงทะเบียนใน LINE Developers)</label>
+          <Label>Callback URL (ลงทะเบียนใน LINE Developers)</Label>
           <ReadonlyUrl>{origin}/api/auth/line/callback</ReadonlyUrl>
         </div>
       </div>
 
-      {/* LINE Messaging API (Bot) */}
-      <div className="pt-4 border-t border-navy-600 space-y-3">
-        <p className="text-xs font-semibold text-gray-300 flex items-center gap-2">
-          <span className="px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-400 text-[10px]">Messaging API</span>
-          LINE Bot — อนุมัติ/ปฏิเสธ + แจ้งเตือนผ่าน LINE
-        </p>
-        <div className="bg-blue-950/30 border border-blue-800/40 rounded-xl px-4 py-3 text-xs text-blue-300 space-y-1">
-          <p className="font-medium">วิธีตั้งค่า LINE Bot:</p>
-          <ol className="list-decimal pl-4 space-y-0.5 text-blue-400">
-            <li>สร้าง Messaging API channel ที่ <a href="https://developers.line.biz/" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-200">developers.line.biz</a></li>
+      {/* LINE Messaging API */}
+      <div className="pt-4 space-y-3" style={{ borderTop: '1px solid #f0f4ff' }}>
+        <SubLabel color="#1d6ae5" bg="#e8f0fe" tag="Messaging API">LINE Bot — อนุมัติ/ปฏิเสธ + แจ้งเตือนผ่าน LINE</SubLabel>
+        <InfoBox>
+          <p className="font-medium" style={{ color: '#1a2744' }}>วิธีตั้งค่า LINE Bot:</p>
+          <ol className="list-decimal pl-4 space-y-0.5">
+            <li>สร้าง Messaging API channel ที่ <a href="https://developers.line.biz/" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: '#1d6ae5' }}>developers.line.biz</a></li>
             <li>คัดลอก <strong>Channel Access Token</strong> และ <strong>Channel Secret</strong> มาใส่ด้านล่าง</li>
             <li>ตั้ง Webhook URL (ด้านล่าง) ใน Developer Console แล้วเปิด <strong>Use webhooks</strong></li>
           </ol>
-        </div>
+        </InfoBox>
         <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1.5">Channel Access Token</label>
+          <Label>Channel Access Token</Label>
           <SecretInput value={msgToken} onChange={setMsgToken} placeholder="Channel Access Token (Long-lived)" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1.5">Channel Secret</label>
+          <Label>Channel Secret</Label>
           <SecretInput value={msgSecret} onChange={setMsgSecret} placeholder="Messaging API channel secret" />
-          <p className="text-xs text-gray-600 mt-1">ใช้ verify ว่า webhook request มาจาก LINE จริง</p>
+          <Hint>ใช้ verify ว่า webhook request มาจาก LINE จริง</Hint>
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1.5">Webhook URL (ตั้งใน LINE Developers Console)</label>
+          <Label>Webhook URL (ตั้งใน LINE Developers Console)</Label>
           <ReadonlyUrl>{origin}/api/webhook/line</ReadonlyUrl>
         </div>
       </div>
 
-      {/* Save */}
-      <div className="flex justify-end pt-1">
-        <button onClick={handleSave} disabled={saving}
-          className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white
-                     bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors disabled:opacity-60">
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          บันทึก
-        </button>
-      </div>
-    </div>
+      <div className="flex justify-end pt-1"><SaveBtn saving={saving} onClick={handleSave} /></div>
+    </SectionCard>
   );
 }
 
-// ─── Google OAuth section ─────────────────────────────────────────────────────
-
-function GoogleSection({ showToast }: { showToast: (msg: string, ok: boolean) => void }) {
-  const [clientId, setClientId]         = useState('');
-  const [clientSecret, setClientSecret] = useState('');
-  const [loading, setLoading]           = useState(true);
-  const [saving, setSaving]             = useState(false);
-
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://app.retc.ac.th';
-
-  const fetchSettings = useCallback(async () => {
-    try {
-      const res = await api.get<{ data: Record<string, string> }>('/settings/general');
-      const map = res.data ?? {};
-      setClientId(map['google_client_id'] ?? '');
-      setClientSecret(map['google_client_secret'] ?? '');
-    } finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { fetchSettings(); }, [fetchSettings]);
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await api.put('/settings/general', {
-        google_client_id:     clientId,
-        google_client_secret: clientSecret,
-      });
-      showToast('บันทึกการตั้งค่า Google สำเร็จ', true);
-    } catch (e: unknown) {
-      showToast((e as Error).message, false);
-    } finally { setSaving(false); }
-  };
-
-  const inp = 'w-full bg-navy-800 border border-navy-600 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 placeholder-gray-600';
-
-  if (loading) return (
-    <div className="card flex items-center justify-center py-10 gap-2 text-gray-500">
-      <Loader2 className="w-4 h-4 animate-spin" /> กำลังโหลด...
-    </div>
-  );
-
-  return (
-    <div className="card space-y-5">
-      <div className="flex items-center gap-3 pb-4 border-b border-navy-600">
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: 'rgba(66,133,244,0.15)' }}>
-          <span className="text-sm font-bold" style={{ color: '#4285f4' }}>G</span>
-        </div>
-        <div>
-          <h2 className="text-sm font-semibold text-gray-200">Google OAuth</h2>
-          <p className="text-xs text-gray-500">เข้าสู่ระบบด้วยบัญชี Google</p>
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-xs font-medium text-gray-400 mb-1.5">Client ID</label>
-        <input type="text" value={clientId} onChange={(e) => setClientId(e.target.value)}
-          placeholder="xxxx.apps.googleusercontent.com" className={inp} />
-      </div>
-      <div>
-        <label className="block text-xs font-medium text-gray-400 mb-1.5">Client Secret</label>
-        <SecretInput value={clientSecret} onChange={setClientSecret} placeholder="Google client secret" />
-      </div>
-      <div>
-        <label className="block text-xs font-medium text-gray-400 mb-1.5">Callback URL (ลงทะเบียนใน Google Cloud Console)</label>
-        <ReadonlyUrl>{origin}/api/auth/google/callback</ReadonlyUrl>
-      </div>
-
-      <div className="flex justify-end pt-1">
-        <button onClick={handleSave} disabled={saving}
-          className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white
-                     bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors disabled:opacity-60">
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          บันทึก
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── Telegram section ──────────────────────────────────────────────────────────
+// ─── Telegram section ─────────────────────────────────────────────────────────
 
 function TelegramSection({ showToast }: { showToast: (msg: string, ok: boolean) => void }) {
   const [token, setToken]     = useState('');
@@ -551,66 +226,293 @@ function TelegramSection({ showToast }: { showToast: (msg: string, ok: boolean) 
     finally { setSetting(false); }
   };
 
-  const inp = 'w-full bg-navy-800 border border-navy-600 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 placeholder-gray-600';
-
-  if (loading) return (
-    <div className="card flex items-center justify-center py-10 gap-2 text-gray-500">
-      <Loader2 className="w-4 h-4 animate-spin" /> กำลังโหลด...
-    </div>
-  );
+  if (loading) return <LoadingCard />;
 
   return (
-    <div className="card space-y-5">
-      <div className="flex items-center gap-3 pb-4 border-b border-navy-600">
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: 'rgba(34,158,217,0.2)' }}>
-          <Send className="w-4 h-4" style={{ color: '#229ED9' }} />
-        </div>
-        <div>
-          <h2 className="text-sm font-semibold text-gray-200">Telegram <span className="text-[10px] text-green-400 font-normal">(ฟรี ไม่จำกัด)</span></h2>
-          <p className="text-xs text-gray-500">แจ้งเตือนผ่าน Telegram — ไม่มีโควตาเหมือน LINE</p>
-        </div>
-      </div>
-
-      <div className="bg-blue-950/30 border border-blue-800/40 rounded-xl px-4 py-3 text-xs text-blue-300 space-y-1">
-        <p className="font-medium">วิธีตั้งค่า:</p>
-        <ol className="list-decimal pl-4 space-y-0.5 text-blue-400">
-          <li>เปิด Telegram แชทกับ <strong>@BotFather</strong> → พิมพ์ <code className="bg-blue-900/50 px-1 rounded">/newbot</code> → ตั้งชื่อ → ได้ Bot Token</li>
+    <SectionCard
+      icon={<Send className="w-4 h-4" style={{ color: '#229ED9' }} />} iconBg="rgba(34,158,217,0.12)"
+      title="Telegram" badge={<span className="text-[10px] font-normal" style={{ color: '#0d9068' }}>(ฟรี ไม่จำกัด)</span>}
+      subtitle="แจ้งเตือนผ่าน Telegram — ไม่มีโควตาเหมือน LINE"
+    >
+      <InfoBox>
+        <p className="font-medium" style={{ color: '#1a2744' }}>วิธีตั้งค่า:</p>
+        <ol className="list-decimal pl-4 space-y-0.5">
+          <li>เปิด Telegram แชทกับ <strong>@BotFather</strong> → พิมพ์ <code className="px-1 rounded" style={{ backgroundColor: '#e2e8f5' }}>/newbot</code> → ตั้งชื่อ → ได้ Bot Token</li>
           <li>วาง Token ด้านล่าง แล้วกด <strong>บันทึก</strong></li>
           <li>กด <strong>ผูก Webhook</strong> 1 ครั้ง</li>
           <li>ผู้ใช้ไปที่ โปรไฟล์ → เชื่อมต่อ Telegram → กด START</li>
         </ol>
-      </div>
+      </InfoBox>
 
       <div>
-        <label className="block text-xs font-medium text-gray-400 mb-1.5">Bot Token (จาก @BotFather)</label>
+        <Label>Bot Token (จาก @BotFather)</Label>
         <div className="relative">
           <input type={show ? 'text' : 'password'} value={token}
             onChange={(e) => setToken(e.target.value)}
-            placeholder="123456789:ABCdef..." className={`${inp} pr-10`} />
-          <button onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
-            {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            placeholder="123456789:ABCdef..." className="input-field pr-10" />
+          <button type="button" onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100 transition-opacity">
+            {show ? <EyeOff className="w-4 h-4" style={{ color: '#4a6080' }} /> : <Eye className="w-4 h-4" style={{ color: '#4a6080' }} />}
           </button>
         </div>
-        <p className="text-xs text-gray-600 mt-1">หรือจะตั้งเป็น env <code className="bg-navy-700 px-1 rounded">TELEGRAM_BOT_TOKEN</code> ใน Plesk ก็ได้ (จะมีความสำคัญเหนือค่าที่นี่)</p>
+        <Hint>หรือจะตั้งเป็น env <code className="px-1 rounded" style={{ backgroundColor: '#eef2fb' }}>TELEGRAM_BOT_TOKEN</code> ใน Plesk ก็ได้ (จะมีความสำคัญเหนือค่าที่นี่)</Hint>
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
-        <button onClick={handleSave} disabled={saving}
-          className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors disabled:opacity-60">
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} บันทึก
-        </button>
+        <SaveBtn saving={saving} onClick={handleSave} />
         <button onClick={handleSetup} disabled={setting}
           className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-          style={{ color: '#229ED9', backgroundColor: 'rgba(34,158,217,0.15)', border: '1px solid rgba(34,158,217,0.4)' }}>
+          style={{ color: '#229ED9', backgroundColor: 'rgba(34,158,217,0.1)', border: '1px solid rgba(34,158,217,0.35)' }}>
           {setting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />} ผูก Webhook
         </button>
-        {botInfo && <span className="text-xs text-green-400">บอท: {botInfo} · webhook พร้อม</span>}
+        {botInfo && <span className="text-xs font-medium" style={{ color: '#0d9068' }}>บอท: {botInfo} · webhook พร้อม</span>}
       </div>
+    </SectionCard>
+  );
+}
+
+// ─── Google OAuth section ─────────────────────────────────────────────────────
+
+function GoogleSection({ showToast }: { showToast: (msg: string, ok: boolean) => void }) {
+  const [clientId, setClientId]         = useState('');
+  const [clientSecret, setClientSecret] = useState('');
+  const [loading, setLoading]           = useState(true);
+  const [saving, setSaving]             = useState(false);
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://app.retc.ac.th';
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      const res = await api.get<{ data: Record<string, string> }>('/settings/general');
+      const map = res.data ?? {};
+      setClientId(map['google_client_id'] ?? '');
+      setClientSecret(map['google_client_secret'] ?? '');
+    } finally { setLoading(false); }
+  }, []);
+  useEffect(() => { fetchSettings(); }, [fetchSettings]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api.put('/settings/general', {
+        google_client_id:     clientId,
+        google_client_secret: clientSecret,
+      });
+      showToast('บันทึกการตั้งค่า Google สำเร็จ', true);
+    } catch (e: unknown) { showToast((e as Error).message, false); }
+    finally { setSaving(false); }
+  };
+
+  if (loading) return <LoadingCard />;
+
+  return (
+    <SectionCard
+      icon={<span className="text-sm font-bold" style={{ color: '#4285f4' }}>G</span>} iconBg="#eef3fe"
+      title="Google OAuth" subtitle="เข้าสู่ระบบด้วยบัญชี Google"
+    >
+      <div>
+        <Label>Client ID</Label>
+        <input type="text" value={clientId} onChange={(e) => setClientId(e.target.value)}
+          placeholder="xxxx.apps.googleusercontent.com" className="input-field" />
+      </div>
+      <div>
+        <Label>Client Secret</Label>
+        <SecretInput value={clientSecret} onChange={setClientSecret} placeholder="Google client secret" />
+      </div>
+      <div>
+        <Label>Callback URL (ลงทะเบียนใน Google Cloud Console)</Label>
+        <ReadonlyUrl>{origin}/api/auth/google/callback</ReadonlyUrl>
+      </div>
+      <div className="flex justify-end pt-1"><SaveBtn saving={saving} onClick={handleSave} /></div>
+    </SectionCard>
+  );
+}
+
+// ─── Email section ────────────────────────────────────────────────────────────
+
+interface EmailSettings {
+  email_provider: 'resend' | 'smtp' | '';
+  email_from: string;
+  resend_api_key: string;
+  smtp_host: string;
+  smtp_port: string;
+  smtp_user: string;
+  smtp_pass: string;
+}
+
+const EMAIL_DEFAULTS: EmailSettings = {
+  email_provider: '', email_from: '', resend_api_key: '',
+  smtp_host: 'smtp.gmail.com', smtp_port: '587', smtp_user: '', smtp_pass: '',
+};
+
+function EmailSection({ showToast }: { showToast: (msg: string, ok: boolean) => void }) {
+  const [cfg, setCfg]         = useState<EmailSettings>(EMAIL_DEFAULTS);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving]   = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testTo, setTestTo]   = useState('');
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      const res = await api.get<{ data: Record<string, string> }>('/settings/general');
+      const m   = res.data ?? {};
+      setCfg({
+        email_provider: (m['email_provider'] as EmailSettings['email_provider']) ?? '',
+        email_from:     m['email_from']     ?? '',
+        resend_api_key: m['resend_api_key'] ?? '',
+        smtp_host:      m['smtp_host']      ?? 'smtp.gmail.com',
+        smtp_port:      m['smtp_port']      ?? '587',
+        smtp_user:      m['smtp_user']      ?? '',
+        smtp_pass:      m['smtp_pass']      ?? '',
+      });
+    } finally { setLoading(false); }
+  }, []);
+  useEffect(() => { fetchSettings(); }, [fetchSettings]);
+
+  const set = (k: keyof EmailSettings, v: string) => setCfg((p) => ({ ...p, [k]: v }));
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api.put('/settings/general', {
+        email_provider: cfg.email_provider, email_from: cfg.email_from,
+        resend_api_key: cfg.resend_api_key, smtp_host: cfg.smtp_host,
+        smtp_port: cfg.smtp_port, smtp_user: cfg.smtp_user, smtp_pass: cfg.smtp_pass,
+      });
+      showToast('บันทึกการตั้งค่า Email สำเร็จ', true);
+    } catch (e: unknown) { showToast((e as Error).message, false); }
+    finally { setSaving(false); }
+  };
+
+  const handleTest = async () => {
+    if (!testTo) { showToast('กรุณาระบุอีเมลทดสอบ', false); return; }
+    setTesting(true);
+    try {
+      await api.post('/settings/test-email', {
+        to: testTo, provider: cfg.email_provider, resend_api_key: cfg.resend_api_key,
+        email_from: cfg.email_from, smtp_host: cfg.smtp_host, smtp_port: cfg.smtp_port,
+        smtp_user: cfg.smtp_user, smtp_pass: cfg.smtp_pass,
+      });
+      showToast('ส่ง Email ทดสอบสำเร็จ ✅ ตรวจสอบใน Inbox ของคุณ', true);
+    } catch (e: unknown) { showToast((e as Error).message, false); }
+    finally { setTesting(false); }
+  };
+
+  if (loading) return <LoadingCard />;
+
+  const providerBtn = (v: EmailSettings['email_provider'], sel: boolean) =>
+    sel ? { borderColor: '#1d6ae5', backgroundColor: '#e8f0fe', color: '#1d6ae5' }
+        : { borderColor: '#dce6f9', backgroundColor: '#fafbff', color: '#4a6080' };
+
+  return (
+    <SectionCard
+      icon={<Mail className="w-4 h-4" style={{ color: '#1d6ae5' }} />} iconBg="#e8f0fe"
+      title="Email" subtitle="ส่งการแจ้งเตือนผ่านอีเมลเมื่อมีกิจกรรมสำคัญ"
+    >
+      {/* Provider selector */}
+      <div>
+        <Label>Email Provider</Label>
+        <div className="flex gap-2">
+          {[
+            { v: 'resend' as const, label: 'Resend', sub: 'API key เดียว · ฟรี 3,000/เดือน' },
+            { v: 'smtp' as const,   label: 'SMTP',   sub: 'Gmail, Outlook หรือ mail server' },
+          ].map(({ v, label, sub }) => (
+            <button key={v} onClick={() => set('email_provider', v)}
+              className="flex-1 text-left px-3 py-2.5 rounded-xl border text-sm transition-colors"
+              style={providerBtn(v, cfg.email_provider === v)}>
+              <p className="font-semibold">{label}</p>
+              <p className="text-xs opacity-70 mt-0.5">{sub}</p>
+            </button>
+          ))}
+          <button onClick={() => set('email_provider', '')}
+            className="px-4 py-2.5 rounded-xl border text-sm transition-colors"
+            style={cfg.email_provider === ''
+              ? { borderColor: '#ef4444', backgroundColor: '#fef2f2', color: '#dc2626' }
+              : { borderColor: '#dce6f9', backgroundColor: '#fafbff', color: '#94a3b8' }}>
+            ปิด
+          </button>
+        </div>
+      </div>
+
+      {cfg.email_provider === 'resend' && (
+        <div>
+          <Label>
+            Resend API Key
+            <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer"
+              className="ml-2 underline" style={{ color: '#1d6ae5' }}>รับ Key ที่นี่ →</a>
+          </Label>
+          <SecretInput value={cfg.resend_api_key} onChange={(v) => set('resend_api_key', v)} placeholder="re_xxxxxxxxxxxxxxxxxxxx" />
+          <Hint>สมัครฟรีที่ resend.com · ฟรี 3,000 อีเมล/เดือน · 100 อีเมล/วัน</Hint>
+        </div>
+      )}
+
+      {cfg.email_provider === 'smtp' && (
+        <>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <Label>SMTP Host</Label>
+              <input type="text" value={cfg.smtp_host} onChange={(e) => set('smtp_host', e.target.value)} placeholder="smtp.gmail.com" className="input-field" />
+            </div>
+            <div>
+              <Label>Port</Label>
+              <input type="number" value={cfg.smtp_port} onChange={(e) => set('smtp_port', e.target.value)} placeholder="587" className="input-field" />
+              <Hint>587 (TLS) / 465 (SSL)</Hint>
+            </div>
+          </div>
+          <div>
+            <Label>Username / Email</Label>
+            <input type="email" value={cfg.smtp_user} onChange={(e) => set('smtp_user', e.target.value)} placeholder="your@gmail.com" className="input-field" />
+          </div>
+          <div>
+            <Label>
+              Password
+              {cfg.smtp_host.includes('gmail') && (
+                <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer"
+                  className="ml-2 underline" style={{ color: '#1d6ae5' }}>Gmail: ใช้ App Password →</a>
+              )}
+            </Label>
+            <SecretInput value={cfg.smtp_pass} onChange={(v) => set('smtp_pass', v)} placeholder="password หรือ app password" />
+          </div>
+        </>
+      )}
+
+      {cfg.email_provider !== '' && (
+        <>
+          <div>
+            <Label>ชื่อผู้ส่ง (From)</Label>
+            <input type="text" value={cfg.email_from} onChange={(e) => set('email_from', e.target.value)}
+              placeholder={cfg.email_provider === 'resend' ? 'Smart Campus <noreply@yourdomain.com>' : cfg.smtp_user} className="input-field" />
+            {cfg.email_provider === 'resend' && <Hint>ต้องใช้โดเมนที่ verify แล้ว หรือ onboarding@resend.dev สำหรับทดสอบ</Hint>}
+          </div>
+
+          <div className="pt-3" style={{ borderTop: '1px solid #f0f4ff' }}>
+            <Label>ทดสอบส่ง Email</Label>
+            <div className="flex gap-2">
+              <input type="email" value={testTo} onChange={(e) => setTestTo(e.target.value)}
+                placeholder="อีเมลทดสอบ..." className="input-field flex-1" />
+              <button onClick={handleTest} disabled={testing || !testTo}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
+                style={{ backgroundColor: '#e8f0fe', color: '#1d6ae5' }}>
+                {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} ทดสอบ
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      <div className="flex justify-end pt-1"><SaveBtn saving={saving} onClick={handleSave} /></div>
+    </SectionCard>
+  );
+}
+
+function LoadingCard() {
+  return (
+    <div className="card flex items-center justify-center py-10 gap-2" style={{ color: '#94a3b8' }}>
+      <Loader2 className="w-4 h-4 animate-spin" /> กำลังโหลด...
     </div>
   );
 }
 
-// ─── Main page ─────────────────────────────────────────────────────────────────
+// ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function IntegrationsPage() {
   const [toast, setToast] = useState<Toast | null>(null);
@@ -623,8 +525,8 @@ export default function IntegrationsPage() {
   return (
     <div className="space-y-5 max-w-2xl">
       <div>
-        <h1 className="text-xl font-bold text-white">การเชื่อมต่อภายนอก</h1>
-        <p className="text-xs text-gray-400 mt-0.5">ตั้งค่า LINE, Telegram, Google และ Email — เข้าสู่ระบบและส่งการแจ้งเตือน</p>
+        <h1 className="text-xl font-bold" style={{ color: '#1a2744' }}>การเชื่อมต่อภายนอก</h1>
+        <p className="text-xs mt-0.5" style={{ color: '#4a6080' }}>ตั้งค่า LINE, Telegram, Google และ Email — เข้าสู่ระบบและส่งการแจ้งเตือน</p>
       </div>
 
       <LineSection showToast={showToast} />
@@ -633,9 +535,14 @@ export default function IntegrationsPage() {
       <EmailSection showToast={showToast} />
 
       {toast && (
-        <div className={`fixed bottom-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border text-sm font-medium
-          ${toast.ok ? 'bg-green-900/90 border-green-700 text-green-200' : 'bg-red-900/90 border-red-700 text-red-200'}`}>
-          {toast.ok ? <CheckCircle className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+        <div
+          className={`fixed top-4 right-4 z-[100] px-4 py-3 rounded-xl shadow-lg text-sm flex items-center gap-2 ${
+            toast.ok
+              ? 'bg-green-50 border border-green-200 text-green-700'
+              : 'bg-red-50 border border-red-200 text-red-600'
+          }`}
+        >
+          {toast.ok ? <Check className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
           {toast.msg}
         </div>
       )}
