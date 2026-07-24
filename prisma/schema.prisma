@@ -162,8 +162,9 @@ model User {
   signature    String?
 
   // Social / SSO
-  lineUserId   String?   @unique
-  googleId     String?   @unique
+  lineUserId     String?  @unique
+  googleId       String?  @unique
+  telegramChatId String?  @unique
 
   // การแจ้งเตือน
   notifyByLine  Boolean  @default(true)

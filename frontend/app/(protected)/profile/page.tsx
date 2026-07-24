@@ -10,7 +10,7 @@ interface UserProfile {
   role: string; department?: string; phone?: string; nickname?: string;
   avatar?: string; position?: string;
   notifyByLine?: boolean; notifyByEmail?: boolean;
-  lineUserId?: string | null; googleId?: string | null;
+  lineUserId?: string | null; googleId?: string | null; telegramChatId?: string | null;
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -99,15 +99,27 @@ function ProfileContent() {
     window.location.href = `/api/auth/google/link?token=${encodeURIComponent(token)}`;
   };
 
-  const handleUnlink = async (provider: 'line' | 'google') => {
+  const handleUnlink = async (provider: 'line' | 'google' | 'telegram') => {
     setUnlinking(provider);
     try {
       await api.delete(`/auth/${provider}/unlink`);
-      showToast(`ยกเลิกการเชื่อมต่อ ${provider === 'line' ? 'LINE' : 'Google'} สำเร็จ`);
+      const label = provider === 'line' ? 'LINE' : provider === 'google' ? 'Google' : 'Telegram';
+      showToast(`ยกเลิกการเชื่อมต่อ ${label} สำเร็จ`);
       loadProfile();
     } catch (e) {
       showToast((e as Error).message, true);
     } finally { setUnlinking(null); }
+  };
+
+  const handleLinkTelegram = async () => {
+    try {
+      const res = await api.get<{ data: { deepLink: string } }>('/auth/telegram/link');
+      window.open(res.data.deepLink, '_blank');
+      showToast('เปิด Telegram แล้วกด "START" เพื่อเชื่อมต่อ จากนั้นรีเฟรชหน้านี้');
+      // ตรวจสถานะซ้ำ ๆ 30 วินาที เผื่อเชื่อมสำเร็จ
+      let n = 0;
+      const t = setInterval(() => { loadProfile(); if (++n >= 10) clearInterval(t); }, 3000);
+    } catch (e) { showToast((e as Error).message, true); }
   };
 
   const handleAvatar = (file: File) => {
@@ -351,7 +363,31 @@ function ProfileContent() {
           )}
         </div>
 
-        <p className="text-xs text-[#94a3b8]">หลังเชื่อมต่อแล้ว สามารถ login ด้วย LINE หรือ Google แทน email/password ได้</p>
+        {/* Telegram */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: '#229ED9' }}>T</div>
+            <div>
+              <p className="text-sm font-medium text-[#1a2744]">Telegram <span className="text-[10px] font-normal text-green-600">(ฟรี ไม่จำกัด)</span></p>
+              <p className="text-xs text-[#94a3b8]">{profile?.telegramChatId ? 'เชื่อมต่อแล้ว' : 'ยังไม่เชื่อมต่อ'}</p>
+            </div>
+          </div>
+          {profile?.telegramChatId ? (
+            <button onClick={() => handleUnlink('telegram')} disabled={unlinking === 'telegram'}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors">
+              <Unlink className="w-3.5 h-3.5" />
+              {unlinking === 'telegram' ? 'กำลังยกเลิก...' : 'ยกเลิก'}
+            </button>
+          ) : (
+            <button onClick={handleLinkTelegram}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg text-white transition-colors" style={{ backgroundColor: '#229ED9' }}>
+              <Link2 className="w-3.5 h-3.5" />
+              เชื่อมต่อ Telegram
+            </button>
+          )}
+        </div>
+
+        <p className="text-xs text-[#94a3b8]">หลังเชื่อมต่อแล้ว สามารถ login ด้วย LINE หรือ Google แทน email/password ได้ · <span className="text-green-600">Telegram แจ้งเตือนฟรีไม่จำกัด</span></p>
       </div>
 
       {/* ── Notification Preferences ─────────────────────────────────────── */}

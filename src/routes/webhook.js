@@ -119,6 +119,54 @@ router.get('/line/debug', async (req, res) => {
   }
 });
 
+// ─── Telegram ────────────────────────────────────────────────────────────────
+const { sendTelegram, consumeLinkCode, getBotUsername, getTelegramToken } = require('../services/telegram');
+
+// ตั้งค่า webhook ของ Telegram bot (เรียกครั้งเดียวหลังตั้ง token)
+// GET /api/webhook/telegram/setup
+router.get('/telegram/setup', async (req, res) => {
+  try {
+    const token = await getTelegramToken();
+    if (!token) return res.status(400).json({ error: 'ยังไม่ได้ตั้งค่า Telegram bot token' });
+    const url = `${process.env.FRONTEND_URL ?? 'https://app.retc.ac.th'}/api/webhook/telegram`;
+    const r = await fetch(`https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(url)}`).then((x) => x.json());
+    const username = await getBotUsername();
+    res.json({ webhook_url: url, bot_username: username, result: r });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/webhook/telegram — รับ update จาก Telegram
+router.post('/telegram', async (req, res) => {
+  res.json({ ok: true });
+  try {
+    const msg = req.body?.message;
+    if (!msg?.chat?.id) return;
+    const chatId = String(msg.chat.id);
+    const text = (msg.text ?? '').trim();
+
+    if (text.startsWith('/start')) {
+      const code = text.split(/\s+/)[1];
+      if (code) {
+        const userId = consumeLinkCode(code);
+        if (userId) {
+          const u = await prisma.user.update({ where: { id: userId }, data: { telegramChatId: chatId } }).catch(() => null);
+          if (u) {
+            await sendTelegram(chatId, `✅ <b>เชื่อมต่อสำเร็จ!</b>\nสวัสดีคุณ ${u.name} 👋\nคุณจะได้รับการแจ้งเตือนจากระบบ RETC Smart Campus ทาง Telegram นี้`);
+            return;
+          }
+        }
+      }
+      await sendTelegram(chatId, 'สวัสดีครับ 👋 นี่คือบอทแจ้งเตือนของ RETC Smart Campus\n\nกรุณาเชื่อมต่อผ่านเว็บ: โปรไฟล์ → เชื่อมต่อ Telegram');
+      return;
+    }
+
+    const user = await prisma.user.findFirst({ where: { telegramChatId: chatId }, select: { name: true } });
+    await sendTelegram(chatId, user
+      ? `🤖 เชื่อมต่อกับบัญชี ${user.name} แล้ว — คุณจะได้รับการแจ้งเตือนที่นี่`
+      : 'ยังไม่ได้เชื่อมต่อบัญชี\nไปที่เว็บ RETC Smart Campus → โปรไฟล์ → เชื่อมต่อ Telegram');
+  } catch (e) { console.error('[Telegram webhook]', e.message); }
+});
+
 // LINE Webhook — POST /api/webhook/line
 router.post('/line', async (req, res) => {
   const signature = req.headers['x-line-signature'];

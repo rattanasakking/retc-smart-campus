@@ -88,6 +88,7 @@ const LIST_SELECT = {
   birthDate:  true,
   lineUserId: true,
   googleId:   true,
+  telegramChatId: true,
   division:   { select: { id: true, name: true, code: true } },
   workUnit:   { select: { id: true, name: true, code: true } },
   deptGroup:  { select: { id: true, name: true, code: true } },
@@ -659,6 +660,26 @@ router.delete('/line/unlink', auth, async (req, res) => {
   try {
     await prisma.user.update({ where: { id: req.user.id }, data: { lineUserId: null } });
     res.json(success(null, 'ยกเลิกการเชื่อมต่อ LINE สำเร็จ'));
+  } catch (e) { res.status(500).json(error('เกิดข้อผิดพลาด')); }
+});
+
+// ─── Telegram Link / Unlink ───────────────────────────────────────────────────
+const { createLinkCode, getBotUsername } = require('../services/telegram');
+
+// GET /api/auth/telegram/link  → คืน deep link ให้ผู้ใช้กดเชื่อมต่อ
+router.get('/telegram/link', auth, async (req, res) => {
+  try {
+    const username = await getBotUsername();
+    if (!username) return res.status(400).json(error('ยังไม่ได้ตั้งค่า Telegram bot (ผู้ดูแลระบบต้องตั้ง token ก่อน)'));
+    const code = createLinkCode(req.user.id);
+    res.json(success({ botUsername: username, deepLink: `https://t.me/${username}?start=${code}`, code }));
+  } catch (e) { res.status(500).json(error('เกิดข้อผิดพลาด')); }
+});
+
+router.delete('/telegram/unlink', auth, async (req, res) => {
+  try {
+    await prisma.user.update({ where: { id: req.user.id }, data: { telegramChatId: null } });
+    res.json(success(null, 'ยกเลิกการเชื่อมต่อ Telegram สำเร็จ'));
   } catch (e) { res.status(500).json(error('เกิดข้อผิดพลาด')); }
 });
 
