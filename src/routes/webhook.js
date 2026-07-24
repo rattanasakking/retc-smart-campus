@@ -81,11 +81,34 @@ router.get('/line/debug', async (req, res) => {
       }
     }
 
+    // ตรวจโควตาข้อความรายเดือนของ LINE OA (limit vs ใช้ไปแล้ว)
+    let line_quota = null;
+    {
+      const token = (process.env.LINE_CHANNEL_ACCESS_TOKEN || process.env.LINE_MESSAGING_TOKEN || tokenRow?.value || '').trim();
+      if (token) {
+        try {
+          const [q, c] = await Promise.all([
+            fetch('https://api.line.me/v2/bot/message/quota', { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
+            fetch('https://api.line.me/v2/bot/message/quota/consumption', { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
+          ]);
+          const limit = q?.type === 'limited' ? q.value : null; // type 'none' = ไม่จำกัด (แผนเสียเงิน)
+          const used  = typeof c?.totalUsage === 'number' ? c.totalUsage : null;
+          line_quota = {
+            type: q?.type ?? null,
+            limit,
+            used,
+            remaining: (limit != null && used != null) ? Math.max(0, limit - used) : (q?.type === 'none' ? 'ไม่จำกัด' : null),
+          };
+        } catch (e) { line_quota = { error: e.message }; }
+      }
+    }
+
     res.json({
       messaging_secret_set: !!(secretRow?.value),
       messaging_token_set:  !!(tokenRow?.value),
       env_secret_set: !!(process.env.LINE_CHANNEL_SECRET),
       env_token_set:  !!(process.env.LINE_CHANNEL_ACCESS_TOKEN || process.env.LINE_MESSAGING_TOKEN),
+      line_quota,
       last_webhook_event: lastEventRow?.value ? JSON.parse(lastEventRow.value) : null,
       admins: allAdmins,
       pending_bookings: pendingBookings,
