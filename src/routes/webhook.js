@@ -362,6 +362,25 @@ function fmtWhen(start, end) {
 }
 const BK_STATUS = { pending: '⏳ รออนุมัติ', approved: '✅ อนุมัติแล้ว', rejected: '❌ ปฏิเสธ', cancelled: '🚫 ยกเลิก', completed: '🏁 เสร็จสิ้น' };
 
+// การ์ดการจอง 1 ใบ + ปุ่มอนุมัติ/ปฏิเสธ (ส่งผ่าน reply = ฟรี)
+function pendingBubble(b) {
+  return {
+    type: 'bubble', size: 'kilo',
+    body: { type: 'box', layout: 'vertical', spacing: 'xs', contents: [
+      { type: 'text', text: b.title, weight: 'bold', size: 'sm', wrap: true },
+      { type: 'text', text: `🏢 ${b.room?.name ?? '-'}`, size: 'xs', color: '#666666' },
+      { type: 'text', text: `📅 ${fmtWhen(b.startTime, b.endTime)}`, size: 'xs', color: '#666666', wrap: true },
+      { type: 'text', text: `👤 ${b.user?.name ?? '-'}`, size: 'xs', color: '#666666' },
+    ] },
+    footer: { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
+      { type: 'button', style: 'primary', color: '#0d9068', height: 'sm',
+        action: { type: 'postback', label: '✅ อนุมัติ', data: `action=room_approve&bookingId=${b.id}`, displayText: `อนุมัติ #${b.id}` } },
+      { type: 'button', style: 'primary', color: '#dc2626', height: 'sm',
+        action: { type: 'postback', label: '❌ ปฏิเสธ', data: `action=room_reject&bookingId=${b.id}`, displayText: `ปฏิเสธ #${b.id}` } },
+    ] },
+  };
+}
+
 async function handleTextMessage(event) {
   const replyToken = event.replyToken;
   const lineUserId = event.source?.userId;
@@ -370,13 +389,27 @@ async function handleTextMessage(event) {
 
   const user = await prisma.user.findFirst({
     where: { lineUserId, isActive: true },
-    select: { id: true, name: true, departmentId: true, department: true },
+    select: { id: true, name: true, departmentId: true, department: true, role: true, isSuperAdmin: true },
   });
   if (!user) {
     return replyMessage(replyToken, [{ type: 'text', text: '❌ ยังไม่ได้เชื่อมต่อ LINE กับบัญชีในระบบ\n\nกรุณาเข้าเว็บ RETC Smart Campus → เมนูโปรไฟล์ → เชื่อมต่อ LINE ก่อนใช้งานครับ' }]);
   }
 
   const t = text.toLowerCase();
+
+  // รายการรออนุมัติ + ปุ่มอนุมัติ/ปฏิเสธ (สำหรับผู้อนุมัติห้อง) — ฟรีทั้งหมดผ่าน reply
+  if (t.includes('รออนุมัติ') || t.includes('อนุมัติห้อง') || t === 'อนุมัติ') {
+    const isRoomAdmin = user.isSuperAdmin || ['admin', 'executive'].includes(user.role)
+      || !!(await prisma.modulePermission.findFirst({ where: { userId: user.id, module: 'ROOM_BOOKING' } }));
+    if (!isRoomAdmin) return replyMessage(replyToken, [{ type: 'text', text: '❌ คุณไม่มีสิทธิ์อนุมัติการจองห้องประชุม' }]);
+    const pend = await prisma.roomBooking.findMany({
+      where: { status: 'pending' },
+      include: { room: { select: { name: true } }, user: { select: { name: true } } },
+      orderBy: { startTime: 'asc' }, take: 10,
+    });
+    if (!pend.length) return replyMessage(replyToken, [{ type: 'text', text: '✅ ไม่มีการจองที่รออนุมัติ' }]);
+    return replyMessage(replyToken, [{ type: 'flex', altText: `มี ${pend.length} รายการรออนุมัติ`, contents: { type: 'carousel', contents: pend.map(pendingBubble) } }]);
+  }
 
   // การจองห้องของฉัน
   if (t.includes('จอง') || t.includes('ห้อง')) {
@@ -404,7 +437,14 @@ async function handleTextMessage(event) {
   }
 
   // help / default
-  return replyMessage(replyToken, [{ type: 'text', text: `🤖 สวัสดีคุณ ${user.name}\nพิมพ์คำสั่งเพื่อดูข้อมูล (ฟรี):\n• "การจอง" — การจองห้องประชุมของคุณ\n• "เวร" — เวรรับนักเรียนวันนี้` }]);
+  const isRoomAdmin = user.isSuperAdmin || ['admin', 'executive'].includes(user.role)
+    || !!(await prisma.modulePermission.findFirst({ where: { userId: user.id, module: 'ROOM_BOOKING' } }));
+  const cmds = [
+    '• "การจอง" — การจองห้องประชุมของคุณ',
+    '• "เวร" — เวรรับนักเรียนวันนี้',
+    isRoomAdmin ? '• "รออนุมัติ" — รายการรออนุมัติ + ปุ่มกดอนุมัติได้เลย' : null,
+  ].filter(Boolean).join('\n');
+  return replyMessage(replyToken, [{ type: 'text', text: `🤖 สวัสดีคุณ ${user.name}\nพิมพ์คำสั่งเพื่อดูข้อมูล (ฟรี ไม่กินโควตา):\n${cmds}` }]);
 }
 
 module.exports = router;
