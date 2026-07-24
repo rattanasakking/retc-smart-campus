@@ -2,8 +2,20 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LogOut, User, ChevronDown, Bell, Settings, Menu } from 'lucide-react';
-import { TOKEN_KEY, USER_KEY } from '@/lib/api';
+import { LogOut, User, ChevronDown, Bell, Settings, Menu, CheckCheck } from 'lucide-react';
+import { TOKEN_KEY, USER_KEY, api } from '@/lib/api';
+
+interface Noti { id: number; title: string; message: string; type: string; isRead: boolean; link: string | null; createdAt: string }
+
+function timeAgo(iso: string) {
+  const d = new Date(iso);
+  const s = (Date.now() - d.getTime()) / 1000;
+  if (s < 60) return 'เมื่อสักครู่';
+  if (s < 3600) return `${Math.floor(s / 60)} นาทีที่แล้ว`;
+  if (s < 86400) return `${Math.floor(s / 3600)} ชม.ที่แล้ว`;
+  if (s < 604800) return `${Math.floor(s / 86400)} วันที่แล้ว`;
+  return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+}
 
 function MobileLogo() {
   const [logoUrl, setLogoUrl]     = useState<string | null>(null);
@@ -42,12 +54,42 @@ const ROLE_LABEL: Record<string, string> = {
 export default function Topbar({ onHamburger }: Props) {
   const [user, setUser] = useState<StoredUser | null>(null);
   const [open, setOpen] = useState(false);
+  const [notis, setNotis]   = useState<Noti[]>([]);
+  const [unread, setUnread] = useState(0);
+  const [bellOpen, setBellOpen] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
     const stored = localStorage.getItem(USER_KEY);
     if (stored) { try { setUser(JSON.parse(stored)); } catch { /* */ } }
   }, []);
+
+  const loadNotis = () => {
+    api.get<{ data: { items: Noti[]; unread: number } }>('/notifications')
+      .then((r) => { setNotis(r.data.items ?? []); setUnread(r.data.unread ?? 0); })
+      .catch(() => {});
+  };
+  useEffect(() => {
+    if (!localStorage.getItem(TOKEN_KEY)) return;
+    loadNotis();
+    const t = setInterval(loadNotis, 60000);
+    return () => clearInterval(t);
+  }, []);
+
+  const clickNoti = (n: Noti) => {
+    if (!n.isRead) {
+      api.put(`/notifications/${n.id}/read`, {}).catch(() => {});
+      setUnread((u) => Math.max(0, u - 1));
+      setNotis((prev) => prev.map((x) => x.id === n.id ? { ...x, isRead: true } : x));
+    }
+    setBellOpen(false);
+    if (n.link) router.push(n.link);
+  };
+  const markAll = () => {
+    api.put('/notifications/read-all', {}).catch(() => {});
+    setUnread(0);
+    setNotis((prev) => prev.map((x) => ({ ...x, isRead: true })));
+  };
 
   const logout = () => {
     localStorage.removeItem(TOKEN_KEY);
@@ -81,10 +123,51 @@ export default function Topbar({ onHamburger }: Props) {
 
       <div className="flex items-center gap-1 md:ml-auto">
         {/* Bell */}
-        <button className="relative p-2 rounded-xl hover:bg-[#f5f8ff]">
-          <Bell className="w-[18px] h-[18px]" style={{ color: '#4a6080' }} />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
-        </button>
+        <div className="relative">
+          <button onClick={() => setBellOpen((o) => !o)} className="relative p-2 rounded-xl hover:bg-[#f5f8ff]">
+            <Bell className="w-[18px] h-[18px]" style={{ color: '#4a6080' }} />
+            {unread > 0 && (
+              <span className="absolute top-0.5 right-0.5 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
+                {unread > 9 ? '9+' : unread}
+              </span>
+            )}
+          </button>
+          {bellOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setBellOpen(false)} />
+              <div className="absolute right-0 mt-2 w-80 max-w-[92vw] rounded-xl shadow-lg z-50 bg-white overflow-hidden"
+                   style={{ border: '1px solid #dce6f9' }}>
+                <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: '1px solid #dce6f9' }}>
+                  <span className="text-sm font-semibold" style={{ color: '#1a2744' }}>การแจ้งเตือน</span>
+                  {unread > 0 && (
+                    <button onClick={markAll} className="flex items-center gap-1 text-xs" style={{ color: '#1d6ae5' }}>
+                      <CheckCheck className="w-3.5 h-3.5" /> อ่านทั้งหมด
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-96 overflow-y-auto">
+                  {notis.length === 0 ? (
+                    <div className="px-4 py-10 text-center text-sm" style={{ color: '#94a3b8' }}>
+                      <Bell className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                      ไม่มีการแจ้งเตือน
+                    </div>
+                  ) : notis.map((n) => (
+                    <button key={n.id} onClick={() => clickNoti(n)}
+                      className="w-full text-left px-4 py-3 hover:bg-[#f5f8ff] transition-colors flex gap-2.5"
+                      style={{ borderBottom: '1px solid #f5f8ff', backgroundColor: n.isRead ? '#fff' : '#f0f6ff' }}>
+                      {!n.isRead && <span className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: '#2979ff' }} />}
+                      <div className={`min-w-0 flex-1 ${n.isRead ? 'pl-4' : ''}`}>
+                        <p className="text-sm font-medium truncate" style={{ color: '#1a2744' }}>{n.title}</p>
+                        <p className="text-xs mt-0.5 line-clamp-2" style={{ color: '#4a6080' }}>{n.message}</p>
+                        <p className="text-[11px] mt-0.5" style={{ color: '#94a3b8' }}>{timeAgo(n.createdAt)}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
 
         {/* Settings — desktop only */}
         <button onClick={() => router.push('/settings/general')}

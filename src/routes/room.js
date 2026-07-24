@@ -6,6 +6,7 @@ const auth = require('../middleware/auth');
 const { success, error, paginate } = require('../utils/response');
 const { notify, sendRoomBookingRequestFlex, sendRoomBookingStatusFlex, pushMessage } = require('../services/line');
 const { sendRoomBookingRequestEmail, sendRoomBookingApprovedEmail, sendRoomBookingRejectedEmail, sendMail } = require('../services/email');
+const { notifyUsers } = require('../services/notification');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -46,7 +47,7 @@ async function notifyRoomManager(booking) {
   const managerId = booking.room?.managerId;
   if (!managerId) return;
   const mgr = await prisma.user.findUnique({ where: { id: managerId }, select: { name: true, lineUserId: true } });
-  if (!mgr?.lineUserId) return;
+  if (!mgr) return;
   const { dateS, timeS } = bookingWhen(booking);
   const statusTh = booking.status === 'approved' ? 'อนุมัติแล้ว' : 'รออนุมัติ';
   const text = [
@@ -60,7 +61,12 @@ async function notifyRoomManager(booking) {
     booking.attendees ? `👥 ${booking.attendees} คน` : null,
     `📌 สถานะ: ${statusTh}`,
   ].filter(Boolean).join('\n');
-  pushMessage(mgr.lineUserId, [{ type: 'text', text }]).catch(() => {});
+  if (mgr.lineUserId) pushMessage(mgr.lineUserId, [{ type: 'text', text }]).catch(() => {});
+  notifyUsers([managerId], {
+    title: `🏢 มีการจองห้องที่คุณดูแล (${booking.room?.name ?? ''})`,
+    message: `${booking.title} — ${booking.user?.name ?? ''} (${dateS} ${timeS})`,
+    type: 'room', link: '/room/manage/bookings',
+  });
 }
 
 const STATUS_TH = {
@@ -87,23 +93,26 @@ async function notifyStaffStatusChange(booking, status, note, actorId) {
     note ? `💬 หมายเหตุ: ${note}` : null,
   ].filter(Boolean).join('\n');
 
-  // รวมผู้รับแบบไม่ซ้ำ: ผู้ดูแลห้อง + admin โมดูล
-  const recipients = new Map();
+  // รวมผู้รับแบบไม่ซ้ำ: ผู้ดูแลห้อง + admin โมดูล (เก็บ lineUserId ไว้ด้วยถ้ามี)
+  const recipients = new Map(); // id -> lineUserId|null
   if (booking.room?.managerId) {
-    const mgr = await prisma.user.findUnique({
-      where: { id: booking.room.managerId }, select: { id: true, lineUserId: true },
-    });
-    if (mgr?.lineUserId) recipients.set(mgr.id, mgr.lineUserId);
+    const mgr = await prisma.user.findUnique({ where: { id: booking.room.managerId }, select: { id: true, lineUserId: true } });
+    if (mgr) recipients.set(mgr.id, mgr.lineUserId);
   }
-  for (const a of await getRoomAdmins()) {
-    if (a.lineUserId) recipients.set(a.id, a.lineUserId);
-  }
+  for (const a of await getRoomAdmins()) recipients.set(a.id, a.lineUserId);
   recipients.delete(actorId);         // คนที่กดเปลี่ยนสถานะเอง ไม่ต้องแจ้งซ้ำ
   recipients.delete(booking.userId);  // ผู้จองได้รับจาก notifyBookerStatus แล้ว
 
+  // LINE (เฉพาะผู้ที่เชื่อม LINE)
   for (const lineUserId of recipients.values()) {
-    pushMessage(lineUserId, [{ type: 'text', text }]).catch(() => {});
+    if (lineUserId) pushMessage(lineUserId, [{ type: 'text', text }]).catch(() => {});
   }
+  // แจ้งเตือนในระบบ (กระดิ่ง) — ทุกคนไม่ว่าจะเชื่อม LINE หรือไม่
+  notifyUsers([...recipients.keys()], {
+    title: `${STATUS_ICON[status] ?? '🔔'} การจอง${booking.room?.name ?? ''} · ${STATUS_TH[status] ?? status}`,
+    message: `${booking.title} — ${booking.user?.name ?? ''} (${dateS} ${timeS})`,
+    type: 'room', link: '/room/manage/bookings',
+  });
 }
 
 /** แจ้งเตือนหัวหน้างานอาคารสถานที่เมื่อมีการขอจัดโต๊ะ (LINE + อีเมลสำรอง) */
@@ -154,6 +163,11 @@ async function notifyFacilitiesHead(booking) {
       html: `<div style="font-family:sans-serif;line-height:1.7">${text.replace(/\n/g, '<br>')}</div>`,
     }).catch((e) => console.error('[facilitiesHead] email error:', e.message));
   }
+  notifyUsers([headId], {
+    title: `🪑 คำร้องขอจัดโต๊ะ — ${booking.room?.name ?? ''}`,
+    message: `${booking.tableLayout} · ${booking.title} — ${booking.user?.name ?? ''} (${dateS} ${timeS})`,
+    type: 'room', link: '/room/manage/bookings',
+  });
 }
 
 async function canAdmin(u) {
@@ -202,6 +216,12 @@ async function notifyAdminsNewBooking(booking) {
       }).catch(() => {});
     }
   }
+  const { dateS, timeS } = bookingWhen(booking);
+  notifyUsers(admins.map((a) => a.id), {
+    title: `🚪 มีคำขอจองห้อง ${booking.room?.name ?? ''} (รออนุมัติ)`,
+    message: `${booking.title} — ${booking.user?.name ?? ''} (${dateS} ${timeS})`,
+    type: 'room', link: '/room/manage/bookings',
+  });
 }
 
 /** ส่งแจ้งเตือนไปหาผู้จองเมื่อสถานะเปลี่ยน */
@@ -217,6 +237,14 @@ async function notifyBookerStatus(booking, status, note) {
   if (bookerEmail) {
     const emailFn = status === 'approved' ? sendRoomBookingApprovedEmail : sendRoomBookingRejectedEmail;
     emailFn({ to: bookerEmail, booking, note }).catch(e => console.error('[notifyBookerStatus] email error:', e.message));
+  }
+  if (booking.userId) {
+    const { dateS, timeS } = bookingWhen(booking);
+    notifyUsers([booking.userId], {
+      title: `${status === 'approved' ? '✅ อนุมัติ' : '❌ ปฏิเสธ'}การจอง ${booking.room?.name ?? ''}`,
+      message: `${booking.title} (${dateS} ${timeS})${note ? ` — ${note}` : ''}`,
+      type: 'room', link: '/room',
+    });
   }
 }
 
