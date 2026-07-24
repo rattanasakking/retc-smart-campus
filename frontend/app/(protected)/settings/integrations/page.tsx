@@ -275,22 +275,54 @@ function EmailSection({ showToast }: { showToast: (msg: string, ok: boolean) => 
   );
 }
 
-// ─── LINE section (Notify + Bot) ──────────────────────────────────────────────
+// ─── Secret input (dark) ──────────────────────────────────────────────────────
+
+function SecretInput({ value, onChange, placeholder }: {
+  value: string; onChange: (v: string) => void; placeholder?: string;
+}) {
+  const [show, setShow] = useState(false);
+  const inp = 'w-full bg-navy-800 border border-navy-600 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 placeholder-gray-600';
+  return (
+    <div className="relative">
+      <input type={show ? 'text' : 'password'} value={value}
+        onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+        className={`${inp} pr-10`} />
+      <button onClick={() => setShow(!show)}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
+        {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+      </button>
+    </div>
+  );
+}
+
+function ReadonlyUrl({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="w-full bg-navy-900 border border-navy-700 text-gray-400 rounded-lg px-3 py-2 text-xs select-all break-all">
+      {children}
+    </div>
+  );
+}
+
+// ─── LINE section (Login + Messaging Bot) ─────────────────────────────────────
 
 function LineSection({ showToast }: { showToast: (msg: string, ok: boolean) => void }) {
-  const [accessToken, setAccessToken] = useState('');
-  const [channelSecret, setChannelSecret] = useState('');
-  const [showAT, setShowAT]         = useState(false);
-  const [showCS, setShowCS]         = useState(false);
-  const [loading, setLoading]       = useState(true);
-  const [saving, setSaving]         = useState(false);
+  const [channelId, setChannelId]       = useState('');   // line_channel_id (Login)
+  const [loginSecret, setLoginSecret]   = useState('');   // line_channel_secret (Login)
+  const [msgToken, setMsgToken]         = useState('');   // line_messaging_token (Bot)
+  const [msgSecret, setMsgSecret]       = useState('');   // line_messaging_secret (Bot)
+  const [loading, setLoading]           = useState(true);
+  const [saving, setSaving]             = useState(false);
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://app.retc.ac.th';
 
   const fetchSettings = useCallback(async () => {
     try {
       const res = await api.get<{ data: Record<string, string> }>('/settings/general');
       const map = res.data ?? {};
-      setAccessToken(map['line_channel_access_token'] ?? '');
-      setChannelSecret(map['line_channel_secret'] ?? '');
+      setChannelId(map['line_channel_id'] ?? '');
+      setLoginSecret(map['line_channel_secret'] ?? '');
+      setMsgToken(map['line_messaging_token'] ?? '');
+      setMsgSecret(map['line_messaging_secret'] ?? '');
     } finally { setLoading(false); }
   }, []);
 
@@ -300,8 +332,10 @@ function LineSection({ showToast }: { showToast: (msg: string, ok: boolean) => v
     setSaving(true);
     try {
       await api.put('/settings/general', {
-        line_channel_access_token:  accessToken,
-        line_channel_secret:        channelSecret,
+        line_channel_id:       channelId,
+        line_channel_secret:   loginSecret,
+        line_messaging_token:  msgToken,
+        line_messaging_secret: msgSecret,
       });
       showToast('บันทึกการตั้งค่า LINE สำเร็จ', true);
     } catch (e: unknown) {
@@ -324,8 +358,8 @@ function LineSection({ showToast }: { showToast: (msg: string, ok: boolean) => v
           <Link2 className="w-4 h-4 text-green-400" />
         </div>
         <div>
-          <h2 className="text-sm font-semibold text-gray-200">LINE Messaging API (Bot)</h2>
-          <p className="text-xs text-gray-500">อนุมัติผ่าน LINE + แจ้งเตือน (มีโควตา 300/เดือน สำหรับแผนฟรี)</p>
+          <h2 className="text-sm font-semibold text-gray-200">LINE</h2>
+          <p className="text-xs text-gray-500">เข้าสู่ระบบด้วย LINE + Bot อนุมัติ/แจ้งเตือน (โควตา 300/เดือน แผนฟรี)</p>
         </div>
       </div>
 
@@ -333,53 +367,137 @@ function LineSection({ showToast }: { showToast: (msg: string, ok: boolean) => v
         ⚠️ <strong>LINE Notify ปิดบริการถาวรแล้ว</strong> (มี.ค. 2568) — ระบบใช้ Messaging API แทน และแนะนำ Telegram (ฟรีไม่จำกัด) เป็นช่องทางหลัก
       </div>
 
-      {/* LINE Messaging API (Bot) */}
+      {/* LINE Login */}
       <div className="space-y-3">
         <p className="text-xs font-semibold text-gray-300 flex items-center gap-2">
+          <span className="px-1.5 py-0.5 rounded bg-green-900/50 text-green-400 text-[10px]">Login</span>
+          เข้าสู่ระบบด้วย LINE
+        </p>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1.5">Channel ID</label>
+          <input type="text" value={channelId} onChange={(e) => setChannelId(e.target.value)}
+            placeholder="1234567890" className={inp} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1.5">Channel Secret</label>
+          <SecretInput value={loginSecret} onChange={setLoginSecret} placeholder="LINE Login channel secret" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1.5">Callback URL (ลงทะเบียนใน LINE Developers)</label>
+          <ReadonlyUrl>{origin}/api/auth/line/callback</ReadonlyUrl>
+        </div>
+      </div>
+
+      {/* LINE Messaging API (Bot) */}
+      <div className="pt-4 border-t border-navy-600 space-y-3">
+        <p className="text-xs font-semibold text-gray-300 flex items-center gap-2">
           <span className="px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-400 text-[10px]">Messaging API</span>
-          LINE Bot — อนุมัติ/ปฏิเสธผ่าน LINE ได้เลย
+          LINE Bot — อนุมัติ/ปฏิเสธ + แจ้งเตือนผ่าน LINE
         </p>
         <div className="bg-blue-950/30 border border-blue-800/40 rounded-xl px-4 py-3 text-xs text-blue-300 space-y-1">
           <p className="font-medium">วิธีตั้งค่า LINE Bot:</p>
           <ol className="list-decimal pl-4 space-y-0.5 text-blue-400">
             <li>สร้าง Messaging API channel ที่ <a href="https://developers.line.biz/" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-200">developers.line.biz</a></li>
             <li>คัดลอก <strong>Channel Access Token</strong> และ <strong>Channel Secret</strong> มาใส่ด้านล่าง</li>
-            <li>ตั้ง Webhook URL เป็น <code className="bg-blue-900/50 px-1 rounded">https://app.retc.ac.th/api/webhook/line</code></li>
-            <li>เปิด <strong>Use webhooks</strong> ใน Developer Console</li>
+            <li>ตั้ง Webhook URL (ด้านล่าง) ใน Developer Console แล้วเปิด <strong>Use webhooks</strong></li>
           </ol>
         </div>
-
         <div>
           <label className="block text-xs font-medium text-gray-400 mb-1.5">Channel Access Token</label>
-          <div className="relative">
-            <input type={showAT ? 'text' : 'password'} value={accessToken}
-              onChange={(e) => setAccessToken(e.target.value)}
-              placeholder="Channel Access Token (Long-lived)"
-              className={`${inp} pr-10`} />
-            <button onClick={() => setShowAT(!showAT)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
-              {showAT ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
+          <SecretInput value={msgToken} onChange={setMsgToken} placeholder="Channel Access Token (Long-lived)" />
         </div>
-
         <div>
           <label className="block text-xs font-medium text-gray-400 mb-1.5">Channel Secret</label>
-          <div className="relative">
-            <input type={showCS ? 'text' : 'password'} value={channelSecret}
-              onChange={(e) => setChannelSecret(e.target.value)}
-              placeholder="Channel Secret"
-              className={`${inp} pr-10`} />
-            <button onClick={() => setShowCS(!showCS)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
-              {showCS ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-          <p className="text-xs text-gray-600 mt-1">ใช้สำหรับ verify ว่า webhook request มาจาก LINE จริง</p>
+          <SecretInput value={msgSecret} onChange={setMsgSecret} placeholder="Messaging API channel secret" />
+          <p className="text-xs text-gray-600 mt-1">ใช้ verify ว่า webhook request มาจาก LINE จริง</p>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1.5">Webhook URL (ตั้งใน LINE Developers Console)</label>
+          <ReadonlyUrl>{origin}/api/webhook/line</ReadonlyUrl>
         </div>
       </div>
 
       {/* Save */}
+      <div className="flex justify-end pt-1">
+        <button onClick={handleSave} disabled={saving}
+          className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white
+                     bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors disabled:opacity-60">
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          บันทึก
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Google OAuth section ─────────────────────────────────────────────────────
+
+function GoogleSection({ showToast }: { showToast: (msg: string, ok: boolean) => void }) {
+  const [clientId, setClientId]         = useState('');
+  const [clientSecret, setClientSecret] = useState('');
+  const [loading, setLoading]           = useState(true);
+  const [saving, setSaving]             = useState(false);
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://app.retc.ac.th';
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      const res = await api.get<{ data: Record<string, string> }>('/settings/general');
+      const map = res.data ?? {};
+      setClientId(map['google_client_id'] ?? '');
+      setClientSecret(map['google_client_secret'] ?? '');
+    } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchSettings(); }, [fetchSettings]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api.put('/settings/general', {
+        google_client_id:     clientId,
+        google_client_secret: clientSecret,
+      });
+      showToast('บันทึกการตั้งค่า Google สำเร็จ', true);
+    } catch (e: unknown) {
+      showToast((e as Error).message, false);
+    } finally { setSaving(false); }
+  };
+
+  const inp = 'w-full bg-navy-800 border border-navy-600 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 placeholder-gray-600';
+
+  if (loading) return (
+    <div className="card flex items-center justify-center py-10 gap-2 text-gray-500">
+      <Loader2 className="w-4 h-4 animate-spin" /> กำลังโหลด...
+    </div>
+  );
+
+  return (
+    <div className="card space-y-5">
+      <div className="flex items-center gap-3 pb-4 border-b border-navy-600">
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: 'rgba(66,133,244,0.15)' }}>
+          <span className="text-sm font-bold" style={{ color: '#4285f4' }}>G</span>
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold text-gray-200">Google OAuth</h2>
+          <p className="text-xs text-gray-500">เข้าสู่ระบบด้วยบัญชี Google</p>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-gray-400 mb-1.5">Client ID</label>
+        <input type="text" value={clientId} onChange={(e) => setClientId(e.target.value)}
+          placeholder="xxxx.apps.googleusercontent.com" className={inp} />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-400 mb-1.5">Client Secret</label>
+        <SecretInput value={clientSecret} onChange={setClientSecret} placeholder="Google client secret" />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-400 mb-1.5">Callback URL (ลงทะเบียนใน Google Cloud Console)</label>
+        <ReadonlyUrl>{origin}/api/auth/google/callback</ReadonlyUrl>
+      </div>
+
       <div className="flex justify-end pt-1">
         <button onClick={handleSave} disabled={saving}
           className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white
@@ -506,26 +624,13 @@ export default function IntegrationsPage() {
     <div className="space-y-5 max-w-2xl">
       <div>
         <h1 className="text-xl font-bold text-white">การเชื่อมต่อภายนอก</h1>
-        <p className="text-xs text-gray-400 mt-0.5">ตั้งค่า LINE, Telegram และ Email สำหรับส่งการแจ้งเตือน</p>
+        <p className="text-xs text-gray-400 mt-0.5">ตั้งค่า LINE, Telegram, Google และ Email — เข้าสู่ระบบและส่งการแจ้งเตือน</p>
       </div>
 
       <LineSection showToast={showToast} />
       <TelegramSection showToast={showToast} />
+      <GoogleSection showToast={showToast} />
       <EmailSection showToast={showToast} />
-
-      {/* Google — coming soon */}
-      <div className="card opacity-60">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-navy-700 rounded-xl flex items-center justify-center">
-            <span className="text-sm">G</span>
-          </div>
-          <div>
-            <h2 className="text-sm font-semibold text-gray-300">Google OAuth</h2>
-            <p className="text-xs text-gray-500">เร็วๆ นี้ — Phase 2</p>
-          </div>
-          <span className="ml-auto text-xs bg-navy-700 text-gray-500 px-2 py-0.5 rounded-full">เร็วๆ นี้</span>
-        </div>
-      </div>
 
       {toast && (
         <div className={`fixed bottom-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border text-sm font-medium
