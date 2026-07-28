@@ -2,6 +2,7 @@ const express  = require('express');
 const crypto   = require('crypto');
 const { PrismaClient } = require('@prisma/client');
 const { sendLeaveStatusNotify, sendLeaveRequestFlex, sendRoomBookingStatusFlex, sendWorkLogStatusFlex, pushMessage, replyMessage } = require('../services/line');
+const { isEventEnabled } = require('../services/notification');
 const { sendRoomBookingApprovedEmail, sendRoomBookingRejectedEmail } = require('../services/email');
 
 const router = express.Router();
@@ -280,7 +281,7 @@ async function handlePostback(event) {
     // แจ้งผู้จอง
     const bookerLine  = booking.user?.lineUserId;
     const bookerEmail = booking.user?.email;
-    if (bookerLine)  sendRoomBookingStatusFlex(bookerLine, booking, newStatus, null).catch(() => {});
+    if (bookerLine && await isEventEnabled('room.status_user')) sendRoomBookingStatusFlex(bookerLine, booking, newStatus, null).catch(() => {});
     if (bookerEmail) {
       const emailFn = newStatus === 'approved' ? sendRoomBookingApprovedEmail : sendRoomBookingRejectedEmail;
       emailFn({ to: bookerEmail, booking }).catch(() => {});
@@ -346,7 +347,7 @@ async function handlePostback(event) {
     replyMessage(replyToken, [{ type: 'text', text: `${actionTh}\n📝 ${log.title}\n👤 ${log.user?.name ?? '-'}` }]).catch(() => {});
 
     // แจ้ง user
-    if (log.user?.lineUserId) {
+    if (log.user?.lineUserId && await isEventEnabled('worklog.status')) {
       sendWorkLogStatusFlex(log.user.lineUserId, log, newStatus, defaultComment, approver.name).catch(() => {});
     }
     return;
@@ -384,7 +385,7 @@ async function handlePostback(event) {
       });
     }
 
-    if (request.user.lineUserId) {
+    if (request.user.lineUserId && await isEventEnabled('leave.status')) {
       await sendLeaveStatusNotify(request.user.lineUserId, request, 'APPROVED');
     }
 
@@ -395,7 +396,7 @@ async function handlePostback(event) {
     });
     await prisma.leaveRequest.update({ where: { id: requestId }, data: { status: 'REJECTED' } });
 
-    if (request.user.lineUserId) {
+    if (request.user.lineUserId && await isEventEnabled('leave.status')) {
       await sendLeaveStatusNotify(request.user.lineUserId, request, 'REJECTED');
     }
   }

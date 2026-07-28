@@ -62,6 +62,14 @@ async function isChannelEnabled(channel) {
   } catch { return true; }
 }
 
+/** เหตุการณ์แจ้งเตือนนี้เปิดอยู่ไหม (เช่น 'room.manager', 'leave.request') — default: เปิด */
+async function isEventEnabled(eventId) {
+  try {
+    const row = await prisma.systemSettings.findUnique({ where: { key: `notify_event_${eventId}` } });
+    return row ? row.value === 'true' : true;
+  } catch { return true; }
+}
+
 /** ส่งช่องทางนี้ให้โมดูลนี้ได้ไหม = เปิดช่องทางทั้งระบบ และ (ถ้าระบุโมดูล) เปิดช่องทางของโมดูลนั้น */
 async function channelAllowed(channel, module) {
   try {
@@ -97,4 +105,4 @@ async function getModuleAdminIds(module) {
   }
 }
 
-module.exports = { notifyUsers, getModuleAdminIds, isChannelEnabled, channelAllowed };
+module.exports = { notifyUsers, getModuleAdminIds, isChannelEnabled, channelAllowed, isEventEnabled };

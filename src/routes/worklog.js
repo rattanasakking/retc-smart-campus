@@ -5,6 +5,7 @@ const { PrismaClient } = require('@prisma/client');
 const auth = require('../middleware/auth');
 const { success, error } = require('../utils/response');
 const { notify, sendWorkLogFlex, sendWorkLogStatusFlex, pushMessage } = require('../services/line');
+const { isEventEnabled } = require('../services/notification');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -535,7 +536,7 @@ router.post('/:id/submit', auth, async (req, res, next) => {
     });
     // ส่งแจ้งเตือนไปยังหัวหน้างานผ่าน LINE Flex (พร้อมปุ่มอนุมัติ/ปฏิเสธ/ส่งคืน)
     const supervisor = await getSupervisor(req.user.id);
-    if (supervisor?.lineUserId) {
+    if (supervisor?.lineUserId && await isEventEnabled('worklog.submit')) {
       sendWorkLogFlex(supervisor.lineUserId, { ...log, id: intId(req.params.id) }).catch(() => {});
     }
     res.json(success(updated, 'ส่งขออนุมัติสำเร็จ'));
@@ -559,7 +560,7 @@ router.put('/:id/approve', auth, async (req, res, next) => {
         data: { logId: intId(req.params.id), approverId: req.user.id, status: 'approved', comment: comment || null },
       }),
     ]);
-    if (log.user?.lineUserId) {
+    if (log.user?.lineUserId && await isEventEnabled('worklog.status')) {
       sendWorkLogStatusFlex(log.user.lineUserId, log, 'approved', comment || null, req.user.name).catch(() => {});
     }
     res.json(success(null, 'อนุมัติสำเร็จ'));
@@ -583,7 +584,7 @@ router.put('/:id/reject', auth, async (req, res, next) => {
         data: { logId: intId(req.params.id), approverId: req.user.id, status: 'rejected', comment: comment || null },
       }),
     ]);
-    if (log.user?.lineUserId) {
+    if (log.user?.lineUserId && await isEventEnabled('worklog.status')) {
       sendWorkLogStatusFlex(log.user.lineUserId, log, 'rejected', comment || null, req.user.name).catch(() => {});
     }
     res.json(success(null, 'ปฏิเสธสำเร็จ'));
@@ -608,7 +609,7 @@ router.put('/:id/return', auth, async (req, res, next) => {
         data: { logId: intId(req.params.id), approverId: req.user.id, status: 'returned', comment: comment.trim() },
       }),
     ]);
-    if (log.user?.lineUserId) {
+    if (log.user?.lineUserId && await isEventEnabled('worklog.status')) {
       sendWorkLogStatusFlex(log.user.lineUserId, log, 'returned', comment.trim(), req.user.name).catch(() => {});
     }
     res.json(success(null, 'ส่งคืนสำเร็จ'));

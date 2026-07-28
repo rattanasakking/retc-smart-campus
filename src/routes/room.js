@@ -6,7 +6,7 @@ const auth = require('../middleware/auth');
 const { success, error, paginate } = require('../utils/response');
 const { sendRoomBookingRequestFlex, sendRoomBookingStatusFlex, pushMessage } = require('../services/line');
 const { sendRoomBookingRequestEmail, sendRoomBookingApprovedEmail, sendRoomBookingRejectedEmail, sendMail } = require('../services/email');
-const { notifyUsers } = require('../services/notification');
+const { notifyUsers, isEventEnabled } = require('../services/notification');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -44,6 +44,7 @@ function bookingWhen(b) {
 
 /** แจ้งเตือนผู้ดูแลห้อง (ถ้ากำหนดไว้) เมื่อมีการจอง */
 async function notifyRoomManager(booking) {
+  if (!await isEventEnabled('room.manager')) return;
   const managerId = booking.room?.managerId;
   if (!managerId) return;
   const mgr = await prisma.user.findUnique({ where: { id: managerId }, select: { name: true, lineUserId: true } });
@@ -80,6 +81,7 @@ const STATUS_ICON = {
 /** แจ้งผู้ดูแลห้อง + admin โมดูลจองห้องประชุม เมื่อสถานะการจองเปลี่ยน */
 async function notifyStaffStatusChange(booking, status, note, actorId) {
   if (!booking) return;
+  if (!await isEventEnabled('room.status_staff')) return;
   const { dateS, timeS } = bookingWhen(booking);
   const text = [
     `\n${STATUS_ICON[status] ?? '🔔'} อัปเดตสถานะการจองห้องประชุม`,
@@ -117,6 +119,7 @@ async function notifyStaffStatusChange(booking, status, note, actorId) {
 
 /** แจ้งเตือนหัวหน้างานอาคารสถานที่เมื่อมีการขอจัดโต๊ะ (LINE + อีเมลสำรอง) */
 async function notifyFacilitiesHead(booking) {
+  if (!await isEventEnabled('room.table')) return;
   if (!booking.tableLayout) {
     console.log(`[facilitiesHead] booking#${booking.id}: ไม่มีการจัดโต๊ะ → ข้าม`);
     return;
@@ -204,6 +207,7 @@ async function getRoomAdmins() {
 
 /** ส่งแจ้งเตือนไปหา admin ทุกคนเมื่อมีการจองใหม่ */
 async function notifyAdminsNewBooking(booking) {
+  if (!await isEventEnabled('room.new')) return;
   const frontendUrl = process.env.FRONTEND_URL ?? 'https://app.retc.ac.th';
   const admins = await getRoomAdmins();
   for (const admin of admins) {
@@ -226,6 +230,7 @@ async function notifyAdminsNewBooking(booking) {
 
 /** ส่งแจ้งเตือนไปหาผู้จองเมื่อสถานะเปลี่ยน */
 async function notifyBookerStatus(booking, status, note) {
+  if (!await isEventEnabled('room.status_user')) return;
   const bookerLine  = booking.user?.lineUserId;
   const bookerEmail = booking.user?.email;
   console.log(`[notifyBookerStatus] bookingId=${booking.id} status=${status} lineUserId=${bookerLine ?? 'MISSING'} email=${bookerEmail ?? 'MISSING'}`);

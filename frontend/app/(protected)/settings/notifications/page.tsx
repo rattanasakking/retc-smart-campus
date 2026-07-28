@@ -1,6 +1,6 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { Bell, Check, AlertTriangle, Loader2 } from 'lucide-react';
+import { Fragment, useEffect, useState } from 'react';
+import { Bell, Check, AlertTriangle, Loader2, ChevronRight, ChevronDown } from 'lucide-react';
 import { api } from '@/lib/api';
 
 type Channel = 'line' | 'telegram' | 'email';
@@ -24,6 +24,31 @@ const CHANNEL_META: { key: Channel; label: string; icon: string; color: string }
   { key: 'email',    label: 'Email',    icon: '📧', color: '#1d6ae5' },
 ];
 
+// เหตุการณ์แจ้งเตือนย่อยของแต่ละโมดูล (แจ้งใคร)
+const MODULE_EVENTS: Record<string, { id: string; label: string; to: string }[]> = {
+  ROOM_BOOKING: [
+    { id: 'room.new',          label: 'มีการจองใหม่ (รออนุมัติ)', to: 'แจ้งแอดมิน/ผู้ดูแลระบบจอง' },
+    { id: 'room.manager',      label: 'มีการจองห้องที่ดูแล',       to: 'แจ้งผู้ดูแลห้อง' },
+    { id: 'room.table',        label: 'คำร้องขอจัดโต๊ะ',           to: 'แจ้งหัวหน้างานอาคารสถานที่' },
+    { id: 'room.status_staff', label: 'มีการเปลี่ยนสถานะการจอง',   to: 'แจ้งผู้ดูแล + แอดมิน' },
+    { id: 'room.status_user',  label: 'ผลอนุมัติ / ปฏิเสธ',        to: 'แจ้งผู้จอง' },
+  ],
+  LEAVE: [
+    { id: 'leave.request', label: 'มีคำขอลาใหม่',      to: 'แจ้งหัวหน้า/ผู้อนุมัติ' },
+    { id: 'leave.status',  label: 'ผลอนุมัติการลา',    to: 'แจ้งผู้ขอลา' },
+  ],
+  WORK_LOG: [
+    { id: 'worklog.submit', label: 'ส่งบันทึกให้ตรวจ',  to: 'แจ้งหัวหน้า/ผู้ตรวจ' },
+    { id: 'worklog.status', label: 'ผลอนุมัติบันทึก',   to: 'แจ้งผู้บันทึก' },
+  ],
+  HELPDESK: [
+    { id: 'helpdesk.new', label: 'มีการแจ้งซ่อมใหม่', to: 'แจ้งแอดมิน/ผู้ดูแลงานซ่อม' },
+  ],
+  LOST_FOUND: [
+    { id: 'lostfound.new', label: 'มีรายการของหาย/ของได้ใหม่', to: 'แจ้งแอดมิน' },
+  ],
+};
+
 function Toggle({ on, disabled, onClick, size = 'md' }: { on: boolean; disabled?: boolean; onClick: () => void; size?: 'sm' | 'md' }) {
   const w = size === 'sm' ? 'h-5 w-9' : 'h-6 w-11';
   const knob = size === 'sm' ? 'h-4 w-4' : 'h-5 w-5';
@@ -42,12 +67,14 @@ function Toggle({ on, disabled, onClick, size = 'md' }: { on: boolean; disabled?
 }
 
 export default function NotificationsPage() {
-  const [matrix, setMatrix]     = useState<Matrix>({});
-  const [globals, setGlobals]   = useState<ChannelRow>({ line: true, telegram: true, email: true });
-  const [loading, setLoading]   = useState(true);
-  const [saving, setSaving]     = useState(false);
-  const [toast, setToast]       = useState('');
-  const [toastErr, setToastErr] = useState('');
+  const [matrix, setMatrix]       = useState<Matrix>({});
+  const [globals, setGlobals]     = useState<ChannelRow>({ line: true, telegram: true, email: true });
+  const [events, setEvents]       = useState<Record<string, boolean>>({});
+  const [expanded, setExpanded]   = useState<Set<string>>(new Set());
+  const [loading, setLoading]     = useState(true);
+  const [saving, setSaving]       = useState(false);
+  const [toast, setToast]         = useState('');
+  const [toastErr, setToastErr]   = useState('');
 
   const showToast = (msg: string, err = false) => {
     if (err) { setToastErr(msg); setToast(''); } else { setToast(msg); setToastErr(''); }
@@ -67,12 +94,17 @@ export default function NotificationsPage() {
           telegram: m['notify_channel_telegram'] !== 'false',
           email:    m['notify_channel_email']    !== 'false',
         });
+        const ev: Record<string, boolean> = {};
+        for (const list of Object.values(MODULE_EVENTS))
+          for (const e of list) ev[e.id] = m[`notify_event_${e.id}`] !== 'false';
+        setEvents(ev);
       })
       .catch(() => showToast('โหลดข้อมูลล้มเหลว', true))
       .finally(() => setLoading(false));
   }, []);
 
   const cellOn = (module: string, ch: Channel) => matrix[module]?.[ch] !== false; // default true
+  const eventOn = (id: string) => events[id] !== false; // default true
 
   const toggleCell = (module: string, ch: Channel) =>
     setMatrix((prev) => {
@@ -86,6 +118,13 @@ export default function NotificationsPage() {
     });
 
   const toggleGlobal = (ch: Channel) => setGlobals((p) => ({ ...p, [ch]: !p[ch] }));
+  const toggleEvent  = (id: string)  => setEvents((p) => ({ ...p, [id]: !(p[id] !== false) }));
+  const toggleExpand = (module: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(module)) next.delete(module); else next.add(module);
+      return next;
+    });
 
   const save = async () => {
     setSaving(true);
@@ -94,13 +133,17 @@ export default function NotificationsPage() {
       for (const { key } of MODULE_META) {
         payload[key] = { line: cellOn(key, 'line'), telegram: cellOn(key, 'telegram'), email: cellOn(key, 'email') };
       }
+      const gen: Record<string, string> = {
+        notify_channel_line:     String(globals.line),
+        notify_channel_telegram: String(globals.telegram),
+        notify_channel_email:    String(globals.email),
+      };
+      for (const list of Object.values(MODULE_EVENTS))
+        for (const e of list) gen[`notify_event_${e.id}`] = String(eventOn(e.id));
+
       await Promise.all([
         api.put('/settings/notifications', payload),
-        api.put('/settings/general', {
-          notify_channel_line:     String(globals.line),
-          notify_channel_telegram: String(globals.telegram),
-          notify_channel_email:    String(globals.email),
-        }),
+        api.put('/settings/general', gen),
       ]);
       showToast('บันทึกการตั้งค่าสำเร็จ');
     } catch (e: unknown) {
@@ -129,8 +172,8 @@ export default function NotificationsPage() {
       </div>
 
       <div className="rounded-xl px-4 py-3 text-xs" style={{ backgroundColor: '#f0f4ff', color: '#4a6080' }}>
-        กำหนดได้ว่าแต่ละโมดูลจะส่งการแจ้งเตือนผ่านช่องทางไหนบ้าง · สวิตช์บนหัวคอลัมน์ = เปิด/ปิดทั้งช่องทางสำหรับทุกโมดูล ·
-        🔔 การแจ้งเตือนในระบบ (กระดิ่ง) เปิดตลอด ฟรี
+        เลือกช่องทางของแต่ละโมดูล (สวิตช์หัวคอลัมน์ = เปิด/ปิดทั้งช่องทาง) · กด <ChevronRight className="w-3 h-3 inline -mt-0.5" /> เพื่อกำหนด
+        <strong> เหตุการณ์ย่อย</strong> ว่าจะแจ้งใครบ้าง (เช่น แจ้งหัวหน้า / แจ้งผู้ใช้) · 🔔 กระดิ่งในระบบ เปิดตลอด ฟรี
       </div>
 
       {loading ? (
@@ -156,34 +199,63 @@ export default function NotificationsPage() {
               </tr>
             </thead>
             <tbody>
-              {MODULE_META.map(({ key, label, icon }) => (
-                <tr key={key} style={{ borderBottom: '1px solid #f5f8ff' }} className="hover:bg-[#fafbff] transition-colors">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-xl">{icon}</span>
-                      <span className="text-sm font-medium" style={{ color: '#1a2744' }}>{label}</span>
-                    </div>
-                  </td>
-                  {CHANNEL_META.map(({ key: ch }) => {
-                    const on = cellOn(key, ch);
-                    const globalOff = !globals[ch];
-                    return (
-                      <td key={ch} className="px-3 py-3 text-center">
-                        <div className="flex justify-center">
-                          <Toggle on={on && !globalOff} disabled={globalOff} onClick={() => toggleCell(key, ch)} />
+              {MODULE_META.map(({ key, label, icon }) => {
+                const evList = MODULE_EVENTS[key] ?? [];
+                const isOpen = expanded.has(key);
+                return (
+                  <Fragment key={key}>
+                    <tr style={{ borderBottom: isOpen ? 'none' : '1px solid #f5f8ff' }} className="hover:bg-[#fafbff] transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          {evList.length > 0 ? (
+                            <button onClick={() => toggleExpand(key)} className="p-0.5 rounded hover:bg-[#e8f0fe]" style={{ color: '#4a6080' }}>
+                              {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                            </button>
+                          ) : <span className="w-5" />}
+                          <span className="text-xl">{icon}</span>
+                          <span className="text-sm font-medium" style={{ color: '#1a2744' }}>{label}</span>
                         </div>
                       </td>
-                    );
-                  })}
-                </tr>
-              ))}
+                      {CHANNEL_META.map(({ key: ch }) => {
+                        const on = cellOn(key, ch);
+                        const globalOff = !globals[ch];
+                        return (
+                          <td key={ch} className="px-3 py-3 text-center">
+                            <div className="flex justify-center">
+                              <Toggle on={on && !globalOff} disabled={globalOff} onClick={() => toggleCell(key, ch)} />
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                    {isOpen && evList.length > 0 && (
+                      <tr style={{ borderBottom: '1px solid #f5f8ff' }}>
+                        <td colSpan={4} className="px-4 pb-3 pt-0">
+                          <div className="ml-7 rounded-lg overflow-hidden" style={{ border: '1px solid #eef2fb' }}>
+                            {evList.map((e, i) => (
+                              <div key={e.id} className="flex items-center justify-between px-3 py-2.5"
+                                style={{ backgroundColor: '#fafbff', borderTop: i === 0 ? 'none' : '1px solid #eef2fb' }}>
+                                <div>
+                                  <p className="text-xs font-medium" style={{ color: '#1a2744' }}>{e.label}</p>
+                                  <p className="text-[11px] mt-0.5" style={{ color: '#94a3b8' }}>{e.to}</p>
+                                </div>
+                                <Toggle size="sm" on={eventOn(e.id)} onClick={() => toggleEvent(e.id)} />
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
       <p className="text-xs" style={{ color: '#94a3b8' }}>
-        หมายเหตุ: หากปิดสวิตช์บนหัวคอลัมน์ ช่องทางนั้นจะไม่ส่งเลยทุกโมดูล (คอลัมน์จะจางลง) ·
+        หมายเหตุ: เหตุการณ์จะส่งก็ต่อเมื่อ <strong>เปิดเหตุการณ์นั้น</strong> และ <strong>เปิดช่องทางของโมดูล</strong> ทั้งคู่ ·
         ผู้ใช้แต่ละคนยังปิดรับการแจ้งเตือนส่วนตัวได้จากหน้าโปรไฟล์
       </p>
     </div>

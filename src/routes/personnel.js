@@ -6,6 +6,7 @@ const { PrismaClient } = require('@prisma/client');
 const auth    = require('../middleware/auth');
 const { success, error, paginate } = require('../utils/response');
 const { sendLeaveRequestFlex, sendLeaveStatusNotify } = require('../services/line');
+const { isEventEnabled } = require('../services/notification');
 
 const router = express.Router();
 const prisma  = new PrismaClient();
@@ -364,7 +365,7 @@ router.post('/leaves', auth, async (req, res) => {
     });
     try {
       const approver = await findApproverForUser(req.user);
-      if (approver?.lineUserId) {
+      if (approver?.lineUserId && await isEventEnabled('leave.request')) {
         await prisma.leaveApproval.updateMany({ where: { requestId: request.id }, data: { approverId: approver.id } });
         await sendLeaveRequestFlex(approver.lineUserId, { ...request, user: await prisma.user.findUnique({ where: { id: req.user.id }, select: { id: true, name: true, department: true } }) });
       }
@@ -430,7 +431,7 @@ router.put('/leaves/:id/approve', auth, requireApprover, async (req, res) => {
         const director = await prisma.user.findFirst({ where: { position: 'director', isActive: true } });
         if (director) {
           await prisma.leaveApproval.create({ data: { requestId: id, approverId: director.id, level: 2 } });
-          if (director.lineUserId) { await sendLeaveRequestFlex(director.lineUserId, request).catch(() => {}); }
+          if (director.lineUserId && await isEventEnabled('leave.request')) { await sendLeaveRequestFlex(director.lineUserId, request).catch(() => {}); }
         }
       }
     }
@@ -444,7 +445,7 @@ router.put('/leaves/:id/approve', auth, requireApprover, async (req, res) => {
         create: { userId: request.userId, leaveTypeId: request.leaveTypeId, year, quota: request.leaveType.maxDaysPerYear, used: request.totalDays },
       });
     }
-    if (request.user.lineUserId && request.user.notifyByLine !== false) { sendLeaveStatusNotify(request.user.lineUserId, request, 'APPROVED', comment).catch(() => {}); }
+    if (request.user.lineUserId && request.user.notifyByLine !== false && await isEventEnabled('leave.status')) { sendLeaveStatusNotify(request.user.lineUserId, request, 'APPROVED', comment).catch(() => {}); }
     res.json(success(updated, 'อนุมัติคำขอลาสำเร็จ'));
   } catch (e) { console.error('[approve]', e); res.status(500).json(error('เกิดข้อผิดพลาด')); }
 });
@@ -462,7 +463,7 @@ router.put('/leaves/:id/reject', auth, requireApprover, async (req, res) => {
       data: { status: 'REJECTED', comment, approverId: req.user.id },
     });
     const updated = await prisma.leaveRequest.update({ where: { id }, data: { status: 'REJECTED' }, include: LEAVE_INCLUDE });
-    if (request.user.lineUserId && request.user.notifyByLine !== false) { sendLeaveStatusNotify(request.user.lineUserId, request, 'REJECTED', comment).catch(() => {}); }
+    if (request.user.lineUserId && request.user.notifyByLine !== false && await isEventEnabled('leave.status')) { sendLeaveStatusNotify(request.user.lineUserId, request, 'REJECTED', comment).catch(() => {}); }
     res.json(success(updated, 'ปฏิเสธคำขอลาสำเร็จ'));
   } catch (e) { res.status(500).json(error('เกิดข้อผิดพลาด')); }
 });
