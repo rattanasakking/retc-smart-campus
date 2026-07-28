@@ -7,6 +7,8 @@ type Channel = 'line' | 'telegram' | 'email';
 type ChannelRow = Record<Channel, boolean>;
 type Matrix = Record<string, ChannelRow>;
 
+const CHANNELS: Channel[] = ['line', 'telegram', 'email'];
+
 const MODULE_META: { key: string; label: string; icon: string }[] = [
   { key: 'DUTY',         label: 'เวรรับนักเรียน',    icon: '🎓' },
   { key: 'WORK_LOG',     label: 'บันทึกปฏิบัติงาน', icon: '📋' },
@@ -34,20 +36,27 @@ const MODULE_EVENTS: Record<string, { id: string; label: string; to: string }[]>
     { id: 'room.status_user',  label: 'ผลอนุมัติ / ปฏิเสธ',        to: 'แจ้งผู้จอง' },
   ],
   LEAVE: [
-    { id: 'leave.request', label: 'มีคำขอลาใหม่',      to: 'แจ้งหัวหน้า/ผู้อนุมัติ' },
-    { id: 'leave.status',  label: 'ผลอนุมัติการลา',    to: 'แจ้งผู้ขอลา' },
+    { id: 'leave.request', label: 'มีคำขอลาใหม่',      to: 'แจ้งหัวหน้า/ผู้อนุมัติ (เฉพาะ LINE)' },
+    { id: 'leave.status',  label: 'ผลอนุมัติการลา',    to: 'แจ้งผู้ขอลา (เฉพาะ LINE)' },
   ],
   WORK_LOG: [
-    { id: 'worklog.submit', label: 'ส่งบันทึกให้ตรวจ',  to: 'แจ้งหัวหน้า/ผู้ตรวจ' },
-    { id: 'worklog.status', label: 'ผลอนุมัติบันทึก',   to: 'แจ้งผู้บันทึก' },
+    { id: 'worklog.submit', label: 'ส่งบันทึกให้ตรวจ',  to: 'แจ้งหัวหน้า/ผู้ตรวจ (เฉพาะ LINE)' },
+    { id: 'worklog.status', label: 'ผลอนุมัติบันทึก',   to: 'แจ้งผู้บันทึก (เฉพาะ LINE)' },
   ],
   HELPDESK: [
-    { id: 'helpdesk.new', label: 'มีการแจ้งซ่อมใหม่', to: 'แจ้งแอดมิน/ผู้ดูแลงานซ่อม' },
+    { id: 'helpdesk.new', label: 'มีการแจ้งซ่อมใหม่', to: 'แจ้งแอดมิน (Telegram/Email/กระดิ่ง)' },
   ],
   LOST_FOUND: [
-    { id: 'lostfound.new', label: 'มีรายการของหาย/ของได้ใหม่', to: 'แจ้งแอดมิน' },
+    { id: 'lostfound.new', label: 'มีรายการของหาย/ของได้ใหม่', to: 'แจ้งแอดมิน (Telegram/Email/กระดิ่ง)' },
   ],
 };
+
+const emptyRow = (): ChannelRow => ({ line: true, telegram: true, email: true });
+const rowFrom = (m: Record<string, string>, prefix: string): ChannelRow => ({
+  line:     m[`${prefix}line`]     !== 'false',
+  telegram: m[`${prefix}telegram`] !== 'false',
+  email:    m[`${prefix}email`]    !== 'false',
+});
 
 function Toggle({ on, disabled, onClick, size = 'md' }: { on: boolean; disabled?: boolean; onClick: () => void; size?: 'sm' | 'md' }) {
   const w = size === 'sm' ? 'h-5 w-9' : 'h-6 w-11';
@@ -67,14 +76,14 @@ function Toggle({ on, disabled, onClick, size = 'md' }: { on: boolean; disabled?
 }
 
 export default function NotificationsPage() {
-  const [matrix, setMatrix]       = useState<Matrix>({});
-  const [globals, setGlobals]     = useState<ChannelRow>({ line: true, telegram: true, email: true });
-  const [events, setEvents]       = useState<Record<string, boolean>>({});
-  const [expanded, setExpanded]   = useState<Set<string>>(new Set());
-  const [loading, setLoading]     = useState(true);
-  const [saving, setSaving]       = useState(false);
-  const [toast, setToast]         = useState('');
-  const [toastErr, setToastErr]   = useState('');
+  const [matrix, setMatrix]     = useState<Matrix>({});
+  const [globals, setGlobals]   = useState<ChannelRow>(emptyRow);
+  const [eventCh, setEventCh]   = useState<Record<string, ChannelRow>>({});
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [loading, setLoading]   = useState(true);
+  const [saving, setSaving]     = useState(false);
+  const [toast, setToast]       = useState('');
+  const [toastErr, setToastErr] = useState('');
 
   const showToast = (msg: string, err = false) => {
     if (err) { setToastErr(msg); setToast(''); } else { setToast(msg); setToastErr(''); }
@@ -94,31 +103,33 @@ export default function NotificationsPage() {
           telegram: m['notify_channel_telegram'] !== 'false',
           email:    m['notify_channel_email']    !== 'false',
         });
-        const ev: Record<string, boolean> = {};
+        const ev: Record<string, ChannelRow> = {};
         for (const list of Object.values(MODULE_EVENTS))
-          for (const e of list) ev[e.id] = m[`notify_event_${e.id}`] !== 'false';
-        setEvents(ev);
+          for (const e of list) ev[e.id] = rowFrom(m, `notify_evt_${e.id}_`);
+        setEventCh(ev);
       })
       .catch(() => showToast('โหลดข้อมูลล้มเหลว', true))
       .finally(() => setLoading(false));
   }, []);
 
-  const cellOn = (module: string, ch: Channel) => matrix[module]?.[ch] !== false; // default true
-  const eventOn = (id: string) => events[id] !== false; // default true
+  const cellOn    = (module: string, ch: Channel) => matrix[module]?.[ch] !== false;
+  const eventOn   = (id: string, ch: Channel) => eventCh[id]?.[ch] !== false;
 
   const toggleCell = (module: string, ch: Channel) =>
     setMatrix((prev) => {
       const ex = prev[module];
-      const row: ChannelRow = {
-        line:     ex?.line     !== false,
-        telegram: ex?.telegram !== false,
-        email:    ex?.email    !== false,
-      };
+      const row: ChannelRow = { line: ex?.line !== false, telegram: ex?.telegram !== false, email: ex?.email !== false };
       return { ...prev, [module]: { ...row, [ch]: !row[ch] } };
     });
 
+  const toggleEvent = (id: string, ch: Channel) =>
+    setEventCh((prev) => {
+      const ex = prev[id];
+      const row: ChannelRow = { line: ex?.line !== false, telegram: ex?.telegram !== false, email: ex?.email !== false };
+      return { ...prev, [id]: { ...row, [ch]: !row[ch] } };
+    });
+
   const toggleGlobal = (ch: Channel) => setGlobals((p) => ({ ...p, [ch]: !p[ch] }));
-  const toggleEvent  = (id: string)  => setEvents((p) => ({ ...p, [id]: !(p[id] !== false) }));
   const toggleExpand = (module: string) =>
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -130,16 +141,17 @@ export default function NotificationsPage() {
     setSaving(true);
     try {
       const payload: Matrix = {};
-      for (const { key } of MODULE_META) {
+      for (const { key } of MODULE_META)
         payload[key] = { line: cellOn(key, 'line'), telegram: cellOn(key, 'telegram'), email: cellOn(key, 'email') };
-      }
+
       const gen: Record<string, string> = {
         notify_channel_line:     String(globals.line),
         notify_channel_telegram: String(globals.telegram),
         notify_channel_email:    String(globals.email),
       };
       for (const list of Object.values(MODULE_EVENTS))
-        for (const e of list) gen[`notify_event_${e.id}`] = String(eventOn(e.id));
+        for (const e of list)
+          for (const ch of CHANNELS) gen[`notify_evt_${e.id}_${ch}`] = String(eventOn(e.id, ch));
 
       await Promise.all([
         api.put('/settings/notifications', payload),
@@ -173,7 +185,7 @@ export default function NotificationsPage() {
 
       <div className="rounded-xl px-4 py-3 text-xs" style={{ backgroundColor: '#f0f4ff', color: '#4a6080' }}>
         เลือกช่องทางของแต่ละโมดูล (สวิตช์หัวคอลัมน์ = เปิด/ปิดทั้งช่องทาง) · กด <ChevronRight className="w-3 h-3 inline -mt-0.5" /> เพื่อกำหนด
-        <strong> เหตุการณ์ย่อย</strong> ว่าจะแจ้งใครบ้าง (เช่น แจ้งหัวหน้า / แจ้งผู้ใช้) · 🔔 กระดิ่งในระบบ เปิดตลอด ฟรี
+        <strong> รายเหตุการณ์</strong> ว่าจะแจ้ง <strong>ใคร</strong> ผ่าน <strong>ช่องทางไหน</strong> · 🔔 กระดิ่งในระบบ เปิดตลอด ฟรี
       </div>
 
       {loading ? (
@@ -185,9 +197,9 @@ export default function NotificationsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ borderBottom: '1px solid #dce6f9', backgroundColor: '#f8faff' }}>
-                <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: '#94a3b8' }}>โมดูล</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: '#94a3b8' }}>โมดูล / เหตุการณ์</th>
                 {CHANNEL_META.map(({ key, label, icon, color }) => (
-                  <th key={key} className="px-3 py-3 text-center">
+                  <th key={key} className="px-3 py-3 text-center" style={{ minWidth: 92 }}>
                     <div className="flex flex-col items-center gap-1.5">
                       <span className="text-xs font-semibold flex items-center gap-1" style={{ color }}>
                         <span>{icon}</span> {label}
@@ -204,6 +216,7 @@ export default function NotificationsPage() {
                 const isOpen = expanded.has(key);
                 return (
                   <Fragment key={key}>
+                    {/* module row */}
                     <tr style={{ borderBottom: isOpen ? 'none' : '1px solid #f5f8ff' }} className="hover:bg-[#fafbff] transition-colors">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
@@ -211,41 +224,42 @@ export default function NotificationsPage() {
                             <button onClick={() => toggleExpand(key)} className="p-0.5 rounded hover:bg-[#e8f0fe]" style={{ color: '#4a6080' }}>
                               {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                             </button>
-                          ) : <span className="w-5" />}
+                          ) : <span className="w-5 inline-block" />}
                           <span className="text-xl">{icon}</span>
                           <span className="text-sm font-medium" style={{ color: '#1a2744' }}>{label}</span>
                         </div>
                       </td>
                       {CHANNEL_META.map(({ key: ch }) => {
-                        const on = cellOn(key, ch);
                         const globalOff = !globals[ch];
                         return (
                           <td key={ch} className="px-3 py-3 text-center">
                             <div className="flex justify-center">
-                              <Toggle on={on && !globalOff} disabled={globalOff} onClick={() => toggleCell(key, ch)} />
+                              <Toggle on={cellOn(key, ch) && !globalOff} disabled={globalOff} onClick={() => toggleCell(key, ch)} />
                             </div>
                           </td>
                         );
                       })}
                     </tr>
-                    {isOpen && evList.length > 0 && (
-                      <tr style={{ borderBottom: '1px solid #f5f8ff' }}>
-                        <td colSpan={4} className="px-4 pb-3 pt-0">
-                          <div className="ml-7 rounded-lg overflow-hidden" style={{ border: '1px solid #eef2fb' }}>
-                            {evList.map((e, i) => (
-                              <div key={e.id} className="flex items-center justify-between px-3 py-2.5"
-                                style={{ backgroundColor: '#fafbff', borderTop: i === 0 ? 'none' : '1px solid #eef2fb' }}>
-                                <div>
-                                  <p className="text-xs font-medium" style={{ color: '#1a2744' }}>{e.label}</p>
-                                  <p className="text-[11px] mt-0.5" style={{ color: '#94a3b8' }}>{e.to}</p>
-                                </div>
-                                <Toggle size="sm" on={eventOn(e.id)} onClick={() => toggleEvent(e.id)} />
-                              </div>
-                            ))}
-                          </div>
+
+                    {/* event sub-rows */}
+                    {isOpen && evList.map((e, i) => (
+                      <tr key={e.id} style={{ borderBottom: i === evList.length - 1 ? '1px solid #f5f8ff' : 'none', backgroundColor: '#fafbff' }}>
+                        <td className="pl-12 pr-4 py-2">
+                          <p className="text-xs font-medium" style={{ color: '#1a2744' }}>{e.label}</p>
+                          <p className="text-[11px] mt-0.5" style={{ color: '#94a3b8' }}>{e.to}</p>
                         </td>
+                        {CHANNEL_META.map(({ key: ch }) => {
+                          const disabled = !globals[ch] || !cellOn(key, ch);
+                          return (
+                            <td key={ch} className="px-3 py-2 text-center">
+                              <div className="flex justify-center">
+                                <Toggle size="sm" on={eventOn(e.id, ch) && !disabled} disabled={disabled} onClick={() => toggleEvent(e.id, ch)} />
+                              </div>
+                            </td>
+                          );
+                        })}
                       </tr>
-                    )}
+                    ))}
                   </Fragment>
                 );
               })}
@@ -255,8 +269,8 @@ export default function NotificationsPage() {
       )}
 
       <p className="text-xs" style={{ color: '#94a3b8' }}>
-        หมายเหตุ: เหตุการณ์จะส่งก็ต่อเมื่อ <strong>เปิดเหตุการณ์นั้น</strong> และ <strong>เปิดช่องทางของโมดูล</strong> ทั้งคู่ ·
-        ผู้ใช้แต่ละคนยังปิดรับการแจ้งเตือนส่วนตัวได้จากหน้าโปรไฟล์
+        หมายเหตุ: เหตุการณ์จะส่งทางช่องทางหนึ่งได้ก็ต่อเมื่อเปิดครบทั้ง <strong>ช่องทางทั้งระบบ → ช่องทางของโมดูล → ช่องทางของเหตุการณ์</strong> ·
+        สวิตช์ที่จางคือช่องทางของโมดูลนั้นถูกปิดไว้ · ผู้ใช้แต่ละคนยังปิดรับส่วนตัวได้จากหน้าโปรไฟล์
       </p>
     </div>
   );

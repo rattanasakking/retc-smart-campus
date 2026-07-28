@@ -68,8 +68,7 @@ async function notify(message, opts = {}) {
 
 /** แจ้งเตือนซ่อมใหม่ → admin โมดูล HELPDESK (ในระบบ + Telegram + Email) */
 async function notifyRepairTicket(ticket) {
-  const { notifyUsers, getModuleAdminIds, isEventEnabled } = require('./notification');
-  if (!await isEventEnabled('helpdesk.new')) return null;
+  const { notifyUsers, getModuleAdminIds } = require('./notification');
   const urgencyLabel = { normal: 'ปกติ', urgent: '⚠️ เร่งด่วน', critical: '🚨 วิกฤต' };
   const ids = await getModuleAdminIds('HELPDESK');
   return notifyUsers(ids, {
@@ -78,13 +77,13 @@ async function notifyRepairTicket(ticket) {
     type: 'helpdesk',
     link: '/helpdesk',
     module: 'HELPDESK',
+    event: 'helpdesk.new',
   });
 }
 
 /** แจ้งเตือนของหาย/ของได้ → admin โมดูล LOST_FOUND (ในระบบ + Telegram + Email) */
 async function notifyLostFound(item) {
-  const { notifyUsers, getModuleAdminIds, isEventEnabled } = require('./notification');
-  if (!await isEventEnabled('lostfound.new')) return null;
+  const { notifyUsers, getModuleAdminIds } = require('./notification');
   const typeLabel = item.type === 'lost' ? '🔍 แจ้งของหาย' : '📦 แจ้งของได้';
   const dateS = item.foundDate ? new Date(item.foundDate).toLocaleDateString('th-TH') : '-';
   const ids = await getModuleAdminIds('LOST_FOUND');
@@ -94,6 +93,7 @@ async function notifyLostFound(item) {
     type: 'lostfound',
     link: '/lost-found',
     module: 'LOST_FOUND',
+    event: 'lostfound.new',
   });
 }
 

@@ -10,7 +10,7 @@ const FRONTEND = process.env.FRONTEND_URL ?? 'https://app.retc.ac.th';
  * @param {number[]} userIds
  * @param {{ title: string, message: string, type?: string, link?: string|null }} data
  */
-async function notifyUsers(userIds, { title, message, type = 'general', link = null, module = null }) {
+async function notifyUsers(userIds, { title, message, type = 'general', link = null, module = null, event = null }) {
   const ids = [...new Set((userIds || []).filter((v) => Number.isInteger(v)))];
   if (!ids.length) return;
 
@@ -24,8 +24,8 @@ async function notifyUsers(userIds, { title, message, type = 'general', link = n
   // 2) Telegram + Email (ฟรี ไม่กินโควตา LINE) — เคารพสวิตช์ช่องทาง (ทั้งระบบ + รายโมดูล)
   try {
     const [telegramOn, emailOn] = await Promise.all([
-      channelAllowed('telegram', module),
-      channelAllowed('email', module),
+      eventChannelAllowed('telegram', module, event),
+      eventChannelAllowed('email', module, event),
     ]);
     if (!telegramOn && !emailOn) return;
 
@@ -72,12 +72,27 @@ async function isEventEnabled(eventId) {
 
 /** ส่งช่องทางนี้ให้โมดูลนี้ได้ไหม = เปิดช่องทางทั้งระบบ และ (ถ้าระบุโมดูล) เปิดช่องทางของโมดูลนั้น */
 async function channelAllowed(channel, module) {
+  return eventChannelAllowed(channel, module, null);
+}
+
+/**
+ * ช่องทางนี้ส่งได้ไหม โดยเช็ค 3 ชั้น (ทั้งหมดต้องเปิด):
+ *  1) ช่องทางทั้งระบบ  notify_channel_<channel>
+ *  2) ช่องทางของโมดูล  notify_<channel>_<module>
+ *  3) ช่องทางของเหตุการณ์ notify_evt_<eventId>_<channel>
+ * default ทุกชั้น = เปิด
+ */
+async function eventChannelAllowed(channel, module, eventId) {
   try {
-    const globalRow = await prisma.systemSettings.findUnique({ where: { key: `notify_channel_${channel}` } });
-    if (globalRow && globalRow.value !== 'true') return false;
+    const g = await prisma.systemSettings.findUnique({ where: { key: `notify_channel_${channel}` } });
+    if (g && g.value !== 'true') return false;
     if (module) {
-      const modRow = await prisma.systemSettings.findUnique({ where: { key: `notify_${channel}_${module}` } });
-      if (modRow && modRow.value !== 'true') return false;
+      const m = await prisma.systemSettings.findUnique({ where: { key: `notify_${channel}_${module}` } });
+      if (m && m.value !== 'true') return false;
+    }
+    if (eventId) {
+      const e = await prisma.systemSettings.findUnique({ where: { key: `notify_evt_${eventId}_${channel}` } });
+      if (e && e.value !== 'true') return false;
     }
     return true;
   } catch { return true; }
@@ -105,4 +120,4 @@ async function getModuleAdminIds(module) {
   }
 }
 
-module.exports = { notifyUsers, getModuleAdminIds, isChannelEnabled, channelAllowed, isEventEnabled };
+module.exports = { notifyUsers, getModuleAdminIds, isChannelEnabled, channelAllowed, eventChannelAllowed, isEventEnabled };

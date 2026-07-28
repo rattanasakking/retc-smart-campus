@@ -6,7 +6,7 @@ const auth = require('../middleware/auth');
 const { success, error, paginate } = require('../utils/response');
 const { sendRoomBookingRequestFlex, sendRoomBookingStatusFlex, pushMessage } = require('../services/line');
 const { sendRoomBookingRequestEmail, sendRoomBookingApprovedEmail, sendRoomBookingRejectedEmail, sendMail } = require('../services/email');
-const { notifyUsers, isEventEnabled } = require('../services/notification');
+const { notifyUsers, eventChannelAllowed } = require('../services/notification');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -44,11 +44,11 @@ function bookingWhen(b) {
 
 /** แจ้งเตือนผู้ดูแลห้อง (ถ้ากำหนดไว้) เมื่อมีการจอง */
 async function notifyRoomManager(booking) {
-  if (!await isEventEnabled('room.manager')) return;
   const managerId = booking.room?.managerId;
   if (!managerId) return;
   const mgr = await prisma.user.findUnique({ where: { id: managerId }, select: { name: true, lineUserId: true } });
   if (!mgr) return;
+  const lineOn = await eventChannelAllowed('line', 'ROOM_BOOKING', 'room.manager');
   const { dateS, timeS } = bookingWhen(booking);
   const statusTh = booking.status === 'approved' ? 'อนุมัติแล้ว' : 'รออนุมัติ';
   const text = [
@@ -62,11 +62,11 @@ async function notifyRoomManager(booking) {
     booking.attendees ? `👥 ${booking.attendees} คน` : null,
     `📌 สถานะ: ${statusTh}`,
   ].filter(Boolean).join('\n');
-  if (mgr.lineUserId) pushMessage(mgr.lineUserId, [{ type: 'text', text }]).catch(() => {});
+  if (lineOn && mgr.lineUserId) pushMessage(mgr.lineUserId, [{ type: 'text', text }]).catch(() => {});
   notifyUsers([managerId], {
     title: `🏢 มีการจองห้องที่คุณดูแล (${booking.room?.name ?? ''})`,
     message: `${booking.title} — ${booking.user?.name ?? ''} (${dateS} ${timeS})`,
-    type: 'room', link: '/room/manage/bookings', module: 'ROOM_BOOKING',
+    type: 'room', link: '/room/manage/bookings', module: 'ROOM_BOOKING', event: 'room.manager',
   });
 }
 
@@ -81,7 +81,7 @@ const STATUS_ICON = {
 /** แจ้งผู้ดูแลห้อง + admin โมดูลจองห้องประชุม เมื่อสถานะการจองเปลี่ยน */
 async function notifyStaffStatusChange(booking, status, note, actorId) {
   if (!booking) return;
-  if (!await isEventEnabled('room.status_staff')) return;
+  const lineOn = await eventChannelAllowed('line', 'ROOM_BOOKING', 'room.status_staff');
   const { dateS, timeS } = bookingWhen(booking);
   const text = [
     `\n${STATUS_ICON[status] ?? '🔔'} อัปเดตสถานะการจองห้องประชุม`,
@@ -106,20 +106,19 @@ async function notifyStaffStatusChange(booking, status, note, actorId) {
   recipients.delete(booking.userId);  // ผู้จองได้รับจาก notifyBookerStatus แล้ว
 
   // LINE (เฉพาะผู้ที่เชื่อม LINE)
-  for (const lineUserId of recipients.values()) {
+  if (lineOn) for (const lineUserId of recipients.values()) {
     if (lineUserId) pushMessage(lineUserId, [{ type: 'text', text }]).catch(() => {});
   }
   // แจ้งเตือนในระบบ (กระดิ่ง) — ทุกคนไม่ว่าจะเชื่อม LINE หรือไม่
   notifyUsers([...recipients.keys()], {
     title: `${STATUS_ICON[status] ?? '🔔'} การจอง${booking.room?.name ?? ''} · ${STATUS_TH[status] ?? status}`,
     message: `${booking.title} — ${booking.user?.name ?? ''} (${dateS} ${timeS})`,
-    type: 'room', link: '/room/manage/bookings', module: 'ROOM_BOOKING',
+    type: 'room', link: '/room/manage/bookings', module: 'ROOM_BOOKING', event: 'room.status_staff',
   });
 }
 
 /** แจ้งเตือนหัวหน้างานอาคารสถานที่เมื่อมีการขอจัดโต๊ะ (LINE + อีเมลสำรอง) */
 async function notifyFacilitiesHead(booking) {
-  if (!await isEventEnabled('room.table')) return;
   if (!booking.tableLayout) {
     console.log(`[facilitiesHead] booking#${booking.id}: ไม่มีการจัดโต๊ะ → ข้าม`);
     return;
@@ -132,6 +131,11 @@ async function notifyFacilitiesHead(booking) {
   }
   const head = await prisma.user.findUnique({ where: { id: headId }, select: { name: true, lineUserId: true, email: true } });
   if (!head) { console.warn(`[facilitiesHead] ไม่พบผู้ใช้ id=${headId}`); return; }
+
+  const [lineOn, emailOn] = await Promise.all([
+    eventChannelAllowed('line', 'ROOM_BOOKING', 'room.table'),
+    eventChannelAllowed('email', 'ROOM_BOOKING', 'room.table'),
+  ]);
 
   const { dateS, timeS } = bookingWhen(booking);
   const text = [
@@ -150,7 +154,7 @@ async function notifyFacilitiesHead(booking) {
 
   console.log(`[facilitiesHead] booking#${booking.id} layout="${booking.tableLayout}" → ${head.name} (LINE:${head.lineUserId ? 'yes' : 'no'}, email:${head.email ? 'yes' : 'no'})`);
 
-  if (head.lineUserId) {
+  if (lineOn && head.lineUserId) {
     pushMessage(head.lineUserId, [{ type: 'text', text }])
       .then((r) => console.log('[facilitiesHead] LINE ส่งสำเร็จ', JSON.stringify(r)))
       .catch((e) => console.error('[facilitiesHead] LINE error:', e.message));
@@ -158,7 +162,7 @@ async function notifyFacilitiesHead(booking) {
     console.warn(`[facilitiesHead] ${head.name} ยังไม่ได้เชื่อม LINE — ส่งทางอีเมลแทน`);
   }
 
-  if (head.email) {
+  if (emailOn && head.email) {
     sendMail({
       to: head.email,
       subject: `🪑 คำร้องขอจัดโต๊ะห้องประชุม — ${booking.room?.name ?? ''} (${dateS})`,
@@ -169,7 +173,7 @@ async function notifyFacilitiesHead(booking) {
   notifyUsers([headId], {
     title: `🪑 คำร้องขอจัดโต๊ะ — ${booking.room?.name ?? ''}`,
     message: `${booking.tableLayout} · ${booking.title} — ${booking.user?.name ?? ''} (${dateS} ${timeS})`,
-    type: 'room', link: '/room/manage/bookings', module: 'ROOM_BOOKING',
+    type: 'room', link: '/room/manage/bookings', module: 'ROOM_BOOKING', event: 'room.table',
   });
 }
 
@@ -207,12 +211,15 @@ async function getRoomAdmins() {
 
 /** ส่งแจ้งเตือนไปหา admin ทุกคนเมื่อมีการจองใหม่ */
 async function notifyAdminsNewBooking(booking) {
-  if (!await isEventEnabled('room.new')) return;
   const frontendUrl = process.env.FRONTEND_URL ?? 'https://app.retc.ac.th';
+  const [lineOn, emailOn] = await Promise.all([
+    eventChannelAllowed('line', 'ROOM_BOOKING', 'room.new'),
+    eventChannelAllowed('email', 'ROOM_BOOKING', 'room.new'),
+  ]);
   const admins = await getRoomAdmins();
   for (const admin of admins) {
-    if (admin.lineUserId) sendRoomBookingRequestFlex(admin.lineUserId, booking).catch(() => {});
-    if (admin.email) {
+    if (lineOn && admin.lineUserId) sendRoomBookingRequestFlex(admin.lineUserId, booking).catch(() => {});
+    if (emailOn && admin.email) {
       sendRoomBookingRequestEmail({
         to: admin.email, adminName: admin.name, booking,
         approveUrl: `${frontendUrl}/api/room/bookings/${booking.id}/approve-link?token=${Buffer.from(`${booking.id}:approve`).toString('base64')}`,
@@ -224,22 +231,25 @@ async function notifyAdminsNewBooking(booking) {
   notifyUsers(admins.map((a) => a.id), {
     title: `🚪 มีคำขอจองห้อง ${booking.room?.name ?? ''} (รออนุมัติ)`,
     message: `${booking.title} — ${booking.user?.name ?? ''} (${dateS} ${timeS})`,
-    type: 'room', link: '/room/manage/bookings', module: 'ROOM_BOOKING',
+    type: 'room', link: '/room/manage/bookings', module: 'ROOM_BOOKING', event: 'room.new',
   });
 }
 
 /** ส่งแจ้งเตือนไปหาผู้จองเมื่อสถานะเปลี่ยน */
 async function notifyBookerStatus(booking, status, note) {
-  if (!await isEventEnabled('room.status_user')) return;
   const bookerLine  = booking.user?.lineUserId;
   const bookerEmail = booking.user?.email;
+  const [lineOn, emailOn] = await Promise.all([
+    eventChannelAllowed('line', 'ROOM_BOOKING', 'room.status_user'),
+    eventChannelAllowed('email', 'ROOM_BOOKING', 'room.status_user'),
+  ]);
   console.log(`[notifyBookerStatus] bookingId=${booking.id} status=${status} lineUserId=${bookerLine ?? 'MISSING'} email=${bookerEmail ?? 'MISSING'}`);
-  if (bookerLine) {
+  if (lineOn && bookerLine) {
     sendRoomBookingStatusFlex(bookerLine, booking, status, note)
       .then(r => console.log(`[notifyBookerStatus] LINE sent ok, result:`, JSON.stringify(r)))
       .catch(e => console.error('[notifyBookerStatus] LINE error:', e.message));
   }
-  if (bookerEmail) {
+  if (emailOn && bookerEmail) {
     const emailFn = status === 'approved' ? sendRoomBookingApprovedEmail : sendRoomBookingRejectedEmail;
     emailFn({ to: bookerEmail, booking, note }).catch(e => console.error('[notifyBookerStatus] email error:', e.message));
   }
@@ -248,7 +258,7 @@ async function notifyBookerStatus(booking, status, note) {
     notifyUsers([booking.userId], {
       title: `${status === 'approved' ? '✅ อนุมัติ' : '❌ ปฏิเสธ'}การจอง ${booking.room?.name ?? ''}`,
       message: `${booking.title} (${dateS} ${timeS})${note ? ` — ${note}` : ''}`,
-      type: 'room', link: '/room', module: 'ROOM_BOOKING',
+      type: 'room', link: '/room', module: 'ROOM_BOOKING', event: 'room.status_user',
     });
   }
 }
