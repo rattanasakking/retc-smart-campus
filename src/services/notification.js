@@ -10,7 +10,7 @@ const FRONTEND = process.env.FRONTEND_URL ?? 'https://app.retc.ac.th';
  * @param {number[]} userIds
  * @param {{ title: string, message: string, type?: string, link?: string|null }} data
  */
-async function notifyUsers(userIds, { title, message, type = 'general', link = null }) {
+async function notifyUsers(userIds, { title, message, type = 'general', link = null, module = null }) {
   const ids = [...new Set((userIds || []).filter((v) => Number.isInteger(v)))];
   if (!ids.length) return;
 
@@ -21,11 +21,11 @@ async function notifyUsers(userIds, { title, message, type = 'general', link = n
     });
   } catch (e) { console.error('[notifyUsers] in-app error:', e.message); }
 
-  // 2) Telegram + Email (ฟรี ไม่กินโควตา LINE) — เคารพสวิตช์เปิด/ปิดช่องทาง
+  // 2) Telegram + Email (ฟรี ไม่กินโควตา LINE) — เคารพสวิตช์ช่องทาง (ทั้งระบบ + รายโมดูล)
   try {
     const [telegramOn, emailOn] = await Promise.all([
-      isChannelEnabled('telegram'),
-      isChannelEnabled('email'),
+      channelAllowed('telegram', module),
+      channelAllowed('email', module),
     ]);
     if (!telegramOn && !emailOn) return;
 
@@ -54,11 +54,24 @@ function escapeHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-/** ช่องทางแจ้งเตือนเปิดอยู่ไหม (line/telegram/email) — default: เปิด */
+/** ช่องทางแจ้งเตือน (global) เปิดอยู่ไหม (line/telegram/email) — default: เปิด */
 async function isChannelEnabled(channel) {
   try {
     const row = await prisma.systemSettings.findUnique({ where: { key: `notify_channel_${channel}` } });
     return row ? row.value === 'true' : true;
+  } catch { return true; }
+}
+
+/** ส่งช่องทางนี้ให้โมดูลนี้ได้ไหม = เปิดช่องทางทั้งระบบ และ (ถ้าระบุโมดูล) เปิดช่องทางของโมดูลนั้น */
+async function channelAllowed(channel, module) {
+  try {
+    const globalRow = await prisma.systemSettings.findUnique({ where: { key: `notify_channel_${channel}` } });
+    if (globalRow && globalRow.value !== 'true') return false;
+    if (module) {
+      const modRow = await prisma.systemSettings.findUnique({ where: { key: `notify_${channel}_${module}` } });
+      if (modRow && modRow.value !== 'true') return false;
+    }
+    return true;
   } catch { return true; }
 }
 
@@ -84,4 +97,4 @@ async function getModuleAdminIds(module) {
   }
 }
 
-module.exports = { notifyUsers, getModuleAdminIds, isChannelEnabled };
+module.exports = { notifyUsers, getModuleAdminIds, isChannelEnabled, channelAllowed };

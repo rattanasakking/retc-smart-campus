@@ -65,7 +65,7 @@ async function notifyRoomManager(booking) {
   notifyUsers([managerId], {
     title: `🏢 มีการจองห้องที่คุณดูแล (${booking.room?.name ?? ''})`,
     message: `${booking.title} — ${booking.user?.name ?? ''} (${dateS} ${timeS})`,
-    type: 'room', link: '/room/manage/bookings',
+    type: 'room', link: '/room/manage/bookings', module: 'ROOM_BOOKING',
   });
 }
 
@@ -111,7 +111,7 @@ async function notifyStaffStatusChange(booking, status, note, actorId) {
   notifyUsers([...recipients.keys()], {
     title: `${STATUS_ICON[status] ?? '🔔'} การจอง${booking.room?.name ?? ''} · ${STATUS_TH[status] ?? status}`,
     message: `${booking.title} — ${booking.user?.name ?? ''} (${dateS} ${timeS})`,
-    type: 'room', link: '/room/manage/bookings',
+    type: 'room', link: '/room/manage/bookings', module: 'ROOM_BOOKING',
   });
 }
 
@@ -166,7 +166,7 @@ async function notifyFacilitiesHead(booking) {
   notifyUsers([headId], {
     title: `🪑 คำร้องขอจัดโต๊ะ — ${booking.room?.name ?? ''}`,
     message: `${booking.tableLayout} · ${booking.title} — ${booking.user?.name ?? ''} (${dateS} ${timeS})`,
-    type: 'room', link: '/room/manage/bookings',
+    type: 'room', link: '/room/manage/bookings', module: 'ROOM_BOOKING',
   });
 }
 
@@ -220,7 +220,7 @@ async function notifyAdminsNewBooking(booking) {
   notifyUsers(admins.map((a) => a.id), {
     title: `🚪 มีคำขอจองห้อง ${booking.room?.name ?? ''} (รออนุมัติ)`,
     message: `${booking.title} — ${booking.user?.name ?? ''} (${dateS} ${timeS})`,
-    type: 'room', link: '/room/manage/bookings',
+    type: 'room', link: '/room/manage/bookings', module: 'ROOM_BOOKING',
   });
 }
 
@@ -243,7 +243,7 @@ async function notifyBookerStatus(booking, status, note) {
     notifyUsers([booking.userId], {
       title: `${status === 'approved' ? '✅ อนุมัติ' : '❌ ปฏิเสธ'}การจอง ${booking.room?.name ?? ''}`,
       message: `${booking.title} (${dateS} ${timeS})${note ? ` — ${note}` : ''}`,
-      type: 'room', link: '/room',
+      type: 'room', link: '/room', module: 'ROOM_BOOKING',
     });
   }
 }

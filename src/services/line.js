@@ -24,6 +24,13 @@ async function isLineChannelEnabled() {
   } catch { return true; }
 }
 
+/** ส่ง LINE ได้ไหม = เปิดช่องทาง LINE ทั้งระบบ และ (ถ้าระบุโมดูล) เปิด LINE ของโมดูลนั้น */
+async function isLineAllowed(module) {
+  if (!await isLineChannelEnabled()) return false;
+  if (module && !await isModuleNotifyEnabled(module)) return false;
+  return true;
+}
+
 /**
  * ส่ง LINE Notify message
  * @param {string} token  — LINE Notify token
@@ -70,6 +77,7 @@ async function notifyRepairTicket(ticket) {
     message: `${ticket.title} — ${urgencyLabel[ticket.urgency] ?? ticket.urgency} @ ${ticket.location} (โดย ${ticket.reporter?.name ?? '-'})`,
     type: 'helpdesk',
     link: '/helpdesk',
+    module: 'HELPDESK',
   });
 }
 
@@ -85,6 +93,7 @@ async function notifyLostFound(item) {
     message: `สถานที่: ${item.foundLocation ?? '-'} · วันที่: ${dateS} (โดย ${item.reporter?.name ?? '-'})`,
     type: 'lostfound',
     link: '/lost-found',
+    module: 'LOST_FOUND',
   });
 }
 
@@ -135,8 +144,8 @@ async function replyMessage(replyToken, messages) {
   }
 }
 
-async function pushMessage(lineUserId, messages) {
-  if (!await isLineChannelEnabled()) return null;   // ปิดช่องทาง LINE ทั้งระบบ
+async function pushMessage(lineUserId, messages, module) {
+  if (!await isLineAllowed(module)) return null;   // ปิดช่องทาง LINE (ทั้งระบบ/รายโมดูล)
   const token = await getChannelAccessToken();
   if (!token) { console.warn('[LINE Bot] pushMessage: no channel access token configured'); return null; }
   if (!lineUserId) { console.warn('[LINE Bot] pushMessage: lineUserId is empty'); return null; }
@@ -253,7 +262,7 @@ async function sendLeaveRequestFlex(approverLineId, request) {
     },
   };
 
-  return pushMessage(approverLineId, [flex]);
+  return pushMessage(approverLineId, [flex], 'LEAVE');
 }
 
 async function sendLeaveStatusNotify(lineUserId, request, status, comment) {
@@ -307,7 +316,7 @@ async function sendLeaveStatusNotify(lineUserId, request, status, comment) {
     },
   };
 
-  return pushMessage(lineUserId, [flex]);
+  return pushMessage(lineUserId, [flex], 'LEAVE');
 }
 
 // ─── Room Booking Flex messages ───────────────────────────────────────────────
@@ -397,7 +406,7 @@ async function sendRoomBookingRequestFlex(adminLineId, booking) {
     },
   };
 
-  return pushMessage(adminLineId, [flex]);
+  return pushMessage(adminLineId, [flex], 'ROOM_BOOKING');
 }
 
 /** แจ้งผู้จองเมื่อได้รับการอนุมัติหรือปฏิเสธ */
@@ -453,7 +462,7 @@ async function sendRoomBookingStatusFlex(lineUserId, booking, status, note) {
     },
   };
 
-  return pushMessage(lineUserId, [flex]);
+  return pushMessage(lineUserId, [flex], 'ROOM_BOOKING');
 }
 
 // ─── WorkLog Flex messages ─────────────────────────────────────────────────────
@@ -542,7 +551,7 @@ async function sendWorkLogFlex(supervisorLineId, log) {
       },
     },
   };
-  return pushMessage(supervisorLineId, [flex]);
+  return pushMessage(supervisorLineId, [flex], 'WORK_LOG');
 }
 
 /** แจ้งผู้บันทึกเมื่อหัวหน้าเปลี่ยนสถานะ */
@@ -610,7 +619,7 @@ async function sendWorkLogStatusFlex(userLineId, log, status, comment, approverN
       },
     },
   };
-  return pushMessage(userLineId, [flex]);
+  return pushMessage(userLineId, [flex], 'WORK_LOG');
 }
 
 module.exports = {

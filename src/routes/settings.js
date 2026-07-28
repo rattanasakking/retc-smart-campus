@@ -523,42 +523,54 @@ router.delete('/academic-years/:id', superAdmin, async (req, res, next) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const NOTIFY_MODULES = ['DUTY', 'WORK_LOG', 'EQUIPMENT', 'HELPDESK', 'ROOM_BOOKING', 'LOST_FOUND', 'PERSONNEL', 'LEAVE'];
-const NOTIFY_KEY = (m) => `notify_line_${m}`;
+const NOTIFY_CHANNELS = ['line', 'telegram', 'email'];
+const NOTIFY_KEY = (channel, module) => `notify_${channel}_${module}`;
 
-// GET /api/settings/notifications
+// GET /api/settings/notifications  → { DUTY: { line, telegram, email }, ... }
 router.get('/notifications', auth, async (req, res, next) => {
   try {
     const rows = await prisma.systemSettings.findMany({
-      where: { key: { startsWith: 'notify_line_' } },
+      where: { OR: NOTIFY_CHANNELS.map((c) => ({ key: { startsWith: `notify_${c}_` } })) },
     });
+    const map = Object.fromEntries(rows.map((r) => [r.key, r.value === 'true']));
     const result = {};
     for (const m of NOTIFY_MODULES) {
-      const row = rows.find((r) => r.key === NOTIFY_KEY(m));
-      result[m] = row ? row.value === 'true' : true; // default on
+      result[m] = {};
+      for (const c of NOTIFY_CHANNELS) {
+        const k = NOTIFY_KEY(c, m);
+        result[m][c] = k in map ? map[k] : true; // default on
+      }
     }
     res.json(success(result));
   } catch (e) { next(e); }
 });
 
-// PUT /api/settings/notifications  — body: { DUTY: true, HELPDESK: false, ... }
+// PUT /api/settings/notifications  — body: { DUTY: { line: true, telegram: false, email: true }, ... }
 router.put('/notifications', superAdmin, async (req, res, next) => {
   try {
     const updates = req.body;
-    if (typeof updates !== 'object' || Array.isArray(updates)) {
+    if (typeof updates !== 'object' || Array.isArray(updates) || updates === null) {
       return res.status(400).json(error('Body ต้องเป็น object'));
     }
-    const entries = Object.entries(updates).filter(([k]) => NOTIFY_MODULES.includes(k));
-    if (entries.length === 0) return res.status(400).json(error('ไม่มีข้อมูลที่จะอัปเดต'));
 
-    await prisma.$transaction(
-      entries.map(([module, enabled]) =>
-        prisma.systemSettings.upsert({
-          where:  { key: NOTIFY_KEY(module) },
-          update: { value: String(Boolean(enabled)) },
-          create: { key: NOTIFY_KEY(module), value: String(Boolean(enabled)), group: 'notifications' },
-        })
-      )
-    );
+    const ops = [];
+    for (const [module, channels] of Object.entries(updates)) {
+      if (!NOTIFY_MODULES.includes(module)) continue;
+      if (typeof channels !== 'object' || channels === null) continue;
+      for (const c of NOTIFY_CHANNELS) {
+        if (channels[c] === undefined) continue;
+        const key = NOTIFY_KEY(c, module);
+        const value = String(Boolean(channels[c]));
+        ops.push(prisma.systemSettings.upsert({
+          where:  { key },
+          update: { value },
+          create: { key, value, group: 'notifications' },
+        }));
+      }
+    }
+    if (ops.length === 0) return res.status(400).json(error('ไม่มีข้อมูลที่จะอัปเดต'));
+
+    await prisma.$transaction(ops);
     res.json(success(null, 'บันทึกการตั้งค่าการแจ้งเตือนสำเร็จ'));
   } catch (e) { next(e); }
 });

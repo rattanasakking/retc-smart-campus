@@ -3,42 +3,47 @@ import { useEffect, useState } from 'react';
 import { Bell, Check, AlertTriangle, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 
-interface NotifySettings { [module: string]: boolean }
-interface Channels { line: boolean; telegram: boolean; email: boolean }
+type Channel = 'line' | 'telegram' | 'email';
+type ChannelRow = Record<Channel, boolean>;
+type Matrix = Record<string, ChannelRow>;
 
-const MODULE_META: { key: string; label: string; icon: string; desc: string }[] = [
-  { key: 'DUTY',         label: 'เวรรับนักเรียน',    icon: '🎓', desc: 'แจ้งเมื่อมีการบันทึกเวร/ขาดเวร' },
-  { key: 'WORK_LOG',     label: 'บันทึกปฏิบัติงาน', icon: '📋', desc: 'แจ้งเมื่อมีการส่ง/อนุมัติรายงาน' },
-  { key: 'EQUIPMENT',    label: 'ยืมครุภัณฑ์',       icon: '🖥️', desc: 'แจ้งเมื่อมีคำขอยืม/คืนครุภัณฑ์' },
-  { key: 'HELPDESK',     label: 'แจ้งซ่อม',          icon: '🔧', desc: 'แจ้งเมื่อมีการแจ้งซ่อมใหม่' },
-  { key: 'ROOM_BOOKING', label: 'จองห้องประชุม',     icon: '🏫', desc: 'แจ้งเมื่อมีการอนุมัติ/ปฏิเสธการจอง' },
-  { key: 'LOST_FOUND',   label: 'ของหาย-ของได้',     icon: '🔍', desc: 'แจ้งเมื่อมีการรายงานของหาย/ของได้' },
-  { key: 'PERSONNEL',    label: 'บุคลากร',           icon: '👤', desc: 'แจ้งเมื่อมีการเปลี่ยนแปลงข้อมูลบุคลากร' },
-  { key: 'LEAVE',        label: 'การลา',             icon: '📅', desc: 'แจ้งเมื่อมีคำขอลาใหม่หรืออัปเดตสถานะ' },
+const MODULE_META: { key: string; label: string; icon: string }[] = [
+  { key: 'DUTY',         label: 'เวรรับนักเรียน',    icon: '🎓' },
+  { key: 'WORK_LOG',     label: 'บันทึกปฏิบัติงาน', icon: '📋' },
+  { key: 'EQUIPMENT',    label: 'ยืมครุภัณฑ์',       icon: '🖥️' },
+  { key: 'HELPDESK',     label: 'แจ้งซ่อม',          icon: '🔧' },
+  { key: 'ROOM_BOOKING', label: 'จองห้องประชุม',     icon: '🏫' },
+  { key: 'LOST_FOUND',   label: 'ของหาย-ของได้',     icon: '🔍' },
+  { key: 'PERSONNEL',    label: 'บุคลากร',           icon: '👤' },
+  { key: 'LEAVE',        label: 'การลา',             icon: '📅' },
 ];
 
-const CHANNEL_META: { key: keyof Channels; label: string; icon: string; color: string; desc: string }[] = [
-  { key: 'line',     label: 'LINE',     icon: '🟢', color: '#06c755', desc: 'ส่งผ่าน LINE Bot (Push/Flex) — มีโควตา 300 ข้อความ/เดือน แผนฟรี' },
-  { key: 'telegram', label: 'Telegram', icon: '🔵', color: '#229ED9', desc: 'ส่งผ่าน Telegram — ฟรี ไม่จำกัด (แนะนำเป็นช่องทางหลัก)' },
-  { key: 'email',    label: 'Email',    icon: '📧', color: '#1d6ae5', desc: 'ส่งผ่านอีเมล — ต้องตั้งค่า Email provider ที่หน้าการเชื่อมต่อภายนอก' },
+const CHANNEL_META: { key: Channel; label: string; icon: string; color: string }[] = [
+  { key: 'line',     label: 'LINE',     icon: '🟢', color: '#06c755' },
+  { key: 'telegram', label: 'Telegram', icon: '🔵', color: '#229ED9' },
+  { key: 'email',    label: 'Email',    icon: '📧', color: '#1d6ae5' },
 ];
 
-function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
+function Toggle({ on, disabled, onClick, size = 'md' }: { on: boolean; disabled?: boolean; onClick: () => void; size?: 'sm' | 'md' }) {
+  const w = size === 'sm' ? 'h-5 w-9' : 'h-6 w-11';
+  const knob = size === 'sm' ? 'h-4 w-4' : 'h-5 w-5';
+  const travel = size === 'sm' ? 'translate-x-4' : 'translate-x-5';
   return (
     <button
       onClick={onClick}
-      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${on ? 'bg-green-500' : 'bg-gray-300'}`}
+      disabled={disabled}
+      className={`relative inline-flex ${w} flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'} ${on ? 'bg-green-500' : 'bg-gray-300'}`}
       role="switch"
       aria-checked={on}
     >
-      <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${on ? 'translate-x-5' : 'translate-x-0'}`} />
+      <span className={`pointer-events-none inline-block ${knob} transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${on ? travel : 'translate-x-0'}`} />
     </button>
   );
 }
 
 export default function NotificationsPage() {
-  const [settings, setSettings] = useState<NotifySettings>({});
-  const [channels, setChannels] = useState<Channels>({ line: true, telegram: true, email: true });
+  const [matrix, setMatrix]     = useState<Matrix>({});
+  const [globals, setGlobals]   = useState<ChannelRow>({ line: true, telegram: true, email: true });
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
   const [toast, setToast]       = useState('');
@@ -51,13 +56,13 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     Promise.all([
-      api.get<{ data: NotifySettings }>('/settings/notifications'),
+      api.get<{ data: Matrix }>('/settings/notifications'),
       api.get<{ data: Record<string, string> }>('/settings/general'),
     ])
       .then(([mods, gen]) => {
-        setSettings(mods.data ?? {});
+        setMatrix(mods.data ?? {});
         const m = gen.data ?? {};
-        setChannels({
+        setGlobals({
           line:     m['notify_channel_line']     !== 'false',
           telegram: m['notify_channel_telegram'] !== 'false',
           email:    m['notify_channel_email']    !== 'false',
@@ -67,18 +72,34 @@ export default function NotificationsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const toggleModule  = (key: string) => setSettings((p) => ({ ...p, [key]: !p[key] }));
-  const toggleChannel = (key: keyof Channels) => setChannels((p) => ({ ...p, [key]: !p[key] }));
+  const cellOn = (module: string, ch: Channel) => matrix[module]?.[ch] !== false; // default true
+
+  const toggleCell = (module: string, ch: Channel) =>
+    setMatrix((prev) => {
+      const ex = prev[module];
+      const row: ChannelRow = {
+        line:     ex?.line     !== false,
+        telegram: ex?.telegram !== false,
+        email:    ex?.email    !== false,
+      };
+      return { ...prev, [module]: { ...row, [ch]: !row[ch] } };
+    });
+
+  const toggleGlobal = (ch: Channel) => setGlobals((p) => ({ ...p, [ch]: !p[ch] }));
 
   const save = async () => {
     setSaving(true);
     try {
+      const payload: Matrix = {};
+      for (const { key } of MODULE_META) {
+        payload[key] = { line: cellOn(key, 'line'), telegram: cellOn(key, 'telegram'), email: cellOn(key, 'email') };
+      }
       await Promise.all([
-        api.put('/settings/notifications', settings),
+        api.put('/settings/notifications', payload),
         api.put('/settings/general', {
-          notify_channel_line:     String(channels.line),
-          notify_channel_telegram: String(channels.telegram),
-          notify_channel_email:    String(channels.email),
+          notify_channel_line:     String(globals.line),
+          notify_channel_telegram: String(globals.telegram),
+          notify_channel_email:    String(globals.email),
         }),
       ]);
       showToast('บันทึกการตั้งค่าสำเร็จ');
@@ -101,80 +122,69 @@ export default function NotificationsPage() {
           <Bell className="w-5 h-5" style={{ color: '#1d6ae5' }} />
           <h1 className="text-lg font-bold" style={{ color: '#1a2744' }}>การแจ้งเตือน</h1>
         </div>
-        <button
-          onClick={save}
-          disabled={saving || loading}
-          className="btn-primary flex items-center gap-1.5 text-sm py-2"
-        >
+        <button onClick={save} disabled={saving || loading} className="btn-primary flex items-center gap-1.5 text-sm py-2">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
           บันทึก
         </button>
       </div>
 
+      <div className="rounded-xl px-4 py-3 text-xs" style={{ backgroundColor: '#f0f4ff', color: '#4a6080' }}>
+        กำหนดได้ว่าแต่ละโมดูลจะส่งการแจ้งเตือนผ่านช่องทางไหนบ้าง · สวิตช์บนหัวคอลัมน์ = เปิด/ปิดทั้งช่องทางสำหรับทุกโมดูล ·
+        🔔 การแจ้งเตือนในระบบ (กระดิ่ง) เปิดตลอด ฟรี
+      </div>
+
       {loading ? (
         <div className="bg-white rounded-xl py-12 text-center text-sm" style={{ border: '1px solid #dce6f9', color: '#94a3b8' }}>
-          <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
-          กำลังโหลด...
+          <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" /> กำลังโหลด...
         </div>
       ) : (
-        <>
-          {/* ── ช่องทางการแจ้งเตือน ─────────────────────────── */}
-          <div>
-            <div className="mb-2">
-              <p className="text-sm font-semibold" style={{ color: '#1a2744' }}>ช่องทางการแจ้งเตือน</p>
-              <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>เปิด/ปิดแต่ละช่องทางสำหรับทั้งระบบ — 🔔 การแจ้งเตือนในระบบ (กระดิ่ง) เปิดตลอด ฟรี</p>
-            </div>
-            <div className="bg-white rounded-xl overflow-hidden" style={{ border: '1px solid #dce6f9' }}>
-              <div className="divide-y" style={{ borderColor: '#f0f4ff' }}>
-                {CHANNEL_META.map(({ key, label, icon, color, desc }) => (
-                  <div key={key} className="flex items-center justify-between px-5 py-4 hover:bg-[#fafbff] transition-colors">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">{icon}</span>
-                      <div>
-                        <p className="text-sm font-semibold" style={{ color }}>{label}</p>
-                        <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>{desc}</p>
-                      </div>
+        <div className="bg-white rounded-xl overflow-x-auto" style={{ border: '1px solid #dce6f9' }}>
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ borderBottom: '1px solid #dce6f9', backgroundColor: '#f8faff' }}>
+                <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: '#94a3b8' }}>โมดูล</th>
+                {CHANNEL_META.map(({ key, label, icon, color }) => (
+                  <th key={key} className="px-3 py-3 text-center">
+                    <div className="flex flex-col items-center gap-1.5">
+                      <span className="text-xs font-semibold flex items-center gap-1" style={{ color }}>
+                        <span>{icon}</span> {label}
+                      </span>
+                      <Toggle size="sm" on={globals[key]} onClick={() => toggleGlobal(key)} />
                     </div>
-                    <Toggle on={channels[key]} onClick={() => toggleChannel(key)} />
-                  </div>
+                  </th>
                 ))}
-              </div>
-            </div>
-          </div>
-
-          {/* ── รายโมดูล (เฉพาะ LINE) ────────────────────────── */}
-          <div>
-            <div className="mb-2">
-              <p className="text-sm font-semibold" style={{ color: '#1a2744' }}>การแจ้งเตือน LINE รายโมดูล</p>
-              <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>
-                เลือกว่าจะให้ส่ง LINE โมดูลไหนบ้าง {!channels.line && <span style={{ color: '#dc2626' }}>(ปิดช่องทาง LINE อยู่ — จะไม่ส่งทุกโมดูล)</span>}
-              </p>
-            </div>
-            <div className={`bg-white rounded-xl overflow-hidden transition-opacity ${channels.line ? '' : 'opacity-50'}`} style={{ border: '1px solid #dce6f9' }}>
-              <div className="divide-y" style={{ borderColor: '#f0f4ff' }}>
-                {MODULE_META.map(({ key, label, icon, desc }) => {
-                  const enabled = settings[key] !== false; // default true
-                  return (
-                    <div key={key} className="flex items-center justify-between px-5 py-4 hover:bg-[#fafbff] transition-colors">
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl">{icon}</span>
-                        <div>
-                          <p className="text-sm font-medium" style={{ color: '#1a2744' }}>{label}</p>
-                          <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>{desc}</p>
-                        </div>
-                      </div>
-                      <Toggle on={enabled} onClick={() => toggleModule(key)} />
+              </tr>
+            </thead>
+            <tbody>
+              {MODULE_META.map(({ key, label, icon }) => (
+                <tr key={key} style={{ borderBottom: '1px solid #f5f8ff' }} className="hover:bg-[#fafbff] transition-colors">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xl">{icon}</span>
+                      <span className="text-sm font-medium" style={{ color: '#1a2744' }}>{label}</span>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </>
+                  </td>
+                  {CHANNEL_META.map(({ key: ch }) => {
+                    const on = cellOn(key, ch);
+                    const globalOff = !globals[ch];
+                    return (
+                      <td key={ch} className="px-3 py-3 text-center">
+                        <div className="flex justify-center">
+                          <Toggle on={on && !globalOff} disabled={globalOff} onClick={() => toggleCell(key, ch)} />
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       <p className="text-xs" style={{ color: '#94a3b8' }}>
-        หมายเหตุ: ผู้ใช้แต่ละคนสามารถปิดรับการแจ้งเตือนส่วนตัวได้จากหน้าโปรไฟล์ของตนเอง
+        หมายเหตุ: หากปิดสวิตช์บนหัวคอลัมน์ ช่องทางนั้นจะไม่ส่งเลยทุกโมดูล (คอลัมน์จะจางลง) ·
+        ผู้ใช้แต่ละคนยังปิดรับการแจ้งเตือนส่วนตัวได้จากหน้าโปรไฟล์
       </p>
     </div>
   );
