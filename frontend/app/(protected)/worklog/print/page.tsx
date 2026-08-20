@@ -1,8 +1,9 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, Printer, Loader2 } from 'lucide-react';
+import { ChevronLeft, Printer, Loader2, FileDown } from 'lucide-react';
 import { api } from '@/lib/api';
+import { downloadWorklogPdf } from '@/lib/worklogPdf';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,6 +55,7 @@ export default function WorklogPdfPage() {
   const [year, setYear]   = useState(String(now.getFullYear() + 543));
   const [data, setData]   = useState<PdfData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [apiError, setApiError] = useState('');
   const [schoolName, setSchoolName] = useState('');
   const [logoUrl, setLogoUrl]       = useState('');
@@ -78,6 +80,16 @@ export default function WorklogPdfPage() {
 
   const handlePrint = () => window.print();
 
+  const handleDownload = async () => {
+    if (!data || data.logs.length === 0) return;
+    setDownloading(true);
+    try {
+      await downloadWorklogPdf(data, { schoolName, logoUrl, posLabel });
+    } catch (e) {
+      setApiError((e as Error).message || 'สร้าง PDF ไม่สำเร็จ');
+    } finally { setDownloading(false); }
+  };
+
   const YEARS = Array.from({ length: 5 }, (_, i) => String(now.getFullYear() + 543 - i));
 
 
@@ -87,21 +99,27 @@ export default function WorklogPdfPage() {
       <style>{`
         @page { size: A4 portrait; margin: 15mm 15mm 20mm 15mm; }
         @media print {
-          html, body { width: 210mm; }
+          html, body { width: 210mm; background: #fff !important; }
           body * { visibility: hidden !important; }
           #print-area, #print-area * { visibility: visible !important; }
+          /* absolute (ไม่ใช่ fixed) เพื่อให้เนื้อหาไหลขึ้นหน้าใหม่ได้ครบทุกรายการ */
           #print-area {
-            position: fixed; inset: 0;
+            position: absolute !important; left: 0; top: 0; width: 100%;
+            border: none !important; box-shadow: none !important;
+            padding: 0 !important; margin: 0 !important;
             font-family: 'Sarabun', sans-serif;
             font-size: 10pt;
           }
           .no-print { display: none !important; }
-          table { border-collapse: collapse; width: 100%; font-size: 9.5pt; }
+          table { border-collapse: collapse; width: 100%; font-size: 9.5pt; page-break-inside: auto; }
+          thead { display: table-header-group; }   /* หัวตารางซ้ำทุกหน้า */
+          tr    { page-break-inside: avoid; page-break-after: auto; }
           th, td { border: 1px solid #333; padding: 3px 5px; }
           th { background: #1a2744 !important; color: #fff !important;
                -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           tr:nth-child(even) td { background: #f8faff !important;
                -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .sign-section { page-break-inside: avoid; }
         }
       `}</style>
 
@@ -122,7 +140,13 @@ export default function WorklogPdfPage() {
           </select>
           <button onClick={handlePrint} disabled={!data || data.logs.length === 0}
             className="btn-primary flex items-center gap-2 text-sm disabled:opacity-50">
-            <Printer className="w-4 h-4" /> พิมพ์ / บันทึก PDF
+            <Printer className="w-4 h-4" /> พิมพ์
+          </button>
+          <button onClick={handleDownload} disabled={!data || data.logs.length === 0 || downloading}
+            className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
+            style={{ backgroundColor: '#fee2e2', color: '#dc2626' }}>
+            {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+            ดาวน์โหลด PDF
           </button>
         </div>
         {loading && (
@@ -212,7 +236,7 @@ export default function WorklogPdfPage() {
           </table>
 
           {/* Signature section */}
-          <div className="grid grid-cols-3 gap-6 mt-8 text-sm text-center">
+          <div className="sign-section grid grid-cols-3 gap-6 mt-8 text-sm text-center">
             <SignBox title="ผู้รายงาน" name={data.user.name} position={posLabel(data.user.position)} />
             <SignBox title="หัวหน้างาน / ผู้ตรวจ" />
             <SignBox title="ผู้บริหาร / ผู้อนุมัติ" />
