@@ -121,7 +121,6 @@ export async function downloadWorklogPdf(data: WlData, meta: Meta) {
   const drawUserInfo = () => {
     const rows: [string, string][] = [
       ['ชื่อ-สกุล', data.user.name || '—'],
-      ['เลขบัตรประชาชน', data.user.nationalId ?? '—'],
       ['ตำแหน่ง', meta.posLabel(data.user.position) || '—'],
       ['ประเภทบุคลากร', data.user.personnelType?.name ?? '—'],
     ];

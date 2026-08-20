@@ -185,7 +185,6 @@ export default function WorklogPdfPage() {
           {/* User info */}
           <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 mb-6 text-sm">
             <InfoRow label="ชื่อ-สกุล"       value={data.user.name} />
-            <InfoRow label="เลขบัตรประชาชน" value={data.user.nationalId ?? '—'} />
             <InfoRow label="ตำแหน่ง"        value={posLabel(data.user.position)} />
             <InfoRow label="ประเภทบุคลากร"  value={data.user.personnelType?.name ?? '—'} />
             {data.user.division  && <InfoRow label="ฝ่าย"  value={data.user.division.name}  />}
