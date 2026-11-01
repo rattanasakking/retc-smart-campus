@@ -370,8 +370,11 @@ router.put('/menu-order', superAdmin, async (req, res, next) => {
 
 // ─── แอป/ระบบภายนอก (หน้า "แอปทั้งหมด") ─────────────────────────────────────
 // เก็บเป็น JSON ใน system_settings key 'external_apps' → { groups: [...], apps: [...] }
+// ลำดับของ groups = ลำดับที่แสดงในหน้า /apps; กลุ่ม id '__internal' แทนส่วน "ระบบในวิทยาลัย" (โมดูลในระบบ)
+const INTERNAL_GROUP_ID = '__internal';
 const EXTERNAL_APPS_DEFAULT = {
   groups: [
+    { id: INTERNAL_GROUP_ID, name: 'ระบบในวิทยาลัย', color: '#1d6ae5' },
     { id: 'vec',     name: 'ระบบของ สอศ.',        color: '#b91c1c' },
     { id: 'college', name: 'ระบบของวิทยาลัย',     color: '#1d6ae5' },
   ],
@@ -388,12 +391,17 @@ const APP_ROLES = ['admin', 'executive', 'teacher', 'staff'];
 const isHttpUrl = (s) => { try { const u = new URL(s); return u.protocol === 'http:' || u.protocol === 'https:'; } catch { return false; } };
 const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 const hexColor = (v, fallback) => (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v : fallback);
+// ไอคอนต้องเป็นไฟล์ที่อัปโหลดผ่าน /external-apps/upload-icon เท่านั้น
+const APP_ICON_RE = /^\/uploads\/app-icons\/[A-Za-z0-9_-]+\.(png|jpg|webp)$/;
 
 function cleanExternalApps(body) {
+  const seen = new Set();
   const groups = (Array.isArray(body?.groups) ? body.groups : [])
     .map((g) => ({ id: str(g?.id, 40), name: str(g?.name, 80), color: hexColor(g?.color, '#1d6ae5') }))
-    .filter((g) => g.id && g.name);
-  const groupIds = new Set(groups.map((g) => g.id));
+    .filter((g) => g.id && g.name && !seen.has(g.id) && seen.add(g.id));
+  // ส่วน "ระบบในวิทยาลัย" ต้องมีเสมอ (ค่าเก่าที่ยังไม่มี → ไว้บนสุด)
+  if (!seen.has(INTERNAL_GROUP_ID)) groups.unshift({ id: INTERNAL_GROUP_ID, name: 'ระบบในวิทยาลัย', color: '#1d6ae5' });
+  const groupIds = new Set(groups.map((g) => g.id).filter((id) => id !== INTERNAL_GROUP_ID));
   const apps = (Array.isArray(body?.apps) ? body.apps : [])
     .map((a) => ({
       id:      str(a?.id, 40),
@@ -402,6 +410,7 @@ function cleanExternalApps(body) {
       url:     str(a?.url, 500),
       color:   hexColor(a?.color, '#1d6ae5'),
       glyph:   str(a?.glyph, 4),
+      icon:    typeof a?.icon === 'string' && APP_ICON_RE.test(a.icon) ? a.icon : '',
       groupId: groupIds.has(a?.groupId) ? a.groupId : null,
       roles:   (Array.isArray(a?.roles) ? a.roles : []).filter((r) => APP_ROLES.includes(r)),
     }))
@@ -446,6 +455,25 @@ router.put('/external-apps', superAdmin, async (req, res, next) => {
       create: { key: 'external_apps', value: JSON.stringify(clean), group: 'general', label: 'แอป/ระบบภายนอก' },
     });
     res.json(success(clean, 'บันทึกรายการแอปสำเร็จ'));
+  } catch (e) { next(e); }
+});
+
+// POST /api/settings/external-apps/upload-icon  (superAdmin)
+// Body: { imageData: 'data:image/png;base64,...' } — รับเฉพาะ PNG/JPG/WebP (ไม่รับ SVG เพราะฝังสคริปต์ได้)
+const ICON_MIME_EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
+router.post('/external-apps/upload-icon', superAdmin, async (req, res, next) => {
+  try {
+    const m = /^data:(image\/[a-z]+);base64,([A-Za-z0-9+/=]+)$/.exec(req.body?.imageData || '');
+    const ext = m && ICON_MIME_EXT[m[1]];
+    if (!ext) return res.status(400).json(error('รองรับเฉพาะไฟล์ PNG, JPG หรือ WebP'));
+    const buffer = Buffer.from(m[2], 'base64');
+    if (buffer.length > 300 * 1024) return res.status(400).json(error('ไฟล์ไอคอนต้องไม่เกิน 300 KB'));
+
+    const name = `icon_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const dir  = path.join(__dirname, '..', '..', 'uploads', 'app-icons');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, name), buffer);
+    res.json(success({ url: `/uploads/app-icons/${name}` }, 'อัปโหลดไอคอนสำเร็จ'));
   } catch (e) { next(e); }
 });
 

@@ -1,11 +1,11 @@
 'use client';
 import { useEffect, useState } from 'react';
 import {
-  LayoutGrid, Plus, Trash2, Pencil, CheckCircle2, Loader2, X, ExternalLink, FolderPlus,
+  LayoutGrid, Plus, Trash2, Pencil, CheckCircle2, Loader2, X, ExternalLink, FolderPlus, ChevronUp, ChevronDown, Upload, Lock,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
-  APP_ROLE_LABEL, glyphOf, type ExternalApp, type ExternalAppGroup, type ExternalAppsData,
+  APP_ROLE_LABEL, INTERNAL_GROUP_ID, glyphOf, resizeIcon, type ExternalApp, type ExternalAppGroup, type ExternalAppsData,
 } from '@/lib/launcher';
 
 const COLORS = ['#1d6ae5', '#0369a1', '#0d9068', '#16a34a', '#b45309', '#c2410c', '#dc2626', '#b91c1c', '#7c3aed', '#db2777', '#4a6080', '#0f1e3c'];
@@ -27,6 +27,18 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (c: string)
   );
 }
 
+function AppIcon({ app, size = 9 }: { app: ExternalApp; size?: number }) {
+  const px = size * 4;
+  return app.icon ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={app.icon} alt="" className="rounded-lg object-cover flex-shrink-0 bg-white" style={{ width: px, height: px, border: '1px solid #dce6f9' }} />
+  ) : (
+    <div className="rounded-lg flex items-center justify-center flex-shrink-0 text-white text-[10px] font-bold" style={{ width: px, height: px, backgroundColor: app.color }}>
+      {glyphOf(app.name || 'App', app.glyph)}
+    </div>
+  );
+}
+
 function AppForm({ initial, groups, onCancel, onSave }: {
   initial: ExternalApp; groups: ExternalAppGroup[];
   onCancel: () => void; onSave: (a: ExternalApp) => void;
@@ -34,6 +46,20 @@ function AppForm({ initial, groups, onCancel, onSave }: {
   const [a, setA] = useState<ExternalApp>(initial);
   const [err, setErr] = useState('');
   const set = <K extends keyof ExternalApp>(k: K, v: ExternalApp[K]) => setA((p) => ({ ...p, [k]: v }));
+  const [uploading, setUploading] = useState(false);
+
+  async function pickIcon(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return setErr('กรุณาเลือกไฟล์รูปภาพ');
+    setUploading(true); setErr('');
+    try {
+      const imageData = await resizeIcon(file);
+      const r = await api.post<{ data: { url: string } }>('/settings/external-apps/upload-icon', { imageData });
+      set('icon', r.data.url);
+    } catch (ex: any) { setErr(ex.message || 'อัปโหลดไอคอนไม่สำเร็จ'); } finally { setUploading(false); }
+  }
 
   function submit() {
     if (!a.name.trim()) return setErr('กรุณากรอกชื่อแอป');
@@ -46,6 +72,21 @@ function AppForm({ initial, groups, onCancel, onSave }: {
 
   return (
     <div className="rounded-xl p-4 space-y-3" style={{ backgroundColor: '#f5f8ff', border: '1px solid #dce6f9' }}>
+      {/* Icon */}
+      <div className="flex items-center gap-3">
+        <AppIcon app={a} size={14} />
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="btn-secondary text-xs flex items-center gap-1.5 cursor-pointer">
+            {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+            {a.icon ? 'เปลี่ยนไอคอน' : 'อัปโหลดไอคอน'}
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" className="hidden" onChange={pickIcon} disabled={uploading} />
+          </label>
+          {a.icon && (
+            <button type="button" onClick={() => set('icon', '')} className="text-xs" style={{ color: '#dc2626' }}>ใช้ตัวย่อแทน</button>
+          )}
+          <p className="w-full text-[11px]" style={{ color: '#94a3b8' }}>รูปจะถูกย่อเป็นสี่เหลี่ยมจัตุรัส 128×128 px อัตโนมัติ · ถ้าไม่ใส่ จะใช้ตัวย่อบนพื้นสี</p>
+        </div>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <label className="block">
           <span className="text-xs font-medium" style={{ color: '#4a6080' }}>ชื่อแอป *</span>
@@ -67,7 +108,7 @@ function AppForm({ initial, groups, onCancel, onSave }: {
           <span className="text-xs font-medium" style={{ color: '#4a6080' }}>กลุ่ม</span>
           <select value={a.groupId ?? ''} onChange={(e) => set('groupId', e.target.value || null)} className="input-field mt-1">
             <option value="">ระบบอื่น ๆ (ไม่มีกลุ่ม)</option>
-            {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+            {groups.filter((g) => g.id !== INTERNAL_GROUP_ID).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
           </select>
         </label>
         <div>
@@ -131,6 +172,11 @@ export default function AppsSettingsPage() {
   const addGroup = () => change({ ...data, groups: [...data.groups, { id: newId(), name: 'กลุ่มใหม่', color: '#1d6ae5' }] });
   const updateGroup = (id: string, patch: Partial<ExternalAppGroup>) =>
     change({ ...data, groups: data.groups.map((g) => g.id === id ? { ...g, ...patch } : g) });
+  const moveGroup = (i: number, dir: -1 | 1) => {
+    const j = i + dir; if (j < 0 || j >= data.groups.length) return;
+    const groups = [...data.groups]; [groups[i], groups[j]] = [groups[j], groups[i]];
+    change({ ...data, groups });
+  };
   const removeGroup = (id: string) => {
     if (!confirm('ลบกลุ่มนี้? แอปในกลุ่มจะย้ายไป "ระบบอื่น ๆ"')) return;
     change({ groups: data.groups.filter((g) => g.id !== id), apps: data.apps.map((a) => a.groupId === id ? { ...a, groupId: null } : a) });
@@ -174,24 +220,44 @@ export default function AppsSettingsPage() {
           {/* Groups */}
           <div className="card space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold" style={{ color: '#1a2744' }}>กลุ่มแอป</h2>
+              <div>
+                <h2 className="text-sm font-semibold" style={{ color: '#1a2744' }}>กลุ่มแอป และลำดับการแสดง</h2>
+                <p className="text-[11px] mt-0.5" style={{ color: '#94a3b8' }}>เรียงตามลำดับที่จะแสดงในหน้า &quot;แอปทั้งหมด&quot; · &quot;ระบบอื่น ๆ&quot; อยู่ท้ายสุดเสมอ</p>
+              </div>
               <button onClick={addGroup} className="flex items-center gap-1 text-xs font-medium" style={{ color: '#1d6ae5' }}>
                 <FolderPlus className="w-3.5 h-3.5" /> เพิ่มกลุ่ม
               </button>
             </div>
             {data.groups.length === 0 && <p className="text-xs" style={{ color: '#94a3b8' }}>ยังไม่มีกลุ่ม</p>}
-            {data.groups.map((g) => (
+            {data.groups.map((g, i) => {
+              const internal = g.id === INTERNAL_GROUP_ID;
+              return (
               <div key={g.id} className="rounded-lg p-3 space-y-2" style={{ backgroundColor: '#f5f8ff', border: '1px solid #dce6f9' }}>
                 <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold w-4 text-center flex-shrink-0" style={{ color: '#94a3b8' }}>{i + 1}</span>
                   <span className="w-1.5 h-6 rounded-full flex-shrink-0" style={{ backgroundColor: g.color }} />
                   <input value={g.name} onChange={(e) => updateGroup(g.id, { name: e.target.value })} className="input-field flex-1 min-w-0" maxLength={80} />
-                  <button onClick={() => removeGroup(g.id)} className="p-2 rounded-lg hover:bg-red-50 flex-shrink-0" aria-label="ลบกลุ่ม">
-                    <Trash2 className="w-4 h-4 text-red-500" />
-                  </button>
+                  <div className="flex flex-col flex-shrink-0">
+                    <button onClick={() => moveGroup(i, -1)} disabled={i === 0} className="p-0.5 rounded hover:bg-white disabled:opacity-30" aria-label="เลื่อนกลุ่มขึ้น">
+                      <ChevronUp className="w-4 h-4" style={{ color: '#4a6080' }} />
+                    </button>
+                    <button onClick={() => moveGroup(i, 1)} disabled={i === data.groups.length - 1} className="p-0.5 rounded hover:bg-white disabled:opacity-30" aria-label="เลื่อนกลุ่มลง">
+                      <ChevronDown className="w-4 h-4" style={{ color: '#4a6080' }} />
+                    </button>
+                  </div>
+                  {internal ? (
+                    <span className="p-2 flex-shrink-0" title="ส่วนโมดูลในระบบ — ลบไม่ได้"><Lock className="w-4 h-4" style={{ color: '#94a3b8' }} /></span>
+                  ) : (
+                    <button onClick={() => removeGroup(g.id)} className="p-2 rounded-lg hover:bg-red-50 flex-shrink-0" aria-label="ลบกลุ่ม">
+                      <Trash2 className="w-4 h-4 text-red-500" />
+                    </button>
+                  )}
                 </div>
+                {internal && <p className="text-[11px] pl-6" style={{ color: '#94a3b8' }}>โมดูลในระบบนี้ (เวร, แจ้งซ่อม, การลา ฯลฯ) — แสดงตามสิทธิ์ผู้ใช้อัตโนมัติ</p>}
                 <ColorPicker value={g.color} onChange={(c) => updateGroup(g.id, { color: c })} />
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Apps */}
@@ -217,9 +283,7 @@ export default function AppsSettingsPage() {
               <AppForm key={a.id} initial={a} groups={data.groups} onCancel={() => setEditingId(null)} onSave={saveApp} />
             ) : (
               <div key={a.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg" style={{ backgroundColor: '#f5f8ff', border: '1px solid #dce6f9' }}>
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-white text-[10px] font-bold" style={{ backgroundColor: a.color }}>
-                  {glyphOf(a.name, a.glyph)}
-                </div>
+                <AppIcon app={a} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate" style={{ color: '#1a2744' }}>{a.name}</p>
                   <p className="text-[11px] truncate" style={{ color: '#94a3b8' }}>

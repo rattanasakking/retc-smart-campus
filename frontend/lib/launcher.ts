@@ -1,10 +1,34 @@
 // หน้า "แอปทั้งหมด" — รวมทางเข้าโมดูลในระบบ + ลิงก์ระบบภายนอกที่ผู้ดูแลกำหนด
 
+// ลำดับของ groups = ลำดับที่แสดงในหน้า /apps; id นี้แทนส่วน "ระบบในวิทยาลัย" (โมดูลในระบบ — ลบไม่ได้)
+export const INTERNAL_GROUP_ID = '__internal';
+
 export interface ExternalAppGroup { id: string; name: string; color: string }
 export interface ExternalApp {
   id: string; name: string; desc: string; url: string;
   color: string; glyph: string; groupId: string | null;
+  icon?: string;   // '/uploads/app-icons/...' — ว่าง = ใช้ตัวย่อ (glyph) บนพื้นสี
   roles: string[]; // ว่าง = ทุกบทบาทเห็น
+}
+
+// ย่อรูปเป็นสี่เหลี่ยมจัตุรัส 128px (ตัดกึ่งกลาง) → data URL สำหรับอัปโหลดไอคอนแอป
+export function resizeIcon(file: File, size = 128): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(img.width, img.height);
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { URL.revokeObjectURL(url); return reject(new Error('canvas')); }
+      ctx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('ไม่สามารถอ่านไฟล์รูปได้')); };
+    img.src = url;
+  });
 }
 export interface ExternalAppsData { groups: ExternalAppGroup[]; apps: ExternalApp[] }
 

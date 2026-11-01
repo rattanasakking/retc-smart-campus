@@ -7,7 +7,7 @@ import {
 import { TOKEN_KEY, USER_KEY } from '@/lib/api';
 import { MAIN_NAV, type MainNavItem } from '@/lib/mainMenu';
 import {
-  INTERNAL_APP_META, loadLauncherPrefs, saveLauncherPrefs, glyphOf,
+  INTERNAL_APP_META, INTERNAL_GROUP_ID, loadLauncherPrefs, saveLauncherPrefs, glyphOf,
   type ExternalAppsData, type LauncherPrefs,
 } from '@/lib/launcher';
 
@@ -28,11 +28,12 @@ interface Tile {
   bg: string;
   Icon?: MainNavItem['Icon'];
   glyph?: string;
+  icon?: string;          // รูปไอคอนที่อัปโหลด (แอปภายนอก)
   badge?: number;
   section: string;        // id ของกลุ่มที่แสดง
 }
 
-const INTERNAL_SECTION = '__internal';
+const INTERNAL_SECTION = INTERNAL_GROUP_ID;
 const OTHER_SECTION = '__other';
 
 // fetch ที่ไม่เด้งไปหน้า login เมื่อ token หมดอายุ (หน้านี้เป็นหน้า public)
@@ -51,8 +52,11 @@ function AppTile({ tile, pinned, hidden, editing, onPin, onHide }: {
   const body = (
     <>
       <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 relative"
-        style={{ backgroundColor: tile.external ? tile.color : tile.bg }}>
-        {tile.Icon
+        style={{ backgroundColor: tile.icon ? '#ffffff' : tile.external ? tile.color : tile.bg, border: tile.icon ? '1px solid #eef2f9' : undefined }}>
+        {tile.icon
+          // eslint-disable-next-line @next/next/no-img-element
+          ? <img src={tile.icon} alt="" className="w-full h-full rounded-xl object-cover" />
+          : tile.Icon
           ? <tile.Icon className="w-5 h-5" style={{ color: tile.color }} />
           : <span className="text-white font-bold text-[11px] tracking-tight leading-none">{tile.glyph}</span>}
         {!!tile.badge && (
@@ -177,10 +181,10 @@ export default function AppsPage() {
           color: meta.color, bg: meta.bg, Icon: n.Icon, badge: badges[n.href], section: INTERNAL_SECTION,
         };
       });
-    const groupIds = new Set(external.groups.map((g) => g.id));
+    const groupIds = new Set(external.groups.map((g) => g.id).filter((id) => id !== INTERNAL_SECTION));
     const ext: Tile[] = external.apps.map((a) => ({
       key: `ex:${a.id}`, name: a.name, desc: a.desc, href: a.url, external: true, locked: false,
-      color: a.color, bg: a.color, glyph: glyphOf(a.name, a.glyph),
+      color: a.color, bg: a.color, glyph: glyphOf(a.name, a.glyph), icon: a.icon || undefined,
       section: a.groupId && groupIds.has(a.groupId) ? a.groupId : OTHER_SECTION,
     }));
     return [...internal, ...ext];
@@ -196,8 +200,9 @@ export default function AppsPage() {
     .map((k) => visible.find((t) => t.key === k))
     .filter((t): t is Tile => !!t && !prefs.hidden.includes(t.key));
 
+  // ลำดับกลุ่มตามที่ผู้ดูแลตั้งไว้ (ถ้าไม่มี "ระบบในวิทยาลัย" ในรายการ → ไว้บนสุด); "ระบบอื่น ๆ" อยู่ท้ายเสมอ
   const sections = [
-    { id: INTERNAL_SECTION, name: 'ระบบในวิทยาลัย', color: '#1d6ae5' },
+    ...(external.groups.some((g) => g.id === INTERNAL_SECTION) ? [] : [{ id: INTERNAL_SECTION, name: 'ระบบในวิทยาลัย', color: '#1d6ae5' }]),
     ...external.groups,
     { id: OTHER_SECTION, name: 'ระบบอื่น ๆ', color: '#64748b' },
   ];
