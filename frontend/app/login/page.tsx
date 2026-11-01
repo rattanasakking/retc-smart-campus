@@ -9,6 +9,16 @@ const ERROR_MESSAGES: Record<string, string> = {
   server_error: 'เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง',
 };
 
+// ?next=/path → กลับไปหน้าที่ตั้งใจเข้าหลัง login (รับเฉพาะ path ในเว็บนี้ กัน open redirect)
+// เก็บไว้ใน sessionStorage ด้วย เพราะ login ผ่าน LINE/Google จะวนกลับมาโดยไม่มี ?next
+const NEXT_KEY = 'retc_login_next';
+const safeNext = (p: string | null) => (p && p.startsWith('/') && !p.startsWith('//') && !p.startsWith('/\\') ? p : null);
+function afterLoginPath() {
+  let saved: string | null = null;
+  try { saved = sessionStorage.getItem(NEXT_KEY); sessionStorage.removeItem(NEXT_KEY); } catch { /* */ }
+  return safeNext(new URLSearchParams(window.location.search).get('next')) ?? safeNext(saved) ?? '/dashboard';
+}
+
 export default function LoginPage() {
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
@@ -21,6 +31,11 @@ export default function LoginPage() {
     const params    = new URLSearchParams(window.location.search);
     const token     = params.get('token');
     const errorCode = params.get('error');
+    const next      = safeNext(params.get('next'));
+    try {
+      if (next) sessionStorage.setItem(NEXT_KEY, next);
+      else if (!token) sessionStorage.removeItem(NEXT_KEY); // เปิดหน้า login ใหม่โดยไม่มี next → ล้างค่าเก่า
+    } catch { /* */ }
 
     if (token) {
       localStorage.setItem(TOKEN_KEY, token);
@@ -31,7 +46,7 @@ export default function LoginPage() {
           if (data.success) localStorage.setItem(USER_KEY, JSON.stringify(data.data));
         })
         .catch(() => {})
-        .finally(() => router.push('/dashboard'));
+        .finally(() => router.push(afterLoginPath()));
       return;
     }
 
@@ -56,7 +71,7 @@ export default function LoginPage() {
       if (data.success) {
         localStorage.setItem(TOKEN_KEY, data.data.token);
         localStorage.setItem(USER_KEY,  JSON.stringify(data.data.user));
-        router.push('/dashboard');
+        router.push(afterLoginPath());
       } else {
         setErrorMsg(data.message || 'เข้าสู่ระบบไม่สำเร็จ');
       }

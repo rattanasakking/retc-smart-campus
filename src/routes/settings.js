@@ -1,5 +1,6 @@
 const express = require('express');
 const bcrypt  = require('bcrypt');
+const jwt     = require('jsonwebtoken');
 const path    = require('path');
 const fs      = require('fs');
 const { PrismaClient } = require('@prisma/client');
@@ -414,14 +415,23 @@ async function readExternalApps() {
   try { return cleanExternalApps(JSON.parse(row.value)); } catch { return EXTERNAL_APPS_DEFAULT; }
 }
 
-// GET /api/settings/external-apps  — ผู้ใช้ทั่วไปเห็นเฉพาะแอปที่ role ตัวเองเข้าถึงได้; ?all=1 (admin) ได้ทั้งหมด
-router.get('/external-apps', auth, async (req, res, next) => {
+// GET /api/settings/external-apps  — public (หน้า /apps เปิดได้โดยไม่ต้อง login)
+// ไม่ได้ login → เห็นเฉพาะแอปที่เปิดให้ทุกคน; login แล้ว → เห็นตาม role; ?all=1 (admin) ได้ทั้งหมด
+router.get('/external-apps', async (req, res, next) => {
   try {
     const data = await readExternalApps();
-    const u = await prisma.user.findUnique({ where: { id: req.user.id }, select: { role: true, isSuperAdmin: true } });
+    let u = null;
+    const h = req.headers.authorization;
+    if (h && h.startsWith('Bearer ')) {
+      try {
+        const payload = jwt.verify(h.slice(7), process.env.JWT_SECRET);
+        u = await prisma.user.findUnique({ where: { id: payload.id }, select: { role: true, isSuperAdmin: true, isActive: true } });
+        if (!u?.isActive) u = null;
+      } catch { u = null; } // token หมดอายุ/ไม่ถูกต้อง → ถือเป็นผู้เยี่ยมชม
+    }
     const isAdmin = u?.isSuperAdmin || u?.role === 'admin';
     if (req.query.all === '1' && isAdmin) return res.json(success(data));
-    const apps = data.apps.filter((a) => a.roles.length === 0 || a.roles.includes(u?.role));
+    const apps = data.apps.filter((a) => a.roles.length === 0 || (u && a.roles.includes(u.role)));
     res.json(success({ groups: data.groups, apps }));
   } catch (e) { next(e); }
 });

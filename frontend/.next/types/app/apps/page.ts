@@ -1,8 +1,8 @@
-// File: C:\Users\Rattanasak Phasuk\retc-smart-campus\frontend\app\(protected)\apps\page.tsx
-import * as entry from '../../../../../app/(protected)/apps/page.js'
+// File: C:\Users\Rattanasak Phasuk\retc-smart-campus\frontend\app\apps\page.tsx
+import * as entry from '../../../../app/apps/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
-type TEntry = typeof import('../../../../../app/(protected)/apps/page.js')
+type TEntry = typeof import('../../../../app/apps/page.js')
 
 // Check that the entry is a valid entry
 checkFields<Diff<{

@@ -13,7 +13,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     const token = localStorage.getItem(TOKEN_KEY);
-    if (!token) router.replace('/login');
+    if (!token) router.replace(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
     else setReady(true);
   }, [router]);
 
