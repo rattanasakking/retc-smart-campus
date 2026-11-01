@@ -8,7 +8,7 @@ import {
 import { api, USER_KEY } from '@/lib/api';
 import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
 import ThaiAddressSelect from '@/components/ui/ThaiAddressSelect';
-import { NAME_PREFIXES, splitNamePrefix, joinNamePrefix } from '@/lib/namePrefix';
+import { NAME_PREFIXES, splitNamePrefix, nameFromForm } from '@/lib/namePrefix';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -295,11 +295,7 @@ export default function PersonnelPage() {
       setFormError('กรุณากรอก ชื่อ, อีเมล, และบทบาท');
       return;
     }
-    // พิมพ์คำนำหน้าซ้ำมาในช่องชื่อ (เช่น เลือก "นาย" แล้วพิมพ์ "นายสมชาย") → ตัดออกก่อนรวม
-    const typed = splitNamePrefix(form.name);
-    const fullName = form.namePrefix
-      ? joinNamePrefix(form.namePrefix, typed.prefix ? typed.rest : form.name)
-      : form.name.trim();
+    const fullName = nameFromForm(form.namePrefix, form.name);
     if (!editTarget && (!form.password || form.password.length < 8)) {
       setFormError('รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร');
       return;

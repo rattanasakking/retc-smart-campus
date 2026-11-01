@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { api, USER_KEY } from '@/lib/api';
 import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
+import { NAME_PREFIXES, splitNamePrefix, nameFromForm } from '@/lib/namePrefix';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -38,7 +39,8 @@ interface Pagination { total: number; page: number; limit: number; totalPages: n
 
 interface FormData {
   employeeId:   string;
-  name:         string;
+  namePrefix:   string; // คำนำหน้า (รวมเข้า name ตอนบันทึก)
+  name:         string; // ชื่อ-นามสกุล ไม่รวมคำนำหน้า
   nickname:     string;
   email:        string;
   phone:        string;
@@ -91,7 +93,7 @@ const POSITION_LABEL: Record<string, string> = Object.fromEntries(
 );
 
 const EMPTY_FORM: FormData = {
-  employeeId: '', name: '', nickname: '', email: '', phone: '', birthDate: '',
+  employeeId: '', namePrefix: '', name: '', nickname: '', email: '', phone: '', birthDate: '',
   role: 'staff', position: '', divisionId: '', workUnitId: '', departmentId: '',
   isSuperAdmin: false, startDate: '', password: '', confirmPassword: '',
 };
@@ -116,7 +118,7 @@ function Avatar({ name, size = 8 }: { name: string; size?: number }) {
       className={`w-${size} h-${size} rounded-full flex items-center justify-center text-white font-bold flex-shrink-0`}
       style={{ backgroundColor: '#2979ff', fontSize: size <= 8 ? 13 : 18 }}
     >
-      {name.charAt(0)}
+      {splitNamePrefix(name).rest.charAt(0)}
     </div>
   );
 }
@@ -375,7 +377,8 @@ function FormModal({
     editUser
       ? {
           employeeId:      editUser.employeeId,
-          name:            editUser.name,
+          namePrefix:      splitNamePrefix(editUser.name).prefix,
+          name:            splitNamePrefix(editUser.name).rest,
           nickname:        editUser.nickname ?? '',
           email:           editUser.email,
           phone:           editUser.phone ?? '',
@@ -427,7 +430,7 @@ function FormModal({
     try {
       const body = {
         employeeId:   form.employeeId.trim(),
-        name:         form.name.trim(),
+        name:         nameFromForm(form.namePrefix, form.name),
         nickname:     form.nickname.trim() || null,
         email:        form.email.trim(),
         phone:        form.phone.trim() || null,
@@ -531,14 +534,23 @@ function FormModal({
                   />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium mb-1" style={{ color: '#4a6080' }}>ชื่อ-นามสกุล *</label>
-                <input
-                  className="input-field"
-                  value={form.name}
-                  onChange={(e) => set('name', e.target.value)}
-                  placeholder="ชื่อ นามสกุล"
-                />
+              <div className="grid grid-cols-[110px_1fr] gap-3">
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: '#4a6080' }}>คำนำหน้า</label>
+                  <select className="input-field" value={form.namePrefix} onChange={(e) => set('namePrefix', e.target.value)}>
+                    <option value="">ไม่ระบุ</option>
+                    {NAME_PREFIXES.map((p) => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: '#4a6080' }}>ชื่อ-นามสกุล *</label>
+                  <input
+                    className="input-field"
+                    value={form.name}
+                    onChange={(e) => set('name', e.target.value)}
+                    placeholder="ชื่อ นามสกุล"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1" style={{ color: '#4a6080' }}>Email *</label>

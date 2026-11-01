@@ -3,6 +3,7 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api, USER_KEY, TOKEN_KEY } from '@/lib/api';
 import { Camera, Lock, Save, X, CheckCircle, Bell, Link2, Unlink, LogOut } from 'lucide-react';
+import { NAME_PREFIXES, splitNamePrefix, nameFromForm } from '@/lib/namePrefix';
 
 interface UserProfile {
   id: number; name: string; email: string; employeeId: string;
@@ -40,7 +41,8 @@ function ProfileContent() {
   const [toastErr, setToastErr] = useState('');
   const imgRef = useRef<HTMLInputElement>(null);
 
-  const [form, setForm]       = useState({ name: '', phone: '', nickname: '' });
+  // name = ชื่อ-นามสกุล ไม่รวมคำนำหน้า (รวมกลับตอนบันทึก)
+  const [form, setForm]       = useState({ namePrefix: '', name: '', phone: '', nickname: '' });
   const [avatarPreview, setAvatarPreview] = useState('');
   const [avatarBase64, setAvatarBase64]   = useState('');
 
@@ -59,7 +61,8 @@ function ProfileContent() {
       .then(r => {
         if (r.success) {
           setProfile(r.data);
-          setForm({ name: r.data.name, phone: r.data.phone ?? '', nickname: r.data.nickname ?? '' });
+          const { prefix, rest } = splitNamePrefix(r.data.name);
+          setForm({ namePrefix: prefix, name: rest, phone: r.data.phone ?? '', nickname: r.data.nickname ?? '' });
           if (r.data.avatar) setAvatarPreview(r.data.avatar);
           setNotifyForm({
             notifyByLine:  r.data.notifyByLine  !== false,
@@ -138,7 +141,7 @@ function ProfileContent() {
     setSaving(true);
     try {
       const body: Record<string, string> = {
-        name: form.name.trim(),
+        name: nameFromForm(form.namePrefix, form.name),
         phone: form.phone,
         nickname: form.nickname,
       };
@@ -223,7 +226,7 @@ function ProfileContent() {
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-3xl font-bold text-white"
                      style={{ backgroundColor: '#2979ff' }}>
-                  {profile?.name?.charAt(0)}
+                  {splitNamePrefix(profile?.name ?? '').rest.charAt(0)}
                 </div>
               )}
             </div>
@@ -259,10 +262,19 @@ function ProfileContent() {
         </div>
 
         {/* Editable fields */}
-        <div>
-          <label className="block text-xs font-medium text-[#4a6080] mb-1">ชื่อ-นามสกุล <span className="text-red-500">*</span></label>
-          <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-            className="input-field" placeholder="ชื่อ นามสกุล" required />
+        <div className="grid grid-cols-[110px_1fr] gap-3">
+          <div>
+            <label className="block text-xs font-medium text-[#4a6080] mb-1">คำนำหน้า</label>
+            <select value={form.namePrefix} onChange={e => setForm(p => ({ ...p, namePrefix: e.target.value }))} className="input-field">
+              <option value="">ไม่ระบุ</option>
+              {NAME_PREFIXES.map((pf) => <option key={pf} value={pf}>{pf}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#4a6080] mb-1">ชื่อ-นามสกุล <span className="text-red-500">*</span></label>
+            <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+              className="input-field" placeholder="ชื่อ นามสกุล" required />
+          </div>
         </div>
         <div>
           <label className="block text-xs font-medium text-[#4a6080] mb-1">ชื่อเล่น</label>

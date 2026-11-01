@@ -18,3 +18,12 @@ export function joinNamePrefix(prefix: string, rest: string): string {
   const r = rest.trim();
   return prefix ? `${prefix}${r}` : r;
 }
+
+// รวมค่าจากฟอร์ม (dropdown + ช่องชื่อ) เป็น name ที่บันทึก
+// ถ้าเลือกคำนำหน้าแล้วยังพิมพ์คำนำหน้าซ้ำในช่องชื่อ (เช่น "นายสมชาย") → ตัดออก ไม่ให้เป็น "นายนายสมชาย"
+// ไม่เลือกคำนำหน้า → ใช้ตามที่พิมพ์
+export function nameFromForm(prefix: string, typed: string): string {
+  if (!prefix) return typed.trim();
+  const t = splitNamePrefix(typed);
+  return joinNamePrefix(prefix, t.prefix ? t.rest : typed);
+}
