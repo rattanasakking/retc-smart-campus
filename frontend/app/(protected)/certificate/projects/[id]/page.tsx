@@ -136,7 +136,7 @@ export default function CertProjectEditor() {
   const inp = 'w-full border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400';
 
   return (
-    <div className="p-4 md:p-6">
+    <div className="md:p-6">
       <div className="flex items-center justify-between mb-4">
         <button onClick={() => router.push('/certificate/projects')} className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900">
           <ArrowLeft size={16} /> กลับ

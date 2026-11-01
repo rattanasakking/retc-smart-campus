@@ -1,0 +1,61 @@
+(self.webpackChunk_N_E=self.webpackChunk_N_E||[]).push([[246],{22098:function(e,t,r){Promise.resolve().then(r.bind(r,39103))},39103:function(e,t,r){"use strict";r.r(t),r.d(t,{default:function(){return b}});var n=r(57437),a=r(2265),s=r(16463),o=r(87138),i=r(74232),c=r(21100),l=r(11240),d=r(20500),h=r(52449),u=r(703),f=r(84129),y=r(8400),p=r(90904),x=r(6600),m=r(24258),k=r(70518),g=r(96264);let v=[{href:"/settings/general",label:"ข้อมูลวิทยาลัย",Icon:i.Z},{href:"/settings/organization",label:"โครงสร้างองค์กร",Icon:c.Z},{href:"/settings/users",label:"จัดการผู้ใช้",Icon:l.Z},{href:"/settings/permissions",label:"สิทธิ์การใช้งาน",Icon:d.Z},{href:"/settings/integrations",label:"การเชื่อมต่อภายนอก",Icon:h.Z},{href:"/settings/menu",label:"เมนูหลัก",Icon:u.Z},{href:"/settings/apps",label:"แอปทั้งหมด",Icon:f.Z},{href:"/settings/quick-menu",label:"เมนูด่วน (มือถือ)",Icon:y.Z},{href:"/settings/leave-types",label:"ประเภทการลา",Icon:p.Z},{href:"/settings/notifications",label:"การแจ้งเตือน",Icon:x.Z}];function b(e){let{children:t}=e,r=(0,s.useRouter)(),i=(0,s.usePathname)(),[c,l]=(0,a.useState)(!1),[d,h]=(0,a.useState)(!1),u="/settings/quick-menu"===i;return((0,a.useEffect)(()=>{let e=localStorage.getItem(g.YJ);if(!e){r.replace("/login");return}try{let t=JSON.parse(e);if(!t.isSuperAdmin&&!u){r.replace("/dashboard");return}h(!!t.isSuperAdmin)}catch(e){r.replace("/login");return}l(!0)},[r,u]),c)?d?(0,n.jsxs)("div",{className:"md:flex md:gap-5 md:items-start",children:[(0,n.jsx)("nav",{className:"md:hidden -mx-4 px-4 mb-4 flex gap-1.5 overflow-x-auto no-scrollbar",children:v.map(e=>{let{href:t,label:r,Icon:a}=e,s=i===t||i.startsWith(t+"/");return(0,n.jsxs)(o.default,{href:t,className:"flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium whitespace-nowrap flex-shrink-0",style:s?{backgroundColor:"#2979ff",color:"#ffffff"}:{backgroundColor:"#ffffff",color:"#4a6080",border:"1px solid #dce6f9"},children:[(0,n.jsx)(a,{className:"w-3.5 h-3.5"}),r]},t)})}),(0,n.jsx)("aside",{className:"hidden md:block w-[184px] flex-shrink-0 sticky top-0",children:(0,n.jsxs)("div",{className:"rounded-xl overflow-hidden",style:{backgroundColor:"#ffffff",border:"1px solid #dce6f9"},children:[(0,n.jsxs)("div",{className:"flex items-center gap-2 px-4 py-3",style:{borderBottom:"1px solid #dce6f9"},children:[(0,n.jsx)(m.Z,{className:"w-3.5 h-3.5",style:{color:"#4a6080"}}),(0,n.jsx)("span",{className:"text-sm font-semibold",style:{color:"#1a2744"},children:"การตั้งค่า"})]}),(0,n.jsx)("nav",{className:"py-1.5",children:v.map(e=>{let{href:t,label:r,Icon:a}=e,s=i===t||i.startsWith(t+"/");return(0,n.jsxs)(o.default,{href:t,className:"flex items-center gap-2.5 px-4 py-2.5 text-[13px] transition-colors",style:{backgroundColor:s?"#2979ff":"transparent",color:s?"#ffffff":"#4a6080",fontWeight:s?500:400},onMouseEnter:e=>{s||(e.currentTarget.style.backgroundColor="#f5f8ff"),s||(e.currentTarget.style.color="#1a2744")},onMouseLeave:e=>{s||(e.currentTarget.style.backgroundColor="transparent"),s||(e.currentTarget.style.color="#4a6080")},children:[(0,n.jsx)(a,{className:"w-3.5 h-3.5 flex-shrink-0"}),(0,n.jsx)("span",{className:"truncate",children:r})]},t)})}),(0,n.jsx)("div",{className:"px-3 py-2.5",style:{borderTop:"1px solid #dce6f9"},children:(0,n.jsxs)(o.default,{href:"/dashboard",className:"flex items-center gap-1.5 text-xs transition-colors hover:text-[#1d6ae5]",style:{color:"#94a3b8"},children:[(0,n.jsx)(k.Z,{className:"w-3 h-3"})," กลับหน้าหลัก"]})})]})}),(0,n.jsx)("div",{className:"md:flex-1 min-w-0",children:t})]}):(0,n.jsx)(n.Fragment,{children:t}):(0,n.jsx)("div",{className:"flex items-center justify-center h-48",children:(0,n.jsx)("div",{className:"w-8 h-8 border-4 border-t-transparent rounded-full animate-spin",style:{borderColor:"#1d6ae5",borderTopColor:"transparent"}})})}},96264:function(e,t,r){"use strict";r.d(t,{B1:function(){return n},YJ:function(){return a},hi:function(){return o}});let n="retc_token",a="retc_user";async function s(e){let t=arguments.length>1&&void 0!==arguments[1]?arguments[1]:{},r=localStorage.getItem(n),s={"Content-Type":"application/json",...t.headers};r&&(s.Authorization="Bearer ".concat(r));let o=await fetch("".concat("/api").concat(e),{...t,headers:s,cache:"no-store"});if(401===o.status)throw localStorage.removeItem(n),localStorage.removeItem(a),window.location.href="/login",Error("กรุณาเข้าสู่ระบบใหม่");let i=await o.json();if(!o.ok)throw Error(i.message||"เกิดข้อผิดพลาด");return i}let o={get:e=>s(e,{method:"GET"}),post:(e,t)=>s(e,{method:"POST",body:JSON.stringify(t)}),put:(e,t)=>s(e,{method:"PUT",body:JSON.stringify(t)}),delete:e=>s(e,{method:"DELETE"})}},6600:function(e,t,r){"use strict";r.d(t,{Z:function(){return n}});/**
+ * @license lucide-react v0.400.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */let n=(0,r(78030).Z)("Bell",[["path",{d:"M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9",key:"1qo2s2"}],["path",{d:"M10.3 21a1.94 1.94 0 0 0 3.4 0",key:"qgo35s"}]])},74232:function(e,t,r){"use strict";r.d(t,{Z:function(){return n}});/**
+ * @license lucide-react v0.400.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */let n=(0,r(78030).Z)("Building2",[["path",{d:"M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z",key:"1b4qmf"}],["path",{d:"M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2",key:"i71pzd"}],["path",{d:"M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2",key:"10jefs"}],["path",{d:"M10 6h4",key:"1itunk"}],["path",{d:"M10 10h4",key:"tcdvrf"}],["path",{d:"M10 14h4",key:"kelpxr"}],["path",{d:"M10 18h4",key:"1ulq68"}]])},90904:function(e,t,r){"use strict";r.d(t,{Z:function(){return n}});/**
+ * @license lucide-react v0.400.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */let n=(0,r(78030).Z)("CalendarX",[["path",{d:"M8 2v4",key:"1cmpym"}],["path",{d:"M16 2v4",key:"4m81vk"}],["rect",{width:"18",height:"18",x:"3",y:"4",rx:"2",key:"1hopcy"}],["path",{d:"M3 10h18",key:"8toen8"}],["path",{d:"m14 14-4 4",key:"rymu2i"}],["path",{d:"m10 14 4 4",key:"3sz06r"}]])},70518:function(e,t,r){"use strict";r.d(t,{Z:function(){return n}});/**
+ * @license lucide-react v0.400.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */let n=(0,r(78030).Z)("ChevronLeft",[["path",{d:"m15 18-6-6 6-6",key:"1wnfg3"}]])},84129:function(e,t,r){"use strict";r.d(t,{Z:function(){return n}});/**
+ * @license lucide-react v0.400.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */let n=(0,r(78030).Z)("LayoutGrid",[["rect",{width:"7",height:"7",x:"3",y:"3",rx:"1",key:"1g98yp"}],["rect",{width:"7",height:"7",x:"14",y:"3",rx:"1",key:"6d4xhi"}],["rect",{width:"7",height:"7",x:"14",y:"14",rx:"1",key:"nxv5o0"}],["rect",{width:"7",height:"7",x:"3",y:"14",rx:"1",key:"1bb6yr"}]])},52449:function(e,t,r){"use strict";r.d(t,{Z:function(){return n}});/**
+ * @license lucide-react v0.400.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */let n=(0,r(78030).Z)("Link2",[["path",{d:"M9 17H7A5 5 0 0 1 7 7h2",key:"8i5ue5"}],["path",{d:"M15 7h2a5 5 0 1 1 0 10h-2",key:"1b9ql8"}],["line",{x1:"8",x2:"16",y1:"12",y2:"12",key:"1jonct"}]])},703:function(e,t,r){"use strict";r.d(t,{Z:function(){return n}});/**
+ * @license lucide-react v0.400.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */let n=(0,r(78030).Z)("ListOrdered",[["line",{x1:"10",x2:"21",y1:"6",y2:"6",key:"76qw6h"}],["line",{x1:"10",x2:"21",y1:"12",y2:"12",key:"16nom4"}],["line",{x1:"10",x2:"21",y1:"18",y2:"18",key:"u3jurt"}],["path",{d:"M4 6h1v4",key:"cnovpq"}],["path",{d:"M4 10h2",key:"16xx2s"}],["path",{d:"M6 18H4c0-1 2-2 2-3s-1-1.5-2-1",key:"m9a95d"}]])},21100:function(e,t,r){"use strict";r.d(t,{Z:function(){return n}});/**
+ * @license lucide-react v0.400.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */let n=(0,r(78030).Z)("Network",[["rect",{x:"16",y:"16",width:"6",height:"6",rx:"1",key:"4q2zg0"}],["rect",{x:"2",y:"16",width:"6",height:"6",rx:"1",key:"8cvhb9"}],["rect",{x:"9",y:"2",width:"6",height:"6",rx:"1",key:"1egb70"}],["path",{d:"M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3",key:"1jsf9p"}],["path",{d:"M12 12V8",key:"2874zd"}]])},24258:function(e,t,r){"use strict";r.d(t,{Z:function(){return n}});/**
+ * @license lucide-react v0.400.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */let n=(0,r(78030).Z)("Settings",[["path",{d:"M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z",key:"1qme2f"}],["circle",{cx:"12",cy:"12",r:"3",key:"1v7zrd"}]])},20500:function(e,t,r){"use strict";r.d(t,{Z:function(){return n}});/**
+ * @license lucide-react v0.400.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */let n=(0,r(78030).Z)("Shield",[["path",{d:"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z",key:"oel41y"}]])},8400:function(e,t,r){"use strict";r.d(t,{Z:function(){return n}});/**
+ * @license lucide-react v0.400.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */let n=(0,r(78030).Z)("Smartphone",[["rect",{width:"14",height:"20",x:"5",y:"2",rx:"2",ry:"2",key:"1yt0o3"}],["path",{d:"M12 18h.01",key:"mhygvu"}]])},11240:function(e,t,r){"use strict";r.d(t,{Z:function(){return n}});/**
+ * @license lucide-react v0.400.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */let n=(0,r(78030).Z)("Users",[["path",{d:"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2",key:"1yyitq"}],["circle",{cx:"9",cy:"7",r:"4",key:"nufk8"}],["path",{d:"M22 21v-2a4 4 0 0 0-3-3.87",key:"kshegd"}],["path",{d:"M16 3.13a4 4 0 0 1 0 7.75",key:"1da9ce"}]])},16463:function(e,t,r){"use strict";var n=r(71169);r.o(n,"useParams")&&r.d(t,{useParams:function(){return n.useParams}}),r.o(n,"usePathname")&&r.d(t,{usePathname:function(){return n.usePathname}}),r.o(n,"useRouter")&&r.d(t,{useRouter:function(){return n.useRouter}}),r.o(n,"useSearchParams")&&r.d(t,{useSearchParams:function(){return n.useSearchParams}})}},function(e){e.O(0,[1048,2971,7023,1744],function(){return e(e.s=22098)}),_N_E=e.O()}]);

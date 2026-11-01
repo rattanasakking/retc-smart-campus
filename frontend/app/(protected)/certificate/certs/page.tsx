@@ -114,7 +114,7 @@ export default function CertsPage() {
   const inp = 'w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400';
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
+    <div className="md:p-6 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Stamp size={20} style={{ color: '#c2410c' }} /> ออกเกียรติบัตร</h1>

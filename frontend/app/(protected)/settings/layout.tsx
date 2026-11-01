@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  Building2, Network, Shield, ChevronLeft, Settings, Users, Smartphone, CalendarX, Bell, ListOrdered, Link2,
+  Building2, Network, Shield, ChevronLeft, Settings, Users, Smartphone, CalendarX, Bell, ListOrdered, Link2, LayoutGrid,
 } from 'lucide-react';
 import { USER_KEY } from '@/lib/api';
 
@@ -16,6 +16,7 @@ const MENU = [
   { href: '/settings/permissions',  label: 'สิทธิ์การใช้งาน',  Icon: Shield      },
   { href: '/settings/integrations',   label: 'การเชื่อมต่อภายนอก', Icon: Link2     },
   { href: '/settings/menu',           label: 'เมนูหลัก',          Icon: ListOrdered },
+  { href: '/settings/apps',           label: 'แอปทั้งหมด',        Icon: LayoutGrid  },
   { href: '/settings/quick-menu',     label: 'เมนูด่วน (มือถือ)', Icon: Smartphone  },
   { href: '/settings/leave-types',    label: 'ประเภทการลา',       Icon: CalendarX   },
   { href: '/settings/notifications',  label: 'การแจ้งเตือน',      Icon: Bell        },
@@ -25,19 +26,23 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   const router   = useRouter();
   const pathname = usePathname();
   const [ready, setReady] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  // เมนูด่วนเป็นค่าส่วนตัว (เก็บในเบราว์เซอร์) — ผู้ใช้ทุกคนเข้าได้
+  const personalPage = pathname === '/settings/quick-menu';
 
   useEffect(() => {
     const raw = localStorage.getItem(USER_KEY);
     if (!raw) { router.replace('/login'); return; }
     try {
       const u: StoredUser = JSON.parse(raw);
-      if (!u.isSuperAdmin) { router.replace('/dashboard'); return; }
+      if (!u.isSuperAdmin && !personalPage) { router.replace('/dashboard'); return; }
+      setIsSuperAdmin(!!u.isSuperAdmin);
     } catch {
       router.replace('/login');
       return;
     }
     setReady(true);
-  }, [router]);
+  }, [router, personalPage]);
 
   if (!ready) {
     return (
@@ -50,10 +55,29 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
     );
   }
 
+  if (!isSuperAdmin) return <>{children}</>;
+
   return (
-    <div className="flex gap-5 items-start">
-      {/* Settings Sidebar */}
-      <aside className="w-[184px] flex-shrink-0 sticky top-0">
+    <div className="md:flex md:gap-5 md:items-start">
+      {/* Mobile: แถบเมนูตั้งค่าแบบเลื่อนแนวนอน */}
+      <nav className="md:hidden -mx-4 px-4 mb-4 flex gap-1.5 overflow-x-auto no-scrollbar">
+        {MENU.map(({ href, label, Icon }) => {
+          const active = pathname === href || pathname.startsWith(href + '/');
+          return (
+            <Link key={href} href={href}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium whitespace-nowrap flex-shrink-0"
+              style={active
+                ? { backgroundColor: '#2979ff', color: '#ffffff' }
+                : { backgroundColor: '#ffffff', color: '#4a6080', border: '1px solid #dce6f9' }}>
+              <Icon className="w-3.5 h-3.5" />
+              {label}
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* Settings Sidebar — desktop */}
+      <aside className="hidden md:block w-[184px] flex-shrink-0 sticky top-0">
         <div
           className="rounded-xl overflow-hidden"
           style={{ backgroundColor: '#ffffff', border: '1px solid #dce6f9' }}
@@ -108,7 +132,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
       </aside>
 
       {/* Page content */}
-      <div className="flex-1 min-w-0">{children}</div>
+      <div className="md:flex-1 min-w-0">{children}</div>
     </div>
   );
 }

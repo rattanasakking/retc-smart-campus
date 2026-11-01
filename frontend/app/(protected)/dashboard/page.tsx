@@ -103,7 +103,10 @@ function QuickMenu() {
     <div className="md:hidden bg-white rounded-2xl p-4 shadow-sm" style={{ border: '1px solid #dce6f9' }}>
       <div className="flex items-center justify-between mb-3">
         <p className="font-semibold text-sm" style={{ color: '#1a2744' }}>เมนูด่วน</p>
-        <Link href="/settings/quick-menu" className="text-xs font-medium" style={{ color: '#1d6ae5' }}>ตั้งค่า →</Link>
+        <div className="flex items-center gap-3">
+          <Link href="/settings/quick-menu" className="text-xs" style={{ color: '#94a3b8' }}>ตั้งค่า</Link>
+          <Link href="/apps" className="text-xs font-medium" style={{ color: '#1d6ae5' }}>แอปทั้งหมด →</Link>
+        </div>
       </div>
       <div className="grid grid-cols-4 gap-2">
         {items.slice(0, 8).map(({ href, label, Icon, color, bg }) => (

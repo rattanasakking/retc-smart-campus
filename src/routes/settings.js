@@ -367,6 +367,78 @@ router.put('/menu-order', superAdmin, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ─── แอป/ระบบภายนอก (หน้า "แอปทั้งหมด") ─────────────────────────────────────
+// เก็บเป็น JSON ใน system_settings key 'external_apps' → { groups: [...], apps: [...] }
+const EXTERNAL_APPS_DEFAULT = {
+  groups: [
+    { id: 'vec',     name: 'ระบบของ สอศ.',        color: '#b91c1c' },
+    { id: 'college', name: 'ระบบของวิทยาลัย',     color: '#1d6ae5' },
+  ],
+  apps: [
+    { id: 'web',     name: 'เว็บไซต์วิทยาลัย', desc: 'เว็บไซต์หลักของวิทยาลัยเทคนิคร้อยเอ็ด', url: 'https://www.retc.ac.th', color: '#1d6ae5', glyph: 'WWW',  groupId: 'college', roles: [] },
+    { id: 'std2018', name: 'ศธ.02 ออนไลน์',    desc: 'ระบบงานทะเบียน ศธ.02 ออนไลน์',           url: 'https://std2018.vec.go.th', color: '#0369a1', glyph: 'ศธ02', groupId: 'vec', roles: [] },
+    { id: 'idplan',  name: 'ID-PLAN',           desc: 'ไอดีแพลนออนไลน์',                         url: 'https://idplan.ovec.go.th/', color: '#7c3aed', glyph: 'ID',   groupId: 'vec', roles: [] },
+    { id: 'dve',     name: 'DVE-DATA',          desc: 'ฐานข้อมูลการจัดการอาชีวศึกษาระบบทวิภาคี', url: 'https://dve.vec.go.th', color: '#0d9068', glyph: 'DVE',  groupId: 'vec', roles: [] },
+    { id: 'rhrd',    name: 'R-HRD',             desc: 'ระบบฝึกอบรมและพัฒนาบุคลากร',            url: 'https://training.r-hrd.net/', color: '#b45309', glyph: 'HRD',  groupId: 'vec', roles: [] },
+  ],
+};
+
+const APP_ROLES = ['admin', 'executive', 'teacher', 'staff'];
+const isHttpUrl = (s) => { try { const u = new URL(s); return u.protocol === 'http:' || u.protocol === 'https:'; } catch { return false; } };
+const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+const hexColor = (v, fallback) => (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v : fallback);
+
+function cleanExternalApps(body) {
+  const groups = (Array.isArray(body?.groups) ? body.groups : [])
+    .map((g) => ({ id: str(g?.id, 40), name: str(g?.name, 80), color: hexColor(g?.color, '#1d6ae5') }))
+    .filter((g) => g.id && g.name);
+  const groupIds = new Set(groups.map((g) => g.id));
+  const apps = (Array.isArray(body?.apps) ? body.apps : [])
+    .map((a) => ({
+      id:      str(a?.id, 40),
+      name:    str(a?.name, 80),
+      desc:    str(a?.desc, 200),
+      url:     str(a?.url, 500),
+      color:   hexColor(a?.color, '#1d6ae5'),
+      glyph:   str(a?.glyph, 4),
+      groupId: groupIds.has(a?.groupId) ? a.groupId : null,
+      roles:   (Array.isArray(a?.roles) ? a.roles : []).filter((r) => APP_ROLES.includes(r)),
+    }))
+    .filter((a) => a.id && a.name && isHttpUrl(a.url));
+  return { groups, apps };
+}
+
+async function readExternalApps() {
+  const row = await prisma.systemSettings.findUnique({ where: { key: 'external_apps' } });
+  if (!row?.value) return EXTERNAL_APPS_DEFAULT;
+  try { return cleanExternalApps(JSON.parse(row.value)); } catch { return EXTERNAL_APPS_DEFAULT; }
+}
+
+// GET /api/settings/external-apps  — ผู้ใช้ทั่วไปเห็นเฉพาะแอปที่ role ตัวเองเข้าถึงได้; ?all=1 (admin) ได้ทั้งหมด
+router.get('/external-apps', auth, async (req, res, next) => {
+  try {
+    const data = await readExternalApps();
+    const u = await prisma.user.findUnique({ where: { id: req.user.id }, select: { role: true, isSuperAdmin: true } });
+    const isAdmin = u?.isSuperAdmin || u?.role === 'admin';
+    if (req.query.all === '1' && isAdmin) return res.json(success(data));
+    const apps = data.apps.filter((a) => a.roles.length === 0 || a.roles.includes(u?.role));
+    res.json(success({ groups: data.groups, apps }));
+  } catch (e) { next(e); }
+});
+
+// PUT /api/settings/external-apps  (superAdmin) — body: { groups, apps }
+router.put('/external-apps', superAdmin, async (req, res, next) => {
+  try {
+    const clean = cleanExternalApps(req.body);
+    await prisma.systemSettings.upsert({
+      where:  { key: 'external_apps' },
+      update: { value: JSON.stringify(clean) },
+      create: { key: 'external_apps', value: JSON.stringify(clean), group: 'general', label: 'แอป/ระบบภายนอก' },
+    });
+    res.json(success(clean, 'บันทึกรายการแอปสำเร็จ'));
+  } catch (e) { next(e); }
+});
+
 // GET /api/settings/general  — คืนเป็น { key: value } object
 router.get('/general', auth, async (req, res, next) => {
   try {

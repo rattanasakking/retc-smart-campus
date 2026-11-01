@@ -13,15 +13,15 @@
 @layer components {
   /* ── Buttons ─────────────────────────────────────────────────────────────── */
   .btn-primary {
-    @apply bg-[#1d6ae5] text-white px-4 py-2 rounded-lg hover:bg-[#2979ff]
+    @apply bg-[#1d6ae5] text-white px-4 py-2 rounded-lg hover:bg-[#2979ff] whitespace-nowrap
            transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium;
   }
   .btn-secondary {
-    @apply bg-white text-[#1a2744] px-4 py-2 rounded-lg hover:bg-[#f5f8ff]
+    @apply bg-white text-[#1a2744] px-4 py-2 rounded-lg hover:bg-[#f5f8ff] whitespace-nowrap
            transition-colors text-sm font-medium border border-[#dce6f9];
   }
   .btn-danger {
-    @apply bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-500
+    @apply bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-500 whitespace-nowrap
            transition-colors text-sm font-medium;
   }
 

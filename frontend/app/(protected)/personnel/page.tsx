@@ -352,7 +352,7 @@ export default function PersonnelPage() {
   const sel = `${inp} bg-white`;
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
+    <div className="md:p-6 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -448,7 +448,7 @@ export default function PersonnelPage() {
                       {!p.division?.name && !p.deptGroup?.name && '—'}
                     </td>
                     <td className="py-3 px-4 text-center">
-                      <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${p.isActive ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
+                      <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${p.isActive ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
                         {p.isActive ? 'ใช้งาน' : 'ปิด'}
                       </span>
                     </td>

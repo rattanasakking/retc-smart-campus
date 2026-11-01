@@ -314,7 +314,7 @@ export default function RoomPage() {
           <h1 className="text-xl font-bold" style={{ color: '#1a2744' }}>จองห้องประชุม</h1>
           <p className="text-xs mt-0.5" style={{ color: '#4a6080' }}>ตรวจสอบและจัดการการจองห้องประชุม</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {isAdmin && (
             <>
               <button onClick={() => router.push('/room/manage/bookings')} className="btn-secondary flex items-center gap-1.5 text-sm">
@@ -332,7 +332,7 @@ export default function RoomPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-0" style={{ borderBottom: '1px solid #dce6f9' }}>
+      <div className="flex gap-0 overflow-x-auto no-scrollbar -mx-4 px-4 md:mx-0 md:px-0" style={{ borderBottom: '1px solid #dce6f9' }}>
         {([
           { key: 'calendar', label: 'ปฏิทิน',         icon: Calendar },
           { key: 'mine',     label: 'การจองของฉัน',    icon: Clock    },
@@ -342,7 +342,7 @@ export default function RoomPage() {
           if (adminOnly && !isAdmin) return null;
           return (
             <button key={key} onClick={() => setActiveTab(key)}
-              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap flex-shrink-0"
               style={activeTab === key ? { color: '#1d6ae5', borderBottom: '2px solid #1d6ae5', marginBottom: -1, backgroundColor: '#f8faff' } : { color: '#4a6080' }}>
               <Icon className="w-3.5 h-3.5" />{label}
             </button>

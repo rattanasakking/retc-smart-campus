@@ -207,7 +207,7 @@ function ProfileContent() {
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-xl mx-auto space-y-5">
+    <div className="md:p-6 max-w-xl mx-auto space-y-5">
       <Toast msg={toast || toastErr} err={!!toastErr} onClose={() => { setToast(''); setToastErr(''); }} />
 
       <h1 className="text-xl font-bold text-[#1a2744]">โปรไฟล์ของฉัน</h1>

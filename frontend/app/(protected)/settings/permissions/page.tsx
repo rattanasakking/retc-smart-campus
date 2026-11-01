@@ -210,7 +210,7 @@ export default function PermissionsPage() {
   }
 
   return (
-    <div className="p-6 space-y-5 max-w-4xl">
+    <div className="md:p-6 space-y-5 max-w-4xl">
       <Toast msg={toast || toastErr} err={!!toastErr} onClose={() => { setToast(''); setToastErr(''); }} />
 
       <div>

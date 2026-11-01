@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, CalendarCheck, ClipboardList, Monitor, Wrench, DoorOpen,
-  PackageSearch, BarChart3, Users, Contact, CalendarX, Award,
+  PackageSearch, BarChart3, Users, Contact, CalendarX, Award, LayoutGrid,
 } from 'lucide-react';
 
 export interface MainNavItem {
@@ -17,6 +17,7 @@ export interface MainNavItem {
 // เมนูหลัก (ลำดับเริ่มต้น) — ใช้ร่วมกันระหว่าง Sidebar และหน้าตั้งค่าเมนู
 export const MAIN_NAV: MainNavItem[] = [
   { href: '/dashboard',         label: 'หน้าหลัก',          Icon: LayoutDashboard },
+  { href: '/apps',              label: 'แอปทั้งหมด',        Icon: LayoutGrid      },
   { href: '/duty',              label: 'เวรรับนักเรียน',    Icon: CalendarCheck,   module: 'DUTY'         },
   { href: '/worklog',           label: 'บันทึกปฏิบัติงาน', Icon: ClipboardList,   module: 'WORK_LOG'     },
   { href: '/equipment',         label: 'ครุภัณฑ์',           Icon: Monitor,         module: 'EQUIPMENT'    },

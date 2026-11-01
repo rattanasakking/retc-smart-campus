@@ -35,7 +35,7 @@ export default function CertProjectsPage() {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
+    <div className="md:p-6 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Layers size={20} style={{ color: '#c2410c' }} /> รูปแบบเกียรติบัตร</h1>
         {isAdmin && (

@@ -242,14 +242,14 @@ export default function DutyReportPage() {
           </button>
           <h1 className="text-xl font-bold text-[#1a2744]">รายงานเวรรับนักเรียน</h1>
         </div>
-        <div className="flex gap-2">
-          <div className="relative">
-            <select value={semester} onChange={e => setSemester(e.target.value)} className="input-field py-2 pr-8 pl-3 text-sm appearance-none" style={{ minWidth: 140 }}>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <div className="relative flex-1 sm:flex-none min-w-[130px]">
+            <select value={semester} onChange={e => setSemester(e.target.value)} className="input-field py-2 pr-8 pl-3 text-sm appearance-none" style={{ minWidth: 0 }}>
               {semesters.map(s => <option key={s} value={s}>ภาค {s}</option>)}
             </select>
           </div>
-          <div className="relative">
-            <select value={deptId} onChange={e => setDeptId(e.target.value)} className="input-field py-2 pr-8 pl-3 text-sm appearance-none" style={{ minWidth: 160 }}>
+          <div className="relative flex-1 sm:flex-none min-w-[130px]">
+            <select value={deptId} onChange={e => setDeptId(e.target.value)} className="input-field py-2 pr-8 pl-3 text-sm appearance-none" style={{ minWidth: 0 }}>
               <option value="">ทุกแผนก</option>
               {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>

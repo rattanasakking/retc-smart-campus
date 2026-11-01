@@ -86,7 +86,7 @@ export default function LeavePage() {
   const sel = 'border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400';
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
+    <div className="md:p-6 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">

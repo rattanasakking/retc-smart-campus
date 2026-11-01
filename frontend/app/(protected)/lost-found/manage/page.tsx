@@ -286,11 +286,11 @@ export default function ManageLostFoundPage() {
   };
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="md:p-6 space-y-5">
       <Toast msg={toast || toastErr} err={!!toastErr} onClose={() => { setToast(''); setToastErr(''); }} />
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-[#1a2744]">จัดการของหาย</h1>
           <p className="text-sm text-[#4a6080] mt-0.5">บันทึกและติดตามของที่พบในวิทยาลัย</p>

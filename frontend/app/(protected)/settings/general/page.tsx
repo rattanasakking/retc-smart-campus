@@ -384,7 +384,7 @@ export default function GeneralPage() {
                     onChange={(e) => set('address', e.target.value)}
                     placeholder="106 ถ.สุริยเดช ต.ในเมือง อ.เมือง จ.ร้อยเอ็ด 45000" />
                 </Field>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <Field label="เบอร์โทร">
                     <input className="input-field" value={settings.phone ?? ''}
                       onChange={(e) => set('phone', e.target.value)} placeholder="043-511-296" />

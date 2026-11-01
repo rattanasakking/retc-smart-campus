@@ -595,7 +595,7 @@ export default function EquipmentPage() {
                     </td>
                     {/* Code */}
                     <td className="px-4 py-3">
-                      <span className="font-mono text-xs font-semibold" style={{ color: '#1d6ae5' }}>{item.code}</span>
+                      <span className="font-mono text-xs font-semibold whitespace-nowrap" style={{ color: '#1d6ae5' }}>{item.code}</span>
                     </td>
                     {/* Name */}
                     <td className="px-4 py-3">

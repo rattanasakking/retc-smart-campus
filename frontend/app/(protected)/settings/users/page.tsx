@@ -102,7 +102,7 @@ function RoleBadge({ role }: { role: string }) {
   const s = ROLE_BADGE[role] ?? { bg: '#f1f5f9', text: '#64748b' };
   return (
     <span
-      className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium"
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap"
       style={{ backgroundColor: s.bg, color: s.text }}
     >
       {ROLE_LABEL[role] ?? role}
@@ -922,7 +922,7 @@ export default function UsersPage() {
                 {['', 'ชื่อ', 'ตำแหน่ง', 'สังกัด', 'สถานะ', ''].map((h, i) => (
                   <th
                     key={i}
-                    className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide"
+                    className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap ${i === 0 || i === 3 ? 'hidden sm:table-cell' : ''}`}
                     style={{ color: '#94a3b8' }}
                   >
                     {h}
@@ -935,7 +935,7 @@ export default function UsersPage() {
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
                     {Array.from({ length: 6 }).map((__, j) => (
-                      <td key={j} className="px-4 py-3">
+                      <td key={j} className={`px-4 py-3 ${j === 0 || j === 3 ? 'hidden sm:table-cell' : ''}`}>
                         <div className="skeleton h-4 rounded" />
                       </td>
                     ))}
@@ -955,7 +955,7 @@ export default function UsersPage() {
                     className="hover:bg-[#f8faff] transition-colors"
                   >
                     {/* Avatar */}
-                    <td className="pl-4 py-3 w-10">
+                    <td className="pl-4 py-3 w-10 hidden sm:table-cell">
                       <Avatar name={u.name} size={8} />
                     </td>
                     {/* Name */}
@@ -982,7 +982,7 @@ export default function UsersPage() {
                       </div>
                     </td>
                     {/* Org */}
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 hidden sm:table-cell">
                       <p className="text-xs" style={{ color: '#1a2744' }}>
                         {u.division?.name ?? u.deptGroup?.name ?? '-'}
                       </p>
@@ -993,7 +993,7 @@ export default function UsersPage() {
                     {/* Status */}
                     <td className="px-4 py-3">
                       <span
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap"
                         style={
                           u.isActive
                             ? { backgroundColor: '#e6f9f0', color: '#0d9068' }

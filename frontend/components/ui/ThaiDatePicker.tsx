@@ -68,20 +68,22 @@ export default function ThaiDatePicker({
         type="button"
         onClick={openPicker}
         disabled={disabled}
-        className="input-field w-full text-left flex items-center gap-2"
+        className={`input-field w-full text-left flex items-center gap-2 ${value ? 'pr-9' : ''}`}
         style={{ cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1 }}
       >
         <Calendar className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#94a3b8' }} />
-        <span style={{ color: value ? '#1a2744' : '#94a3b8' }}>{displayVal || placeholder}</span>
-        {value && (
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onChange(''); }}
-            className="ml-auto text-xs"
-            style={{ color: '#94a3b8' }}
-          >✕</button>
-        )}
+        <span className="truncate" style={{ color: value ? '#1a2744' : '#94a3b8' }}>{displayVal || placeholder}</span>
       </button>
+      {/* ปุ่มล้างค่า — อยู่นอกปุ่มหลัก (ห้ามซ้อน <button> ใน <button>) */}
+      {value && !disabled && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          aria-label="ล้างวันที่"
+          className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-xs rounded"
+          style={{ color: '#94a3b8' }}
+        >✕</button>
+      )}
 
       {open && (
         <>

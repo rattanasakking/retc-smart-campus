@@ -57,7 +57,7 @@ export default function CertReportsPage() {
   const sel = 'px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-400';
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
+    <div className="md:p-6 space-y-4">
       <style>{`@media print { body * { visibility: hidden; } #printArea, #printArea * { visibility: visible; } #printArea { position: absolute; left: 0; top: 0; width: 100%; padding: 0 !important; border: none !important; box-shadow: none !important; } .no-print { display: none !important; } @page { size: A4 landscape; margin: 1.5cm; } }`}</style>
 
       <div className="flex items-center justify-between flex-wrap gap-3 no-print">

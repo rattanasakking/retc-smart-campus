@@ -426,9 +426,9 @@ export default function WorkLogPage() {
           <ClipboardList className="w-5 h-5" style={{ color: '#1d6ae5' }} />
           <h1 className="text-xl font-bold" style={{ color: '#1a2744' }}>บันทึกปฏิบัติงาน</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
           {/* Tab bar */}
-          <div className="flex" style={{ borderBottom: '1px solid #dce6f9' }}>
+          <div className="flex w-full sm:w-auto" style={{ borderBottom: '1px solid #dce6f9' }}>
             <button
               onClick={() => router.push('/worklog')}
               className="px-3 py-1.5 text-sm font-medium transition-colors"
@@ -442,22 +442,22 @@ export default function WorkLogPage() {
                 className="px-3 py-1.5 text-sm font-medium transition-colors flex items-center gap-1"
                 style={activeTab === 'settings' ? { color: '#1d6ae5', borderBottom: '2px solid #1d6ae5', marginBottom: -1 } : { color: '#4a6080' }}
               >
-                <Settings className="w-3.5 h-3.5" /> ประเภทงาน
+                <Settings className="w-3.5 h-3.5" /> <span className="whitespace-nowrap">ประเภทงาน</span>
               </button>
             )}
           </div>
           {activeTab === 'list' && (
             <>
-              <select className="input-field text-sm py-2 w-auto" value={month} onChange={(e) => setMonth(e.target.value)}>
+              <select className="input-field text-sm py-2 w-auto flex-1 sm:flex-none" value={month} onChange={(e) => setMonth(e.target.value)}>
                 {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
               </select>
-              <select className="input-field text-sm py-2 w-auto" value={year} onChange={(e) => setYear(e.target.value)}>
+              <select className="input-field text-sm py-2 w-auto flex-1 sm:flex-none" value={year} onChange={(e) => setYear(e.target.value)}>
                 {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
               </select>
-              <button onClick={() => router.push('/worklog/print')} className="btn-secondary flex items-center gap-1.5 text-sm py-2">
+              <button onClick={() => router.push('/worklog/print')} className="btn-secondary flex items-center justify-center gap-1.5 text-sm py-2 whitespace-nowrap flex-1 sm:flex-none">
                 <Eye className="w-3.5 h-3.5" /> รายงาน PDF
               </button>
-              <button onClick={() => router.push('/worklog/new')} className="btn-primary flex items-center gap-1.5 text-sm py-2">
+              <button onClick={() => router.push('/worklog/new')} className="btn-primary flex items-center justify-center gap-1.5 text-sm py-2 whitespace-nowrap flex-1 sm:flex-none">
                 <Plus className="w-3.5 h-3.5" /> บันทึกใหม่
               </button>
             </>

@@ -210,7 +210,7 @@ export default function ReportOverviewPage() {
     : 0;
 
   return (
-    <div className="p-6 space-y-5 max-w-6xl mx-auto">
+    <div className="md:p-6 space-y-5 max-w-6xl mx-auto">
       {/* Print styles */}
       <style>{`
         @media print {
@@ -222,12 +222,12 @@ export default function ReportOverviewPage() {
       `}</style>
 
       {/* ── Header ────────────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-bold text-[#1a2744]">รายงานภาพรวม</h1>
           <p className="text-sm text-[#4a6080] mt-0.5">{filterLabel()}</p>
         </div>
-        <div className="flex gap-2 no-print">
+        <div className="flex gap-2 flex-wrap no-print">
           <button onClick={() => window.print()}
             className="btn-secondary flex items-center gap-1.5 text-sm">
             <Printer className="w-4 h-4" /> พิมพ์ PDF
@@ -240,12 +240,12 @@ export default function ReportOverviewPage() {
       </div>
 
       {/* ── Tabs ──────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-4 no-print">
+      <div className="flex items-center gap-3 flex-wrap no-print">
         <div className="flex rounded-xl overflow-hidden border border-[#dce6f9]">
           {([['year','รายปี'],['semester','รายภาคเรียน'],['month','รายเดือน']] as [TabType, string][]).map(([t, label]) => (
             <button key={t}
               onClick={() => { setTab(t); load(t); }}
-              className="px-4 py-2 text-sm font-medium transition-colors"
+              className="px-3 sm:px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap"
               style={{
                 backgroundColor: tab === t ? '#1d6ae5' : 'white',
                 color: tab === t ? 'white' : '#4a6080',

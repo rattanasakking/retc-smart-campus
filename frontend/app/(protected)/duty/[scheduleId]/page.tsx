@@ -358,8 +358,8 @@ export default function ScheduleDetailPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ backgroundColor: '#f8faff', borderBottom: '1px solid #f0f4ff' }}>
-                  {['', 'ชื่อ', 'สถานะ', 'หลักฐาน', ''].map((h) => (
-                    <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold" style={{ color: '#94a3b8' }}>{h}</th>
+                  {['', 'ชื่อ', 'สถานะ', 'หลักฐาน', ''].map((h, i) => (
+                    <th key={i} className="px-4 py-2.5 text-left text-xs font-semibold" style={{ color: '#94a3b8' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
