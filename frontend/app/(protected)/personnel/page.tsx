@@ -8,6 +8,7 @@ import {
 import { api, USER_KEY } from '@/lib/api';
 import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
 import ThaiAddressSelect from '@/components/ui/ThaiAddressSelect';
+import { NAME_PREFIXES, splitNamePrefix, joinNamePrefix } from '@/lib/namePrefix';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -69,7 +70,7 @@ interface LeaveRequest {
 }
 
 interface FormState {
-  nationalId: string; name: string; email: string;
+  nationalId: string; namePrefix: string; name: string; email: string; // name = ชื่อ-นามสกุล (ไม่รวมคำนำหน้า)
   password: string; role: string; position: string; isSuperAdmin: boolean;
   personnelTypeId: string; educationLevel: string;
   divisionId: string; workUnitId: string; departmentId: string;
@@ -79,7 +80,7 @@ interface FormState {
 }
 
 const BLANK: FormState = {
-  nationalId: '', name: '', email: '', password: '',
+  nationalId: '', namePrefix: '', name: '', email: '', password: '',
   role: 'staff', position: '', isSuperAdmin: false,
   personnelTypeId: '', educationLevel: '',
   divisionId: '', workUnitId: '', departmentId: '',
@@ -215,7 +216,8 @@ export default function PersonnelPage() {
     setAvatarPreview(p.avatar ?? null);
     setForm({
       nationalId: p.nationalId ?? '',
-      name: p.name, email: p.email, password: '',
+      namePrefix: splitNamePrefix(p.name).prefix,
+      name: splitNamePrefix(p.name).rest, email: p.email, password: '',
       role: p.role, position: p.position ?? '',
       isSuperAdmin: p.isSuperAdmin,
       personnelTypeId: String(p.personnelTypeId ?? ''),
@@ -289,10 +291,15 @@ export default function PersonnelPage() {
   }
 
   async function save() {
-    if (!form.name || !form.email || !form.role) {
+    if (!form.name.trim() || !form.email || !form.role) {
       setFormError('กรุณากรอก ชื่อ, อีเมล, และบทบาท');
       return;
     }
+    // พิมพ์คำนำหน้าซ้ำมาในช่องชื่อ (เช่น เลือก "นาย" แล้วพิมพ์ "นายสมชาย") → ตัดออกก่อนรวม
+    const typed = splitNamePrefix(form.name);
+    const fullName = form.namePrefix
+      ? joinNamePrefix(form.namePrefix, typed.prefix ? typed.rest : form.name)
+      : form.name.trim();
     if (!editTarget && (!form.password || form.password.length < 8)) {
       setFormError('รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร');
       return;
@@ -300,7 +307,8 @@ export default function PersonnelPage() {
     setSaving(true);
     setFormError('');
     try {
-      const payload: Record<string, unknown> = { ...form };
+      const { namePrefix: _prefix, ...rest } = form;
+      const payload: Record<string, unknown> = { ...rest, name: fullName };
       if (!payload.password) delete payload.password;
       if (avatarBase64) payload.avatar = avatarBase64;
       if (editTarget) {
@@ -422,7 +430,7 @@ export default function PersonnelPage() {
                       <button onClick={() => openView(p)} className="flex items-center gap-3 text-left hover:opacity-80 transition-opacity">
                         {p.avatar
                           ? <img src={p.avatar} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
-                          : <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm flex-shrink-0">{p.name[0]}</div>
+                          : <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm flex-shrink-0">{splitNamePrefix(p.name).rest[0]}</div>
                         }
                         <div>
                           <div className="font-medium text-gray-800 hover:text-blue-600 transition-colors">{p.name}</div>
@@ -507,7 +515,7 @@ export default function PersonnelPage() {
             <div className="flex items-center gap-4 px-6 py-4 flex-shrink-0" style={{ background: 'linear-gradient(135deg,#0f1e3c,#1d3a72)', borderRadius: '1rem 1rem 0 0' }}>
               {viewTarget.avatar
                 ? <img src={viewTarget.avatar} alt="" className="w-14 h-14 rounded-full object-cover border-2 border-white/30 flex-shrink-0" />
-                : <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-white text-xl font-bold flex-shrink-0">{viewTarget.name[0]}</div>
+                : <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-white text-xl font-bold flex-shrink-0">{splitNamePrefix(viewTarget.name).rest[0]}</div>
               }
               <div className="flex-1 min-w-0">
                 <p className="text-lg font-bold text-white truncate">{viewTarget.name}</p>
@@ -808,9 +816,18 @@ export default function PersonnelPage() {
                     <label className="text-xs text-gray-500 mb-1 block">เลขบัตรประจำตัวประชาชน</label>
                     <input value={form.nationalId} onChange={(e) => setF('nationalId', e.target.value)} className={inp} placeholder="1XXXXXXXXXXXX" maxLength={13} />
                   </div>
-                  <div>
-                    <label className="text-xs text-gray-500 mb-1 block">ชื่อ-นามสกุล <span className="text-red-500">*</span></label>
-                    <input value={form.name} onChange={(e) => setF('name', e.target.value)} className={inp} placeholder="นายสมชาย ใจดี" />
+                  <div className="grid grid-cols-[110px_1fr] gap-3">
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">คำนำหน้า</label>
+                      <select value={form.namePrefix} onChange={(e) => setF('namePrefix', e.target.value)} className={inp}>
+                        <option value="">ไม่ระบุ</option>
+                        {NAME_PREFIXES.map((p) => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">ชื่อ-นามสกุล <span className="text-red-500">*</span></label>
+                      <input value={form.name} onChange={(e) => setF('name', e.target.value)} className={inp} placeholder="สมชาย ใจดี" />
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
