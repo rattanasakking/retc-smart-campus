@@ -7,6 +7,7 @@ const { success, error, paginate } = require('../utils/response');
 const { sendRoomBookingRequestFlex, sendRoomBookingStatusFlex, pushMessage } = require('../services/line');
 const { sendRoomBookingRequestEmail, sendRoomBookingApprovedEmail, sendRoomBookingRejectedEmail, sendMail } = require('../services/email');
 const { notifyUsers, eventChannelAllowed } = require('../services/notification');
+const { BookingConflict, assertRoomFree } = require('../services/roomBooking');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -607,27 +608,31 @@ router.post('/bookings', auth, async (req, res, next) => {
 
     const start = new Date(startTime);
     const end   = new Date(endTime);
+    if (isNaN(start) || isNaN(end)) return res.status(400).json(error('รูปแบบวันเวลาไม่ถูกต้อง'));
     if (end <= start) return res.status(400).json(error('เวลาสิ้นสุดต้องหลังเวลาเริ่ม'));
 
-    const conflict = await prisma.roomBooking.findFirst({
-      where: { roomId: intId(roomId), status: { in: ['pending','approved'] }, AND: [{ startTime: { lt: end } }, { endTime: { gt: start } }] },
-      include: { user: { select: { name: true } } },
-    });
-    if (conflict) return res.status(409).json(error(`ห้องถูกจองในช่วงเวลานี้แล้ว (${conflict.user.name})`));
-
-    const status  = room.requireApproval ? 'pending' : 'approved';
-    const booking = await prisma.roomBooking.create({
-      data: {
-        roomId:          intId(roomId), userId: req.user.id, title: title.trim(),
-        attendees:       attendees ? intId(attendees) : null,
-        startTime: start, endTime: end,
-        equipmentNeeded: equipmentNeeded?.length ? JSON.stringify(equipmentNeeded) : null,
-        tableLayout:     tableLayout?.trim() || null,
-        purpose:         purpose?.trim() || null,
-        status,
-      },
-      include: BOOKING_INC,
-    });
+    const status = room.requireApproval ? 'pending' : 'approved';
+    let booking;
+    try {
+      booking = await prisma.$transaction(async (tx) => {
+        await assertRoomFree(tx, room.id, start, end);
+        return tx.roomBooking.create({
+          data: {
+            roomId:          room.id, userId: req.user.id, title: title.trim(),
+            attendees:       attendees ? intId(attendees) : null,
+            startTime: start, endTime: end,
+            equipmentNeeded: equipmentNeeded?.length ? JSON.stringify(equipmentNeeded) : null,
+            tableLayout:     tableLayout?.trim() || null,
+            purpose:         purpose?.trim() || null,
+            status,
+          },
+          include: BOOKING_INC,
+        });
+      });
+    } catch (e) {
+      if (e instanceof BookingConflict) return res.status(409).json(error(e.message));
+      throw e;
+    }
 
     if (room.requireApproval) notifyAdminsNewBooking(booking).catch(() => {});
     notifyRoomManager(booking).catch(() => {});     // แจ้งผู้ดูแลห้อง
@@ -664,10 +669,17 @@ router.put('/bookings/:id/approve', auth, async (req, res, next) => {
     const b = await prisma.roomBooking.findUnique({ where: { id: intId(req.params.id) } });
     if (!b) return res.status(404).json(error('ไม่พบการจอง'));
     if (b.status !== 'pending') return res.status(400).json(error('สถานะไม่ถูกต้อง'));
-    await prisma.$transaction([
-      prisma.roomBooking.update({ where: { id: intId(req.params.id) }, data: { status: 'approved' } }),
-      prisma.roomBookingApproval.create({ data: { bookingId: intId(req.params.id), approverId: req.user.id, status: 'approved', note: note?.trim() || null } }),
-    ]);
+    try {
+      await prisma.$transaction(async (tx) => {
+        // กันข้อมูลเก่าที่อาจซ้อนกันอยู่แล้ว — ไม่อนุมัติทับการจองอื่น
+        await assertRoomFree(tx, b.roomId, b.startTime, b.endTime, b.id, ['approved']);
+        await tx.roomBooking.update({ where: { id: b.id }, data: { status: 'approved' } });
+        await tx.roomBookingApproval.create({ data: { bookingId: b.id, approverId: req.user.id, status: 'approved', note: note?.trim() || null } });
+      });
+    } catch (e) {
+      if (e instanceof BookingConflict) return res.status(409).json(error(e.message));
+      throw e;
+    }
     const updated = await prisma.roomBooking.findUnique({ where: { id: intId(req.params.id) }, include: BOOKING_INC });
     notifyBookerStatus(updated, 'approved', note?.trim() || null).catch(() => {});
     notifyStaffStatusChange(updated, 'approved', note?.trim() || null, req.user.id).catch(() => {});
@@ -706,7 +718,17 @@ router.put('/bookings/:id/status', auth, async (req, res, next) => {
     if (!b) return res.status(404).json(error('ไม่พบการจอง'));
     if (b.status === status) return res.json(success(null, 'เป็นสถานะนี้อยู่แล้ว'));
 
-    await prisma.roomBooking.update({ where: { id }, data: { status } });
+    try {
+      await prisma.$transaction(async (tx) => {
+        // เปลี่ยนกลับเป็น รออนุมัติ/อนุมัติ (เช่น จากยกเลิก) → ช่วงเวลานั้นอาจมีคนจองไปแล้ว
+        if (status === 'approved') await assertRoomFree(tx, b.roomId, b.startTime, b.endTime, id, ['approved']);
+        else if (status === 'pending') await assertRoomFree(tx, b.roomId, b.startTime, b.endTime, id);
+        await tx.roomBooking.update({ where: { id }, data: { status } });
+      });
+    } catch (e) {
+      if (e instanceof BookingConflict) return res.status(409).json(error(e.message));
+      throw e;
+    }
 
     // บันทึกประวัติ เฉพาะอนุมัติ/ปฏิเสธ
     if (status === 'approved' || status === 'rejected') {

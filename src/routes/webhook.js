@@ -4,6 +4,7 @@ const { PrismaClient } = require('@prisma/client');
 const { sendLeaveStatusNotify, sendLeaveRequestFlex, sendRoomBookingStatusFlex, sendWorkLogStatusFlex, pushMessage, replyMessage } = require('../services/line');
 const { eventChannelAllowed } = require('../services/notification');
 const { sendRoomBookingApprovedEmail, sendRoomBookingRejectedEmail } = require('../services/email');
+const { BookingConflict, assertRoomFree } = require('../services/roomBooking');
 
 const router = express.Router();
 const prisma  = new PrismaClient();
@@ -263,10 +264,20 @@ async function handlePostback(event) {
     }
 
     const newStatus = action === 'room_approve' ? 'approved' : 'rejected';
-    await prisma.$transaction([
-      prisma.roomBooking.update({ where: { id: bookingId }, data: { status: newStatus } }),
-      prisma.roomBookingApproval.create({ data: { bookingId, approverId: approver.id, status: newStatus, note: null } }),
-    ]);
+    try {
+      await prisma.$transaction(async (tx) => {
+        // อนุมัติจาก LINE ก็ต้องไม่ทับการจองอื่น (เหมือนอนุมัติจากเว็บ)
+        if (newStatus === 'approved') await assertRoomFree(tx, booking.roomId, booking.startTime, booking.endTime, bookingId, ['approved']);
+        await tx.roomBooking.update({ where: { id: bookingId }, data: { status: newStatus } });
+        await tx.roomBookingApproval.create({ data: { bookingId, approverId: approver.id, status: newStatus, note: null } });
+      });
+    } catch (e) {
+      if (e instanceof BookingConflict) {
+        replyMessage(replyToken, [{ type: 'text', text: `❌ อนุมัติไม่ได้: ${e.message}` }]).catch(() => {});
+        return;
+      }
+      throw e;
+    }
 
     // แจ้ง admin ว่าดำเนินการสำเร็จ
     const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
