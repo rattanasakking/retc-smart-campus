@@ -8,7 +8,7 @@ import {
 import { api, USER_KEY } from '@/lib/api';
 import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
 import ThaiAddressSelect from '@/components/ui/ThaiAddressSelect';
-import { NAME_PREFIXES, splitNamePrefix, nameFromForm } from '@/lib/namePrefix';
+import { NAME_PREFIXES, splitNamePrefix, splitFullName, fullNameFromForm } from '@/lib/namePrefix';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -70,7 +70,7 @@ interface LeaveRequest {
 }
 
 interface FormState {
-  nationalId: string; namePrefix: string; name: string; email: string; // name = ชื่อ-นามสกุล (ไม่รวมคำนำหน้า)
+  nationalId: string; namePrefix: string; firstName: string; lastName: string; email: string; // รวมเป็น name ตอนบันทึก
   password: string; role: string; position: string; isSuperAdmin: boolean;
   personnelTypeId: string; educationLevel: string;
   divisionId: string; workUnitId: string; departmentId: string;
@@ -80,7 +80,7 @@ interface FormState {
 }
 
 const BLANK: FormState = {
-  nationalId: '', namePrefix: '', name: '', email: '', password: '',
+  nationalId: '', namePrefix: '', firstName: '', lastName: '', email: '', password: '',
   role: 'staff', position: '', isSuperAdmin: false,
   personnelTypeId: '', educationLevel: '',
   divisionId: '', workUnitId: '', departmentId: '',
@@ -216,8 +216,9 @@ export default function PersonnelPage() {
     setAvatarPreview(p.avatar ?? null);
     setForm({
       nationalId: p.nationalId ?? '',
-      namePrefix: splitNamePrefix(p.name).prefix,
-      name: splitNamePrefix(p.name).rest, email: p.email, password: '',
+      namePrefix: splitFullName(p.name).prefix,
+      firstName: splitFullName(p.name).first, lastName: splitFullName(p.name).last,
+      email: p.email, password: '',
       role: p.role, position: p.position ?? '',
       isSuperAdmin: p.isSuperAdmin,
       personnelTypeId: String(p.personnelTypeId ?? ''),
@@ -291,11 +292,11 @@ export default function PersonnelPage() {
   }
 
   async function save() {
-    if (!form.name.trim() || !form.email || !form.role) {
+    if (!form.firstName.trim() || !form.email || !form.role) {
       setFormError('กรุณากรอก ชื่อ, อีเมล, และบทบาท');
       return;
     }
-    const fullName = nameFromForm(form.namePrefix, form.name);
+    const fullName = fullNameFromForm(form.namePrefix, form.firstName, form.lastName);
     if (!editTarget && (!form.password || form.password.length < 8)) {
       setFormError('รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร');
       return;
@@ -303,7 +304,7 @@ export default function PersonnelPage() {
     setSaving(true);
     setFormError('');
     try {
-      const { namePrefix: _prefix, ...rest } = form;
+      const { namePrefix: _prefix, firstName: _first, lastName: _last, ...rest } = form;
       const payload: Record<string, unknown> = { ...rest, name: fullName };
       if (!payload.password) delete payload.password;
       if (avatarBase64) payload.avatar = avatarBase64;
@@ -792,7 +793,7 @@ export default function PersonnelPage() {
                       {avatarPreview
                         ? <img src={avatarPreview} alt="" className="w-20 h-20 rounded-full object-cover border-2 border-blue-200" />
                         : <div className="w-20 h-20 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-2xl font-bold border-2 border-dashed border-blue-300">
-                            {form.name ? form.name[0] : <Camera size={24} />}
+                            {form.firstName ? form.firstName.trim()[0] : <Camera size={24} />}
                           </div>
                       }
                       <div className="absolute inset-0 rounded-full bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -812,17 +813,21 @@ export default function PersonnelPage() {
                     <label className="text-xs text-gray-500 mb-1 block">เลขบัตรประจำตัวประชาชน</label>
                     <input value={form.nationalId} onChange={(e) => setF('nationalId', e.target.value)} className={inp} placeholder="1XXXXXXXXXXXX" maxLength={13} />
                   </div>
-                  <div className="grid grid-cols-[110px_1fr] gap-3">
+                  <div className="grid grid-cols-[96px_1fr] sm:grid-cols-[100px_1fr_1fr] gap-3">
                     <div>
                       <label className="text-xs text-gray-500 mb-1 block">คำนำหน้า</label>
                       <select value={form.namePrefix} onChange={(e) => setF('namePrefix', e.target.value)} className={inp}>
                         <option value="">ไม่ระบุ</option>
-                        {NAME_PREFIXES.map((p) => <option key={p} value={p}>{p}</option>)}
+                        {NAME_PREFIXES.map((pf) => <option key={pf} value={pf}>{pf}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500 mb-1 block">ชื่อ-นามสกุล <span className="text-red-500">*</span></label>
-                      <input value={form.name} onChange={(e) => setF('name', e.target.value)} className={inp} placeholder="สมชาย ใจดี" />
+                      <label className="text-xs text-gray-500 mb-1 block">ชื่อ <span className="text-red-500">*</span></label>
+                      <input value={form.firstName} onChange={(e) => setF('firstName', e.target.value)} className={inp} placeholder="สมชาย" />
+                    </div>
+                    <div className="col-span-2 sm:col-span-1">
+                      <label className="text-xs text-gray-500 mb-1 block">นามสกุล</label>
+                      <input value={form.lastName} onChange={(e) => setF('lastName', e.target.value)} className={inp} placeholder="ใจดี" />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">

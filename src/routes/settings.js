@@ -6,6 +6,7 @@ const fs      = require('fs');
 const { PrismaClient } = require('@prisma/client');
 const auth = require('../middleware/auth');
 const { success, error } = require('../utils/response');
+const { saveAvatarImage, AvatarError } = require('../utils/avatar');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -927,17 +928,21 @@ router.post('/users/import', superAdmin, async (req, res, next) => {
 router.post('/users', superAdmin, async (req, res, next) => {
   try {
     const { employeeId, name, nickname, email, password, role, position, isSuperAdmin,
-            divisionId, workUnitId, departmentId, department, phone, birthDate, nationalId, startDate } = req.body;
+            divisionId, workUnitId, departmentId, department, phone, birthDate, nationalId, startDate, avatar } = req.body;
 
     if (!employeeId?.trim() || !name?.trim() || !email?.trim() || !password || !role)
       return res.status(400).json(error('กรุณากรอกข้อมูลที่จำเป็น: รหัสพนักงาน, ชื่อ, email, รหัสผ่าน, role'));
     if (!VALID_ROLES.includes(role)) return res.status(400).json(error('role ไม่ถูกต้อง'));
     if (password.length < 8) return res.status(400).json(error('รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร'));
 
+    // avatar: data URL ของรูปใหม่ (ไม่ส่ง = ไม่มีรูป)
+    const avatarUrl = typeof avatar === 'string' && avatar.startsWith('data:') ? saveAvatarImage(avatar) : null;
+
     const hashed = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
       data: {
         employeeId:  employeeId.trim(),
+        avatar:      avatarUrl,
         name:        name.trim(),
         nickname:    nickname    || null,
         email:       email.trim().toLowerCase(),
@@ -958,6 +963,7 @@ router.post('/users', superAdmin, async (req, res, next) => {
     });
     res.status(201).json(success({ ...user, modulePermissions: modulePermissions(user) }, 'สร้างผู้ใช้สำเร็จ'));
   } catch (e) {
+    if (e instanceof AvatarError) return res.status(400).json(error(e.message));
     if (e.code === 'P2002') {
       const f = e.meta?.target?.includes('email') ? 'อีเมล' : 'รหัสพนักงาน';
       return res.status(409).json(error(`${f}นี้มีในระบบแล้ว`));
@@ -998,9 +1004,14 @@ router.put('/users/:id', superAdmin, async (req, res, next) => {
   try {
     const id = intId(req.params.id);
     const { name, nickname, email, role, position, isSuperAdmin, isActive,
-            divisionId, workUnitId, departmentId, department, phone, birthDate, nationalId, startDate } = req.body;
+            divisionId, workUnitId, departmentId, department, phone, birthDate, nationalId, startDate, avatar } = req.body;
 
     if (role && !VALID_ROLES.includes(role)) return res.status(400).json(error('role ไม่ถูกต้อง'));
+
+    // avatar: data URL = รูปใหม่ · null = ลบรูป · ไม่ส่ง = คงรูปเดิม
+    let avatarUrl;
+    if (typeof avatar === 'string' && avatar.startsWith('data:')) avatarUrl = saveAvatarImage(avatar);
+    else if (avatar === null) avatarUrl = null;
 
     const user = await prisma.user.update({
       where: { id },
@@ -1020,11 +1031,13 @@ router.put('/users/:id', superAdmin, async (req, res, next) => {
         ...(birthDate    !== undefined && { birthDate:   birthDate    ? new Date(birthDate)  : null }),
         ...(nationalId   !== undefined && { nationalId:  nationalId   || null                 }),
         ...(startDate    !== undefined && { startDate:   startDate    ? new Date(startDate)  : null }),
+        ...(avatarUrl    !== undefined && { avatar:      avatarUrl                              }),
       },
       select: USER_COLS,
     });
     res.json(success({ ...user, modulePermissions: modulePermissions(user) }, 'อัปเดตข้อมูลสำเร็จ'));
   } catch (e) {
+    if (e instanceof AvatarError) return res.status(400).json(error(e.message));
     if (e.code === 'P2025') return res.status(404).json(error('ไม่พบผู้ใช้'));
     if (e.code === 'P2002') return res.status(409).json(error('อีเมลนี้มีในระบบแล้ว'));
     next(e);

@@ -3,11 +3,12 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Search, Plus, X, ChevronLeft, ChevronRight, Eye, EyeOff,
   Phone, Mail, Building2, Calendar, Key, Shield, Check,
-  AlertTriangle, Pencil, UserX, UserCheck, RefreshCw, Users,
+  AlertTriangle, Pencil, UserX, UserCheck, RefreshCw, Users, Camera,
 } from 'lucide-react';
 import { api, USER_KEY } from '@/lib/api';
 import ThaiDatePicker from '@/components/ui/ThaiDatePicker';
-import { NAME_PREFIXES, splitNamePrefix, nameFromForm } from '@/lib/namePrefix';
+import { NAME_PREFIXES, splitNamePrefix, splitFullName, fullNameFromForm } from '@/lib/namePrefix';
+import { resizeSquareImage } from '@/lib/image';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,8 +40,9 @@ interface Pagination { total: number; page: number; limit: number; totalPages: n
 
 interface FormData {
   employeeId:   string;
-  namePrefix:   string; // คำนำหน้า (รวมเข้า name ตอนบันทึก)
-  name:         string; // ชื่อ-นามสกุล ไม่รวมคำนำหน้า
+  namePrefix:   string; // คำนำหน้า ─┐
+  firstName:    string; // ชื่อ       ├ รวมเป็น name ตอนบันทึก ("นายสมชาย ใจดี")
+  lastName:     string; // นามสกุล  ─┘
   nickname:     string;
   email:        string;
   phone:        string;
@@ -93,7 +95,7 @@ const POSITION_LABEL: Record<string, string> = Object.fromEntries(
 );
 
 const EMPTY_FORM: FormData = {
-  employeeId: '', namePrefix: '', name: '', nickname: '', email: '', phone: '', birthDate: '',
+  employeeId: '', namePrefix: '', firstName: '', lastName: '', nickname: '', email: '', phone: '', birthDate: '',
   role: 'staff', position: '', divisionId: '', workUnitId: '', departmentId: '',
   isSuperAdmin: false, startDate: '', password: '', confirmPassword: '',
 };
@@ -112,7 +114,11 @@ function RoleBadge({ role }: { role: string }) {
   );
 }
 
-function Avatar({ name, size = 8 }: { name: string; size?: number }) {
+function Avatar({ name, src, size = 8 }: { name: string; src?: string | null; size?: number }) {
+  if (src) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt="" className={`w-${size} h-${size} rounded-full object-cover flex-shrink-0`} />;
+  }
   return (
     <div
       className={`w-${size} h-${size} rounded-full flex items-center justify-center text-white font-bold flex-shrink-0`}
@@ -151,7 +157,7 @@ function DetailModal({ user, isSuperAdminViewer, onClose, onEdit, onToggle, onRe
             <X className="w-4 h-4" style={{ color: '#4a6080' }} />
           </button>
           <div className="flex items-center gap-4">
-            <Avatar name={user.name} size={14} />
+            <Avatar name={user.name} src={user.avatar} size={14} />
             <div>
               <p className="text-lg font-bold" style={{ color: '#1a2744' }}>{user.name}</p>
               {user.nickname && <p className="text-sm" style={{ color: '#4a6080' }}>({user.nickname})</p>}
@@ -377,8 +383,9 @@ function FormModal({
     editUser
       ? {
           employeeId:      editUser.employeeId,
-          namePrefix:      splitNamePrefix(editUser.name).prefix,
-          name:            splitNamePrefix(editUser.name).rest,
+          namePrefix:      splitFullName(editUser.name).prefix,
+          firstName:       splitFullName(editUser.name).first,
+          lastName:        splitFullName(editUser.name).last,
           nickname:        editUser.nickname ?? '',
           email:           editUser.email,
           phone:           editUser.phone ?? '',
@@ -398,6 +405,18 @@ function FormModal({
   const [saving, setSaving]   = useState(false);
   const [err, setErr]         = useState('');
   const [showPwd, setShowPwd] = useState(false);
+  // รูปโปรไฟล์: undefined = ไม่เปลี่ยน · data URL = รูปใหม่ · null = ลบรูป
+  const [avatarData, setAvatarData] = useState<string | null | undefined>(undefined);
+  const avatarShown = avatarData === undefined ? editUser?.avatar ?? null : avatarData;
+
+  const pickAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setErr('กรุณาเลือกไฟล์รูปภาพ'); return; }
+    try { setAvatarData(await resizeSquareImage(file, 400)); setErr(''); }
+    catch { setErr('ไม่สามารถอ่านไฟล์รูปได้'); }
+  };
 
   const filteredWorkUnits = form.divisionId
     ? allWorkUnits.filter((w) => w.divisionId === parseInt(form.divisionId))
@@ -412,7 +431,7 @@ function FormModal({
 
   const validate = () => {
     if (!form.employeeId.trim()) return 'กรุณากรอกรหัสพนักงาน';
-    if (!form.name.trim())       return 'กรุณากรอกชื่อ';
+    if (!form.firstName.trim())  return 'กรุณากรอกชื่อ';
     if (!form.email.trim())      return 'กรุณากรอก Email';
     if (!form.role)              return 'กรุณาเลือก Role';
     if (!isEdit) {
@@ -430,7 +449,7 @@ function FormModal({
     try {
       const body = {
         employeeId:   form.employeeId.trim(),
-        name:         nameFromForm(form.namePrefix, form.name),
+        name:         fullNameFromForm(form.namePrefix, form.firstName, form.lastName),
         nickname:     form.nickname.trim() || null,
         email:        form.email.trim(),
         phone:        form.phone.trim() || null,
@@ -443,6 +462,7 @@ function FormModal({
         isSuperAdmin: form.isSuperAdmin,
         startDate:    form.startDate || null,
         ...(!isEdit && { password: form.password }),
+        ...(avatarData !== undefined && { avatar: avatarData }),
       };
       if (isEdit) {
         await api.put(`/settings/users/${editUser!.id}`, body);
@@ -510,6 +530,31 @@ function FormModal({
           {/* Tab 0: ข้อมูลส่วนตัว */}
           {tab === 0 && (
             <div className="space-y-3">
+              {/* รูปโปรไฟล์ */}
+              <div className="flex items-center gap-4 pb-1">
+                <label className="relative cursor-pointer group flex-shrink-0" title="เลือกรูปโปรไฟล์">
+                  {avatarShown ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={avatarShown} alt="" className="w-20 h-20 rounded-full object-cover" style={{ border: '2px solid #dce6f9' }} />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-bold" style={{ backgroundColor: '#2979ff' }}>
+                      {form.firstName.trim().charAt(0) || <Camera className="w-7 h-7" />}
+                    </div>
+                  )}
+                  <span className="absolute bottom-0 right-0 w-7 h-7 rounded-full flex items-center justify-center shadow group-hover:scale-110 transition-transform"
+                    style={{ backgroundColor: '#1d6ae5', border: '2px solid #fff' }}>
+                    <Camera className="w-3.5 h-3.5 text-white" />
+                  </span>
+                  <input type="file" accept="image/*" className="hidden" onChange={pickAvatar} />
+                </label>
+                <div className="text-xs space-y-1" style={{ color: '#94a3b8' }}>
+                  <p>แตะที่รูปเพื่อเลือกรูปโปรไฟล์</p>
+                  <p>ระบบจะย่อเป็นสี่เหลี่ยมจัตุรัสให้อัตโนมัติ</p>
+                  {avatarShown && (
+                    <button type="button" onClick={() => setAvatarData(null)} className="font-medium" style={{ color: '#dc2626' }}>ลบรูป</button>
+                  )}
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium mb-1" style={{ color: '#4a6080' }}>
@@ -534,7 +579,7 @@ function FormModal({
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-[110px_1fr] gap-3">
+              <div className="grid grid-cols-[96px_1fr] sm:grid-cols-[100px_1fr_1fr] gap-3">
                 <div>
                   <label className="block text-xs font-medium mb-1" style={{ color: '#4a6080' }}>คำนำหน้า</label>
                   <select className="input-field" value={form.namePrefix} onChange={(e) => set('namePrefix', e.target.value)}>
@@ -543,12 +588,21 @@ function FormModal({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1" style={{ color: '#4a6080' }}>ชื่อ-นามสกุล *</label>
+                  <label className="block text-xs font-medium mb-1" style={{ color: '#4a6080' }}>ชื่อ *</label>
                   <input
                     className="input-field"
-                    value={form.name}
-                    onChange={(e) => set('name', e.target.value)}
-                    placeholder="ชื่อ นามสกุล"
+                    value={form.firstName}
+                    onChange={(e) => set('firstName', e.target.value)}
+                    placeholder="ชื่อ"
+                  />
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="block text-xs font-medium mb-1" style={{ color: '#4a6080' }}>นามสกุล</label>
+                  <input
+                    className="input-field"
+                    value={form.lastName}
+                    onChange={(e) => set('lastName', e.target.value)}
+                    placeholder="นามสกุล"
                   />
                 </div>
               </div>
@@ -968,7 +1022,7 @@ export default function UsersPage() {
                   >
                     {/* Avatar */}
                     <td className="pl-4 py-3 w-10 hidden sm:table-cell">
-                      <Avatar name={u.name} size={8} />
+                      <Avatar name={u.name} src={u.avatar} size={8} />
                     </td>
                     {/* Name */}
                     <td className="px-4 py-3">

@@ -9,6 +9,7 @@ const { PrismaClient } = require('@prisma/client');
 const auth             = require('../middleware/auth');
 const { requireAdmin } = require('../middleware/roles');
 const { success, error, paginate } = require('../utils/response');
+const { saveAvatarImage, AvatarError } = require('../utils/avatar');
 
 const { pushMessage } = require('../services/line');
 
@@ -58,16 +59,8 @@ function emailFromIdToken(idToken) {
   } catch { return null; }
 }
 
-function saveAvatar(base64) {
-  const data = base64.replace(/^data:image\/\w+;base64,/, '');
-  const match = base64.match(/^data:image\/(\w+);/);
-  const ext   = match ? `.${match[1]}` : '.jpg';
-  const name  = `avatar_${Date.now()}_${Math.random().toString(36).slice(2, 6)}${ext}`;
-  const dir   = path.join(__dirname, '..', '..', 'uploads', 'avatars');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, name), Buffer.from(data, 'base64'));
-  return `/uploads/avatars/${name}`;
-}
+// ตรวจชนิดไฟล์ (PNG/JPG/WebP/GIF) ก่อนบันทึก — ดู utils/avatar.js
+const saveAvatar = saveAvatarImage;
 
 const VALID_ROLES = ['admin', 'executive', 'teacher', 'staff'];
 
@@ -204,6 +197,7 @@ router.put('/profile', auth, async (req, res) => {
     });
     res.json(success(user, 'อัปเดตโปรไฟล์สำเร็จ'));
   } catch (err) {
+    if (err instanceof AvatarError) return res.status(400).json(error(err.message));
     console.error('[PUT /profile]', err);
     res.status(500).json(error('เกิดข้อผิดพลาดในระบบ', 500));
   }

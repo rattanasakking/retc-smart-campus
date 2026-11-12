@@ -3,7 +3,7 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api, USER_KEY, TOKEN_KEY } from '@/lib/api';
 import { Camera, Lock, Save, X, CheckCircle, Bell, Link2, Unlink, LogOut } from 'lucide-react';
-import { NAME_PREFIXES, splitNamePrefix, nameFromForm } from '@/lib/namePrefix';
+import { NAME_PREFIXES, splitNamePrefix, splitFullName, fullNameFromForm } from '@/lib/namePrefix';
 
 interface UserProfile {
   id: number; name: string; email: string; employeeId: string;
@@ -41,8 +41,8 @@ function ProfileContent() {
   const [toastErr, setToastErr] = useState('');
   const imgRef = useRef<HTMLInputElement>(null);
 
-  // name = ชื่อ-นามสกุล ไม่รวมคำนำหน้า (รวมกลับตอนบันทึก)
-  const [form, setForm]       = useState({ namePrefix: '', name: '', phone: '', nickname: '' });
+  // คำนำหน้า + ชื่อ + นามสกุล แยกช่อง — รวมกลับเป็น name ตอนบันทึก
+  const [form, setForm]       = useState({ namePrefix: '', firstName: '', lastName: '', phone: '', nickname: '' });
   const [avatarPreview, setAvatarPreview] = useState('');
   const [avatarBase64, setAvatarBase64]   = useState('');
 
@@ -61,8 +61,8 @@ function ProfileContent() {
       .then(r => {
         if (r.success) {
           setProfile(r.data);
-          const { prefix, rest } = splitNamePrefix(r.data.name);
-          setForm({ namePrefix: prefix, name: rest, phone: r.data.phone ?? '', nickname: r.data.nickname ?? '' });
+          const { prefix, first, last } = splitFullName(r.data.name);
+          setForm({ namePrefix: prefix, firstName: first, lastName: last, phone: r.data.phone ?? '', nickname: r.data.nickname ?? '' });
           if (r.data.avatar) setAvatarPreview(r.data.avatar);
           setNotifyForm({
             notifyByLine:  r.data.notifyByLine  !== false,
@@ -137,11 +137,11 @@ function ProfileContent() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim()) { showToast('กรุณาระบุชื่อ', true); return; }
+    if (!form.firstName.trim()) { showToast('กรุณาระบุชื่อ', true); return; }
     setSaving(true);
     try {
       const body: Record<string, string> = {
-        name: nameFromForm(form.namePrefix, form.name),
+        name: fullNameFromForm(form.namePrefix, form.firstName, form.lastName),
         phone: form.phone,
         nickname: form.nickname,
       };
@@ -262,20 +262,23 @@ function ProfileContent() {
         </div>
 
         {/* Editable fields */}
-        <div className="grid grid-cols-[110px_1fr] gap-3">
-          <div>
-            <label className="block text-xs font-medium text-[#4a6080] mb-1">คำนำหน้า</label>
-            <select value={form.namePrefix} onChange={e => setForm(p => ({ ...p, namePrefix: e.target.value }))} className="input-field">
-              <option value="">ไม่ระบุ</option>
-              {NAME_PREFIXES.map((pf) => <option key={pf} value={pf}>{pf}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-[#4a6080] mb-1">ชื่อ-นามสกุล <span className="text-red-500">*</span></label>
-            <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-              className="input-field" placeholder="ชื่อ นามสกุล" required />
-          </div>
-        </div>
+        <div className="grid grid-cols-[96px_1fr] sm:grid-cols-[100px_1fr_1fr] gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-[#4a6080] mb-1">คำนำหน้า</label>
+                      <select value={form.namePrefix} onChange={e => setForm(p => ({ ...p, namePrefix: e.target.value }))} className="input-field">
+                        <option value="">ไม่ระบุ</option>
+                        {NAME_PREFIXES.map((pf) => <option key={pf} value={pf}>{pf}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-[#4a6080] mb-1">ชื่อ <span className="text-red-500">*</span></label>
+                      <input value={form.firstName} onChange={e => setForm(p => ({ ...p, firstName: e.target.value }))} className="input-field" placeholder="สมชาย" />
+                    </div>
+                    <div className="col-span-2 sm:col-span-1">
+                      <label className="block text-xs font-medium text-[#4a6080] mb-1">นามสกุล</label>
+                      <input value={form.lastName} onChange={e => setForm(p => ({ ...p, lastName: e.target.value }))} className="input-field" placeholder="ใจดี" />
+                    </div>
+                  </div>
         <div>
           <label className="block text-xs font-medium text-[#4a6080] mb-1">ชื่อเล่น</label>
           <input value={form.nickname} onChange={e => setForm(p => ({ ...p, nickname: e.target.value }))}

@@ -5,6 +5,7 @@ const path    = require('path');
 const { PrismaClient } = require('@prisma/client');
 const auth    = require('../middleware/auth');
 const { success, error, paginate } = require('../utils/response');
+const { saveAvatarImage, AvatarError } = require('../utils/avatar');
 const { sendLeaveRequestFlex, sendLeaveStatusNotify } = require('../services/line');
 const { eventChannelAllowed } = require('../services/notification');
 
@@ -32,17 +33,8 @@ function handleLeaveAttachment(attachments) {
   return attachments || null;
 }
 
-function saveAvatarBase64(base64) {
-  const data  = base64.replace(/^data:[\w/+-]+;base64,/, '');
-  const match = base64.match(/^data:([\w/+-]+);base64,/);
-  const mime  = match?.[1] ?? 'image/jpeg';
-  const ext   = mime.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg';
-  const name  = `avatar_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
-  const dir   = path.join(__dirname, '..', '..', 'uploads', 'avatars');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, name), Buffer.from(data, 'base64'));
-  return `/uploads/avatars/${name}`;
-}
+// ตรวจชนิดไฟล์ (PNG/JPG/WebP/GIF) ก่อนบันทึก — ดู utils/avatar.js
+const saveAvatarBase64 = saveAvatarImage;
 
 async function hasPersonnelPermission(userId) {
   const perm = await prisma.modulePermission.findFirst({
@@ -605,7 +597,10 @@ router.post('/', auth, requireSuperAdmin, async (req, res) => {
 
     let avatarUrl = null;
     if (avatar && typeof avatar === 'string' && avatar.startsWith('data:')) {
-      try { avatarUrl = saveAvatarBase64(avatar); } catch (e) { console.warn('[avatar save]', e.message); }
+      try { avatarUrl = saveAvatarBase64(avatar); } catch (e) {
+        if (e instanceof AvatarError) return res.status(400).json(error(e.message));
+        console.warn('[avatar save]', e.message);
+      }
     }
 
     const hashed = await bcrypt.hash(password, 10);
@@ -662,7 +657,10 @@ router.put('/:id', auth, requireSuperAdmin, async (req, res) => {
 
     let avatarUrl;
     if (avatar && typeof avatar === 'string' && avatar.startsWith('data:')) {
-      try { avatarUrl = saveAvatarBase64(avatar); } catch (e) { console.warn('[avatar save]', e.message); }
+      try { avatarUrl = saveAvatarBase64(avatar); } catch (e) {
+        if (e instanceof AvatarError) return res.status(400).json(error(e.message));
+        console.warn('[avatar save]', e.message);
+      }
     }
 
     const user = await prisma.user.update({

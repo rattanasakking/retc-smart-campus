@@ -1,5 +1,6 @@
 'use client';
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 
 const MONTHS_FULL  = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
@@ -27,6 +28,30 @@ export default function ThaiDatePicker({
   const [mode, setMode]         = useState<'days'|'months'>('days');
   const [viewYear, setViewYear] = useState(parsed ? parsed[0] : today.getFullYear());
   const [viewMonth, setViewMon] = useState(parsed ? parsed[1] - 1 : today.getMonth());
+  const btnRef   = useRef<HTMLButtonElement>(null);
+  const popRef   = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  // ปฏิทินแสดงผ่าน portal (ลอยเหนือทุกอย่าง) — ถ้าวางไว้ในกล่องที่เลื่อนได้ เช่น modal
+  // ปฏิทินจะถูกตัดขอบจนกดเลือกวันไม่ได้ · วางใต้ช่อง ถ้าที่ไม่พอให้เปิดขึ้นด้านบน และไม่ล้นขอบจอ
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const b = btnRef.current?.getBoundingClientRect();
+      const h = popRef.current?.offsetHeight ?? 340;
+      if (!b) return;
+      const w = 280, gap = 4, vw = window.innerWidth, vh = window.innerHeight;
+      let top = b.bottom + gap;
+      if (top + h > vh - 8 && b.top - gap - h >= 8) top = b.top - gap - h;
+      top = Math.max(8, Math.min(top, vh - h - 8));
+      const left = Math.max(8, Math.min(b.left, vw - w - 8));
+      setPos({ top, left });
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true); // true = รวมการเลื่อนในกล่องที่ซ้อนอยู่ (เช่น ตัว modal)
+    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); };
+  }, [open, mode]);
 
   const minDate = min ? (() => { const d = new Date(min + 'T00:00:00'); return d; })() : null;
   const maxDate = max ? (() => { const d = new Date(max + 'T00:00:00'); return d; })() : null;
@@ -65,6 +90,7 @@ export default function ThaiDatePicker({
   return (
     <div className={`relative ${className}`}>
       <button
+        ref={btnRef}
         type="button"
         onClick={openPicker}
         disabled={disabled}
@@ -85,12 +111,16 @@ export default function ThaiDatePicker({
         >✕</button>
       )}
 
-      {open && (
+      {open && createPortal(
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="fixed inset-0" style={{ zIndex: 1000 }} onClick={() => setOpen(false)} />
           <div
-            className="absolute z-50 top-full mt-1 left-0 rounded-2xl shadow-xl overflow-hidden"
-            style={{ backgroundColor: '#fff', border: '1px solid #dce6f9', width: 280 }}
+            ref={popRef}
+            className="fixed rounded-2xl shadow-xl overflow-hidden"
+            style={{
+              backgroundColor: '#fff', border: '1px solid #dce6f9', width: 280, zIndex: 1001,
+              top: pos?.top ?? -9999, left: pos?.left ?? -9999,
+            }}
           >
             {/* ── Header ── */}
             <div className="flex items-center justify-between px-3 py-2.5" style={{ borderBottom: '1px solid #f0f4ff' }}>
@@ -191,7 +221,8 @@ export default function ThaiDatePicker({
               </div>
             )}
           </div>
-        </>
+        </>,
+        document.body,
       )}
     </div>
   );
