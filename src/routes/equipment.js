@@ -5,6 +5,7 @@ const { PrismaClient } = require('@prisma/client');
 const auth = require('../middleware/auth');
 const { success, error, paginate } = require('../utils/response');
 
+const { saveDataUrl, isDataUrl } = require('../utils/upload');
 const router = express.Router();
 const prisma = new PrismaClient();
 
@@ -19,26 +20,17 @@ async function canManage(u) {
   return !!perm;
 }
 
-// Save base64 image to disk, return URL
-function saveImage(base64) {
-  const data  = base64.replace(/^data:image\/\w+;base64,/, '');
-  const match = base64.match(/^data:image\/(\w+);/);
-  const ext   = match ? `.${match[1]}` : '.jpg';
-  const name  = `eq_${Date.now()}_${Math.random().toString(36).slice(2,6)}${ext}`;
-  const dir   = path.join(__dirname, '..', '..', 'uploads', 'equipment');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, name), Buffer.from(data, 'base64'));
-  return `/uploads/equipment/${name}`;
-}
+// Save base64 image to disk, return URL (ตรวจชนิดไฟล์ — ดู utils/upload.js)
+const saveImage = (base64) => saveDataUrl(base64, { folder: 'equipment', prefix: 'eq', label: 'รูปครุภัณฑ์' });
 
 // Accept single base64 or array of base64; return JSON-string of URL array
 function processImages(images) {
   if (!images) return null;
   const arr = Array.isArray(images) ? images : [images];
   const urls = arr.map(img => {
-    if (!img) return null;
-    if (img.startsWith('/uploads/') || img.startsWith('http')) return img;
-    if (img.startsWith('data:image/')) return saveImage(img);
+    if (!img || typeof img !== 'string') return null;
+    if (img.startsWith('/uploads/') || /^https?:\/\//.test(img)) return img;
+    if (isDataUrl(img)) return saveImage(img);
     return null;
   }).filter(Boolean);
   return urls.length ? JSON.stringify(urls) : null;

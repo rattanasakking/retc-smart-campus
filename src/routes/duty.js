@@ -5,6 +5,7 @@ const { PrismaClient } = require('@prisma/client');
 const auth = require('../middleware/auth');
 const { success, error } = require('../utils/response');
 
+const { saveDataUrl } = require('../utils/upload');
 const router = express.Router();
 const prisma = new PrismaClient();
 
@@ -30,16 +31,8 @@ const dutyAdmin = [
   },
 ];
 
-function savePhoto(base64, fileName) {
-  const data = base64.replace(/^data:image\/\w+;base64,/, '');
-  const buf  = Buffer.from(data, 'base64');
-  const ext  = (fileName && path.extname(fileName)) || '.jpg';
-  const name = `duty_${Date.now()}_${Math.random().toString(36).slice(2, 6)}${ext}`;
-  const dir  = path.join(__dirname, '..', '..', 'uploads', 'duty');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, name), buf);
-  return `/uploads/duty/${name}`;
-}
+// รูปยืนยันการอยู่เวร — นามสกุลไฟล์มาจากชนิดไฟล์ที่ตรวจแล้ว ไม่ใช่ชื่อไฟล์ที่ส่งมา (ดู utils/upload.js)
+const savePhoto = (base64) => saveDataUrl(base64, { folder: 'duty', prefix: 'duty', label: 'รูปถ่าย' });
 
 // ─── GET /api/duty/today ──────────────────────────────────────────────────────
 // ตรวจว่า user มีเวรวันนี้หรือไม่
@@ -273,7 +266,7 @@ router.post('/logs/batch', auth, async (req, res, next) => {
       if (!scheduleId || !teacherId || !status) continue;
 
       let photoUrl = null;
-      if (photo && status === 'PRESENT') photoUrl = savePhoto(photo, photoFileName);
+      if (photo && status === 'PRESENT') photoUrl = savePhoto(photo);
 
       const log = await prisma.dutyLog.upsert({
         where:  { scheduleId_teacherId: { scheduleId: intId(scheduleId), teacherId: intId(teacherId) } },
@@ -295,7 +288,7 @@ router.post('/logs', auth, async (req, res, next) => {
     if (!['PRESENT', 'ABSENT'].includes(status)) return res.status(400).json(error('status ไม่ถูกต้อง'));
 
     let photoUrl = null;
-    if (photo && status === 'PRESENT') photoUrl = savePhoto(photo, photoFileName);
+    if (photo && status === 'PRESENT') photoUrl = savePhoto(photo);
 
     const log = await prisma.dutyLog.upsert({
       where:  { scheduleId_teacherId: { scheduleId: intId(scheduleId), teacherId: req.user.id } },

@@ -5,23 +5,17 @@ const { PrismaClient } = require('@prisma/client');
 const auth    = require('../middleware/auth');
 const { success, error, paginate } = require('../utils/response');
 
+const { saveDataUrl } = require('../utils/upload');
 const router = express.Router();
 const prisma = new PrismaClient();
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 const intOrNull = (v) => (v !== undefined && v !== '' && v !== null) ? parseInt(v, 10) : null;
 
-function saveCertTemplate(base64) {
-  const data  = base64.replace(/^data:[\w/+-]+;base64,/, '');
-  const match = base64.match(/^data:([\w/+-]+);base64,/);
-  const mime  = match?.[1] ?? 'image/png';
-  const ext   = mime.split('/')[1]?.replace('jpeg', 'jpg') ?? 'png';
-  const name  = `cert_tpl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
-  const dir   = path.join(__dirname, '..', '..', 'uploads', 'certificates');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, name), Buffer.from(data, 'base64'));
-  return `/uploads/certificates/${name}`;
-}
+// รูปแบบเกียรติบัตร / ลายเซ็น — รับเฉพาะ PNG/JPG (ตรวจชนิดไฟล์ — ดู utils/upload.js)
+const saveCertTemplate = (base64) => saveDataUrl(base64, {
+  folder: 'certificates', prefix: 'cert_tpl', types: ['image/png', 'image/jpeg'], label: 'รูปเกียรติบัตร/ลายเซ็น',
+});
 
 function removeUpload(url) {
   if (!url || !url.startsWith('/uploads/')) return;

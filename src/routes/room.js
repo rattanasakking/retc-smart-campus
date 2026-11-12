@@ -9,25 +9,18 @@ const { sendRoomBookingRequestEmail, sendRoomBookingApprovedEmail, sendRoomBooki
 const { notifyUsers, eventChannelAllowed } = require('../services/notification');
 const { BookingConflict, assertRoomFree } = require('../services/roomBooking');
 
+const { saveDataUrl, isDataUrl } = require('../utils/upload');
 const router = express.Router();
 const prisma = new PrismaClient();
 
-function saveRoomImage(base64) {
-  const data  = base64.replace(/^data:image\/\w+;base64,/, '');
-  const match = base64.match(/^data:image\/(\w+);/);
-  const ext   = match ? `.${match[1]}` : '.jpg';
-  const name  = `room_${Date.now()}_${Math.random().toString(36).slice(2, 6)}${ext}`;
-  const dir   = path.join(__dirname, '..', '..', 'uploads', 'rooms');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, name), Buffer.from(data, 'base64'));
-  return `/uploads/rooms/${name}`;
-}
+// (ตรวจชนิดไฟล์ — ดู utils/upload.js)
+const saveRoomImage = (base64) => saveDataUrl(base64, { folder: 'rooms', prefix: 'room', label: 'รูปห้อง' });
 
 function processRoomImage(image) {
-  if (!image) return null;
-  if (image.startsWith('/uploads/') || image.startsWith('http')) return image;
-  if (image.startsWith('data:image/')) return saveRoomImage(image);
-  return image; // assume URL
+  if (!image || typeof image !== 'string') return null;
+  if (image.startsWith('/uploads/') || /^https?:\/\//.test(image)) return image;
+  if (isDataUrl(image)) return saveRoomImage(image);
+  return null;
 }
 
 const intId    = (s) => parseInt(s, 10);

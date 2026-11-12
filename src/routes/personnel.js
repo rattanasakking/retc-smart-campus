@@ -9,28 +9,23 @@ const { saveAvatarImage, AvatarError } = require('../utils/avatar');
 const { sendLeaveRequestFlex, sendLeaveStatusNotify } = require('../services/line');
 const { eventChannelAllowed } = require('../services/notification');
 
+const { saveDataUrl, isDataUrl, UploadError, IMAGE_OR_PDF } = require('../utils/upload');
 const router = express.Router();
 const prisma  = new PrismaClient();
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 const intOrNull = (v) => (v !== undefined && v !== '' && v !== null) ? parseInt(v, 10) : null;
 
-function saveLeaveDoc(base64) {
-  const data  = base64.replace(/^data:[\w/+-]+;base64,/, '');
-  const match = base64.match(/^data:([\w/+-]+);base64,/);
-  const mime  = match?.[1] ?? 'image/jpeg';
-  const ext   = mime === 'application/pdf' ? 'pdf' : mime.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg';
-  const name  = `leave_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
-  const dir   = path.join(__dirname, '..', '..', 'uploads', 'leave');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, name), Buffer.from(data, 'base64'));
-  return `/uploads/leave/${name}`;
-}
+// ไฟล์แนบใบลา — รูปภาพหรือ PDF (ตรวจชนิดไฟล์ — ดู utils/upload.js)
+const saveLeaveDoc = (base64) => saveDataUrl(base64, {
+  folder: 'leave', prefix: 'leave', types: IMAGE_OR_PDF, label: 'ไฟล์แนบ',
+});
 
 function handleLeaveAttachment(attachments) {
   if (!attachments) return null;
-  if (typeof attachments === 'string' && attachments.startsWith('data:')) return saveLeaveDoc(attachments);
-  return attachments || null;
+  if (isDataUrl(attachments)) return saveLeaveDoc(attachments);
+  // เก็บได้เฉพาะไฟล์ที่อัปโหลดไว้แล้วในระบบ
+  return typeof attachments === 'string' && attachments.startsWith('/uploads/leave/') ? attachments : null;
 }
 
 // ตรวจชนิดไฟล์ (PNG/JPG/WebP/GIF) ก่อนบันทึก — ดู utils/avatar.js
@@ -363,7 +358,10 @@ router.post('/leaves', auth, async (req, res) => {
       }
     } catch (lineErr) { console.warn('[Leave] LINE notify failed:', lineErr.message); }
     res.status(201).json(success(request, 'ยื่นคำขอลาสำเร็จ'));
-  } catch (e) { console.error('[POST /leaves]', e); res.status(500).json(error('เกิดข้อผิดพลาด')); }
+  } catch (e) {
+    if (e instanceof UploadError) return res.status(400).json(error(e.message));
+    console.error('[POST /leaves]', e); res.status(500).json(error('เกิดข้อผิดพลาด'));
+  }
 });
 
 router.get('/leaves/:id', auth, async (req, res) => {

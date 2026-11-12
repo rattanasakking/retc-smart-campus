@@ -6,22 +6,19 @@ const auth = require('../middleware/auth');
 const { success, error, paginate } = require('../utils/response');
 const { notifyLostFound } = require('../services/line');
 
+const { saveDataUrl, isDataUrl, UploadError } = require('../utils/upload');
 const router = express.Router();
 const prisma = new PrismaClient();
 
 // ── Save base64 image to disk, return URL ────────────────────────────────────
+// (ตรวจชนิดไฟล์ — ดู utils/upload.js)
 function saveImage(base64, prefix = 'lf') {
-  if (!base64) return null;
-  if (base64.startsWith('/uploads/') || base64.startsWith('http')) return base64;
-  const data  = base64.replace(/^data:image\/\w+;base64,/, '');
-  const match = base64.match(/^data:image\/(\w+);/);
-  const ext   = match ? `.${match[1]}` : '.jpg';
-  const name  = `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}${ext}`;
-  const dir   = path.join(__dirname, '..', '..', 'uploads', 'lostfound');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, name), Buffer.from(data, 'base64'));
-  return `/uploads/lostfound/${name}`;
+  if (!base64 || typeof base64 !== 'string') return null;
+  if (base64.startsWith('/uploads/') || /^https?:\/\//.test(base64)) return base64;
+  if (!isDataUrl(base64)) return null;
+  return saveDataUrl(base64, { folder: 'lostfound', prefix, label: 'รูปภาพ' });
 }
+const uploadFail = (res, err) => err instanceof UploadError && (res.status(400).json(error(err.message)), true);
 
 const canAdmin = (u) => u.isSuperAdmin || u.role === 'admin' || u.role === 'executive';
 
@@ -249,6 +246,7 @@ router.post('/', auth, async (req, res) => {
     notifyLostFound(item).catch(() => {});
     res.status(201).json(success(item, 'บันทึกสำเร็จ'));
   } catch (err) {
+    if (uploadFail(res, err)) return;
     console.error('[POST /lostfound]', err);
     res.status(500).json(error('เกิดข้อผิดพลาดในระบบ', 500));
   }
@@ -286,6 +284,7 @@ router.put('/:id/claim', auth, async (req, res) => {
 
     res.json(success(updated, 'บันทึกการรับคืนสำเร็จ'));
   } catch (err) {
+    if (uploadFail(res, err)) return;
     console.error('[PUT /lostfound/:id/claim]', err);
     res.status(500).json(error('เกิดข้อผิดพลาดในระบบ', 500));
   }
@@ -326,6 +325,7 @@ router.put('/:id', auth, async (req, res) => {
 
     res.json(success(updated, 'แก้ไขสำเร็จ'));
   } catch (err) {
+    if (uploadFail(res, err)) return;
     console.error('[PUT /lostfound/:id]', err);
     res.status(500).json(error('เกิดข้อผิดพลาดในระบบ', 500));
   }

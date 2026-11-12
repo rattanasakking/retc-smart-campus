@@ -7,6 +7,7 @@ const { PrismaClient } = require('@prisma/client');
 const auth = require('../middleware/auth');
 const { success, error } = require('../utils/response');
 const { saveAvatarImage, AvatarError } = require('../utils/avatar');
+const { saveDataUrl } = require('../utils/upload');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -493,19 +494,10 @@ router.get('/general', auth, async (req, res, next) => {
 // Body: { imageData: 'data:image/...;base64,...', fileName: 'logo.png' }
 router.post('/general/upload-logo', superAdmin, async (req, res, next) => {
   try {
-    const { imageData, fileName } = req.body;
+    const { imageData } = req.body;
     if (!imageData) return res.status(400).json(error('ไม่พบข้อมูลรูปภาพ'));
-
-    const base64 = imageData.replace(/^data:image\/\w+;base64,/, '');
-    const buffer = Buffer.from(base64, 'base64');
-    const ext    = (fileName && path.extname(fileName)) || '.png';
-    const name   = `logo_${Date.now()}${ext}`;
-    const dir    = path.join(__dirname, '..', '..', 'uploads', 'logo');
-
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, name), buffer);
-
-    const logo_url = `/uploads/logo/${name}`;
+    // นามสกุลไฟล์มาจากชนิดไฟล์ที่ตรวจแล้ว (ไม่ใช้ fileName จากผู้ใช้) — ดู utils/upload.js
+    const logo_url = saveDataUrl(imageData, { folder: 'logo', prefix: 'logo', label: 'โลโก้' });
     await prisma.systemSettings.upsert({
       where:  { key: 'logo_url' },
       update: { value: logo_url },

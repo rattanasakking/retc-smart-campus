@@ -7,6 +7,7 @@ const { success, error } = require('../utils/response');
 const { notify, sendWorkLogFlex, sendWorkLogStatusFlex, pushMessage } = require('../services/line');
 const { eventChannelAllowed } = require('../services/notification');
 
+const { saveDataUrl, isDataUrl } = require('../utils/upload');
 const router = express.Router();
 const prisma = new PrismaClient();
 
@@ -40,18 +41,13 @@ function canApprove(user) {
     || APPROVER_POSITIONS.includes(user.position);
 }
 
+// รูปแนบบันทึกปฏิบัติงาน (ตรวจชนิดไฟล์ — ดู utils/upload.js)
 function saveAttachments(items) {
-  const dir = path.join(__dirname, '..', '..', 'uploads', 'worklog');
-  fs.mkdirSync(dir, { recursive: true });
-  return items.map((item) => {
-    if (!item) return null;
+  return (Array.isArray(items) ? items : []).map((item) => {
+    if (!item || typeof item !== 'string') return null;
     if (item.startsWith('/uploads/')) return item;
-    const b64  = item.replace(/^data:image\/\w+;base64,/, '');
-    const match = item.match(/^data:image\/(\w+);/);
-    const ext  = match ? `.${match[1]}` : '.jpg';
-    const name = `wl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}${ext}`;
-    fs.writeFileSync(path.join(dir, name), Buffer.from(b64, 'base64'));
-    return `/uploads/worklog/${name}`;
+    if (!isDataUrl(item)) return null;
+    return saveDataUrl(item, { folder: 'worklog', prefix: 'wl', label: 'รูปแนบ' });
   }).filter(Boolean);
 }
 
